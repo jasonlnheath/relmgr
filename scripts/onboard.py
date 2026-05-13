@@ -183,6 +183,45 @@ def setup_android_contacts(config: dict) -> bool:
     return False
 
 
+def setup_facebook_cookies(config: dict) -> bool:
+    """Set up Facebook scraping via cookies export."""
+    print("\n--- Facebook Profile Scraper ---")
+    print("This lets us pull profile data (work, contact info, relationship status)")
+    print("from Facebook to enrich your contacts. You need to export your FB cookies.")
+    print()
+    print("How to get your Facebook cookies:")
+    print("  1. Log into facebook.com in Chrome/Firefox")
+    print("  2. Install browser extension:")
+    print("     - Chrome: 'Get cookies.txt LOCALLY'")
+    print("     - Firefox: 'Cookie Quick Manager'")
+    print("  3. Go to the extension and export cookies as a file")
+    print("  4. Save it somewhere accessible (e.g., ~/facebook_cookies.txt)")
+    print()
+
+    default_path = os.path.expanduser("~/facebook_cookies.txt")
+    while True:
+        path = prompt(f"Path to cookies file (or press Enter to skip)", default_path)
+        if not path:
+            print("  Skipping Facebook (you can add it later)")
+            config["facebook"] = {"enabled": False}
+            return True
+
+        p = Path(path)
+        if not p.exists():
+            print(f"  ✗ File not found: {path}")
+            continue
+
+        size = p.stat().st_size
+        if size < 100:
+            print(f"  ✗ File too small ({size} bytes). Make sure it contains full cookies.")
+            continue
+
+        print(f"  ✓ Found: {p.name} ({size:,} bytes)")
+        config["facebook"] = {"enabled": True, "cookies_path": str(p.resolve())}
+        print("✓ Facebook scraper configured")
+        return True
+
+
 def save_config(config: dict, config_path: Path) -> None:
     """Save configuration to config.yaml."""
     # Write as Python config for easy import
@@ -238,6 +277,10 @@ def main():
     # Android
     if confirm("\nSet up Android Contacts?"):
         setup_android_contacts(config)
+
+    # Facebook (optional — for social updates on contacts)
+    if confirm("\nSet up Facebook Profile Scraper? (for social updates on contacts)"):
+        setup_facebook_cookies(config)
 
     # Save config
     save_config(config, config_path)
