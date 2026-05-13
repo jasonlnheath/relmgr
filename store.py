@@ -45,7 +45,8 @@ def init_db(db_path: Path = None) -> None:
                 source_id TEXT NOT NULL,
                 raw_data TEXT,
                 fetched_at TEXT NOT NULL,
-                FOREIGN KEY (contact_id) REFERENCES contacts(id)
+                FOREIGN KEY (contact_id) REFERENCES contacts(id),
+                UNIQUE(contact_id, source, source_id)
             );
 
             CREATE TABLE IF NOT EXISTS dedup_log (
@@ -111,7 +112,7 @@ def upsert_contact(contact: dict, db_path: Path = None) -> str:
             conn.execute(
                 """INSERT INTO contact_sources (contact_id, source, source_id, raw_data, fetched_at)
                    VALUES (?, ?, ?, ?, ?)
-                   ON CONFLICT(source_id) DO UPDATE SET
+                   ON CONFLICT(contact_id, source, source_id) DO UPDATE SET
                        contact_id=excluded.contact_id,
                        raw_data=excluded.raw_data,
                        fetched_at=excluded.fetched_at""",

@@ -138,6 +138,9 @@ def main():
     # sync
     sync_parser = subparsers.add_parser("sync", help="Fetch and deduplicate contacts from all sources")
 
+    # onboard
+    subparsers.add_parser("onboard", help="Interactive onboarding for all contact sources")
+
     # list
     subparsers.add_parser("list", help="List all contacts")
 
@@ -156,6 +159,7 @@ def main():
 
     commands = {
         "sync": cmd_sync,
+        "onboard": lambda args: __import__("scripts.onboard", fromlist=["main"]).main(),
         "list": cmd_list,
         "dedup": cmd_dedup,
         "export": cmd_export,
