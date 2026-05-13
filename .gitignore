@@ -22,3 +22,6 @@ venv/
 .vscode/
 *.swp
 *.swo
+
+# Generated DB (keep in project, ignore large exports)
+contacts.db
