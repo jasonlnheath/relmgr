@@ -1,0 +1,24 @@
+# Database
+*.db
+*.db-journal
+
+# Credentials
+.env
+*.key
+*.p12
+*.json
+
+# Exports
+exports/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
