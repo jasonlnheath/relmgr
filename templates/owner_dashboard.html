@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block title %}Whitelist Dashboard{% endblock %}
+
+{% block content %}
+<div class="bg-white rounded-lg shadow p-6">
+    <h1 class="text-2xl font-bold text-gray-900 mb-6">Whitelist Dashboard</h1>
+
+    {# Context categories removed from UI per Jason ruling 2026-09-12.       #}
+    {# Backend routes (/context, /categorize) stay dormant for now.          #}
+
+    {# P4-T2: bulk actions. One real form; grant rows attach via the HTML5 #}
+    {# form="" attribute so they never nest inside the per-grant forms.     #}
+    {% if profiles %}
+    <form method="POST" action="/owner/{{ token }}/bulk" id="bulkform"
+          class="flex items-center gap-2 mb-4 bg-blue-50 rounded-md px-3 py-2">
+        <span class="text-xs font-medium text-gray-600">Bulk:</span>
+        <select name="expiry" class="text-xs border rounded px-1 py-0.5">
+            <option value="14">14d</option>
+            <option value="90" selected>90d</option>
+            <option value="quarter">End of quarter</option>
+            <option value="lifetime">Lifetime</option>
+        </select>
+        <button type="submit" name="decision" value="approve" form="bulkform"
+                class="bg-green-600 text-white px-2 py-0.5 rounded text-xs hover:bg-green-700">
+            Approve selected
+        </button>
+        <button type="submit" name="decision" value="deny" form="bulkform"
+                class="bg-red-600 text-white px-2 py-0.5 rounded text-xs hover:bg-red-700">
+            Deny selected
+        </button>
+        <button type="submit" name="decision" value="revoke" form="bulkform"
+                class="bg-amber-600 text-white px-2 py-0.5 rounded text-xs hover:bg-amber-700">
+            Revoke selected
+        </button>
+    </form>
+    {% endif %}
+
+    {% if not profiles %}
+    <div class="text-center py-8">
+        <p class="text-gray-500 text-lg">No pending requests ✓</p>
+        <p class="text-gray-400 text-sm mt-2">All caught up — refresh when new requests arrive.</p>
+    </div>
+    {% else %}
+    <div class="space-y-6">
+        {% for entry in profiles %}
+        <div class="border-t pt-4">
+            <div class="flex items-center justify-between mb-3">
+                <div>
+                    <h2 class="text-lg font-semibold text-gray-900">{{ entry.profile.display_name }}</h2>
+                    <p class="text-sm text-gray-500">
+                        {% if entry.profile.title or entry.profile.company %}
+                            {% if entry.profile.title %}{{ entry.profile.title }}{% endif %}
+                            {% if entry.profile.title and entry.profile.company %} at {% endif %}
+                            {% if entry.profile.company %}{{ entry.profile.company }}{% endif %}
+                        {% endif %}
+                    </p>
+                </div>
+                {% set own_email = namespace(v=None) %}
+                {% for f in entry.profile.fields %}{% if own_email.v is none and f.field_type == 'email' %}{% set own_email.v = f.field_value %}{% endif %}{% endfor %}
+                <a href="/p/{{ entry.profile.handle }}{% if own_email.v %}?e={{ own_email.v | urlencode }}{% endif %}" class="text-sm text-blue-600 hover:underline">View profile →</a>
+            </div>
+
+            {# P3-T4: 14-day scan bar chart — pure Tailwind divs, no JS #}
+            <div class="mb-3 rounded-md border bg-white p-2">
+                <p class="text-xs font-medium text-gray-500 mb-1">
+                    Profile views — last 14 days
+                    ({{ entry.scan_stats[-1]['scans'] }} today)
+                </p>
+                <div class="flex items-end gap-1 h-24">
+                    {% for day in entry.scan_stats %}
+                    <div class="relative flex-1 group" data-date="{{ day.date }}" data-scans="{{ day.scans }}">
+                        <div class="absolute bottom-0 left-0 right-0 bg-blue-400/70 rounded-t"
+                             style="height: {{ (day.scans * 100 / entry.scan_max) if entry.scan_max else 0 }}%"></div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            {% for grant in entry.grants %}
+            <div class="bg-gray-50 rounded-md p-3 mb-2">
+                <div class="flex items-start justify-between">
+                    <div class="flex-1">
+                        <p class="text-sm font-medium text-gray-900">{{ grant.requester_name }}</p>
+                        <p class="text-sm text-gray-600">{{ grant.requester_email }}</p>
+                        {# context badge + categorize form removed per Jason ruling 2026-09-12 #}
+                        <p class="text-xs text-gray-400 mt-1">
+                            {% set d = days_since(grant.created_at) %}
+                            {% if d == 0 %}today{% elif d == 1 %}1 day ago{% else %}{{ d }} days ago{% endif %}
+                        </p>
+                    </div>
+
+                    {% if grant.status == 'pending' %}
+                    <div class="flex items-center gap-2 ml-4">
+                        <input type="checkbox" name="grant_ids" value="{{ grant.id }}" form="bulkform"
+                               class="rounded border-gray-300" title="select for bulk action">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                            Pending
+                        </span>
+                        <form method="POST" action="/owner/{{ token }}/decision" class="inline-flex gap-1">
+                            <input type="hidden" name="grant_id" value="{{ grant.id }}">
+                            <select name="expiry" class="text-xs border rounded px-1 py-0.5">
+                                <option value="14">14d</option>
+                                <option value="90" selected>90d</option>
+                                <option value="quarter">End of quarter</option>
+                                <option value="lifetime">Lifetime</option>
+                            </select>
+                            <button type="submit" name="decision" value="approve"
+                                    class="bg-green-600 text-white px-2 py-0.5 rounded text-xs hover:bg-green-700">
+                                Approve
+                            </button>
+                            <button type="submit" name="decision" value="deny"
+                                    class="bg-red-600 text-white px-2 py-0.5 rounded text-xs hover:bg-red-700">
+                                Deny
+                            </button>
+                        </form>
+                    </div>
+                    {% elif grant.status == 'granted' %}
+                    <div class="ml-4 flex items-center gap-2">
+                        <input type="checkbox" name="grant_ids" value="{{ grant.id }}" form="bulkform"
+                               class="rounded border-gray-300" title="select for bulk action">
+                        {% if grant.expires_at is none %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            Lifetime
+                        </span>
+                        {% elif grant.expires_at and grant.expires_at is string %}
+                        {% set exp = days_until(grant.expires_at) %}
+                        {% if exp <= 0 %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
+                            Expired
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            Expires in {{ exp }}d
+                        </span>
+                        {% endif %}
+                        {% else %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
+                            {{ grant.expires_at }}
+                        </span>
+                        {% endif %}
+                        <form method="POST" action="/owner/{{ token }}/revoke" class="inline-flex items-center gap-1 mt-1">
+                            <input type="hidden" name="grant_id" value="{{ grant.id }}">
+                            <button type="submit"
+                                    class="bg-amber-600 text-white px-2 py-0.5 rounded text-xs hover:bg-amber-700">
+                                Revoke
+                            </button>
+                        </form>
+                    </div>
+                    {% elif grant.status == 'revoked' %}
+                    <div class="ml-4">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-600">
+                            Revoked
+                        </span>
+                    </div>
+                    {% elif grant.status == 'denied' %}
+                    <div class="ml-4">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                            Denied
+                        </span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

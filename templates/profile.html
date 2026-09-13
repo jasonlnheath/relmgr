@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}{{ profile.display_name }} — Whitelist{% endblock %}
+
+{% block content %}
+<div class="bg-white rounded-lg shadow p-6">
+    <div class="flex items-center justify-between mb-4">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">{{ profile.display_name }}</h1>
+            {% if profile.title or profile.company %}
+            <p class="text-gray-600">
+                {% if profile.title %}{{ profile.title }}{% endif %}
+                {% if profile.title and profile.company %} at {% endif %}
+                {% if profile.company %}{{ profile.company }}{% endif %}
+            </p>
+            {% endif %}
+        </div>
+        <span class="text-sm text-gray-500">Handle: {{ profile.handle }}</span>
+    </div>
+
+    {% if profile.verified_at %}
+    <div class="mb-4">
+        {% set days = days_since(profile.verified_at) %}
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+            {% if stale %}bg-yellow-100 text-yellow-800{% else %}bg-green-100 text-green-800{% endif %}">
+            {% if stale %}⚠ Verification stale ({{ days }} days ago){% else %}✓ Verified {{ days }} days ago{% endif %}
+        </span>
+    </div>
+    {% endif %}
+
+    <div class="border-t pt-4 mt-4">
+        <h2 class="text-lg font-semibold text-gray-900 mb-3">Contact Information</h2>
+
+        {% if cards %}
+        {# B4: card-driven public page #}
+        {% for card in cards %}
+        <div class="mb-6 {% if not loop.last %}pb-4 border-b border-gray-200{% endif %}">
+            <div class="flex items-center mb-3">
+                {% if card.photo_path %}
+                <img src="/photos/{{ profile.id }}/{{ card.id }}"
+                     alt="{{ card.name }} photo"
+                     class="w-16 h-16 rounded-full object-cover mr-3">
+                {% else %}
+                <div class="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center
+                            mr-3 text-gray-400 text-lg font-medium">
+                    {{ profile.display_name[:1] }}
+                </div>
+                {% endif %}
+                <h3 class="text-base font-semibold text-gray-900">{{ card.name }}</h3>
+            </div>
+            <div class="space-y-2 ml-19">
+                {% for f in card.visible_fields %}
+                <div class="flex items-center text-gray-700">
+                    <span class="w-20 text-sm text-gray-500">{{ f.field_type }}</span>
+                    <span>{{ f.field_value }}</span>
+                    <span class="ml-2 text-xs text-gray-400">({{ f.visibility }})</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+
+        {% if profile.bio %}
+        <p class="text-sm text-gray-700 whitespace-pre-line mt-4">{{ profile.bio }}</p>
+        {% endif %}
+
+        {% if tier != 'granted' %}
+        <p class="text-sm text-gray-500 mt-2 italic">
+            Some information is hidden.
+            <a href="/p/{{ profile.handle }}/request-form" class="text-blue-600 hover:underline">Request access</a>.
+        </p>
+        {% endif %}
+
+        {# Card-less profile: degrade to the legacy flat field list #}
+        {% else %}
+        {% if tier == 'granted' %}
+        <div class="space-y-2">
+            {% for f in profile.fields %}
+            <div class="flex items-center text-gray-700">
+                <span class="w-20 text-sm text-gray-500">{{ f.field_type }}</span>
+                <span>{{ f.field_value }}</span>
+                <span class="ml-2 text-xs text-gray-400">({{ f.visibility }})</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="space-y-2">
+            {% for f in profile.fields %}
+            {% if f.visibility == 'public' %}
+            <div class="flex items-center text-gray-700">
+                <span class="w-20 text-sm text-gray-500">{{ f.field_type }}</span>
+                <span>{{ f.field_value }}</span>
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+        <p class="text-sm text-gray-500 mt-2 italic">
+            Some information is hidden.
+            <a href="/p/{{ profile.handle }}/request-form" class="text-blue-600 hover:underline">Request access</a>.
+        </p>
+        {% endif %}
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

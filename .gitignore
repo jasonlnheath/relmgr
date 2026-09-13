@@ -25,3 +25,9 @@ venv/
 
 # Generated DB (keep in project, ignore large exports)
 contacts.db
+
+# Runtime uploads & logs
+uploads/
+server.log
+*.db-shm
+*.db-wal
