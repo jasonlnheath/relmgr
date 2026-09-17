@@ -120,7 +120,7 @@ The following rulings were established during development and are preserved as b
 | Ruling | Constraint |
 |---|---|
 | User decides, app enforces | The system never overrides user preference. No auto-approvals. |
-| Context layer | **OPEN** — revived for decision: revive the 2026-09-12 cut or keep it removed. DB columns + routes remain dormant either way. |
+| Context layer | **Bookshelved** — moved to Deferred section below. |
 | Denials live in the junk view | Denied contacts go to a separate `/owner/{token}/junk` view — never greyed out inline. |
 | Tests never write the prod DB | All tests use tmp_db fixtures. The live `contacts.db` is never modified by the test suite. Hermeticity is verified by a row-sha digest. |
 | `merge_all` / `merge_and_dedup` never called | These scripts `DROP TABLE contacts`. They are dead ends. Never executed. |
@@ -129,10 +129,10 @@ The following rulings were established during development and are preserved as b
 | Scan events stay IP-less | `scan_events` records `profile_handle`, `scan_at`, and optional `viewer_email` — no IP address or user-agent tracking. |
 | Standing posture | **Personal-local now, public deployment deferred** — this is a standing decision. |
 | Bio only for anonymous | Anonymous visitors see the profile bio only; all fields and cards require a grant. Supersedes the Work-card public default. |
-| Photo originals | **OPEN** — keep or discard after 512-square encode? |
+| Photo originals | **Kept** — originals are kept after the 512-square encode. Spec-level ruling; code follow-up pending (current implementation discards them). |
 | Contact list shows all live contacts | The contact list view shows all contacts from `contacts.db` (1,920+), not just whitelist-approved ones. |
-| Bio cap | **OPEN** — current 2,000 character cap; captain reopened for decision. |
-| Photo originals kept | **OPEN** — same decision as above: keep or discard after 512-square encode. |
+| Bio cap | **2,000 confirmed** — 2,000 character cap confirmed for now. |
+
 | Seed default cards cover all owners | `seed_default_cards()` now seeds Work (email fields) and Personal (phone fields) cards for every profile, not just the default owner. |
 
 ## Implementation Status Map (as of commit c0345a4)
@@ -178,6 +178,7 @@ The following rulings were established during development and are preserved as b
 |---|---|---|
 | Book Me (calendar availability) | ❌ Deferred | Explicitly not MVP. Intended as Cal.com embed or Google Calendar API. |
 | GUI evaluation pass | ❌ Deferred | GUI evaluation before QR generation; verification-loop testing deferred until after QR. |
+| Context layer (category UI) | ❌ Removed 2026-09-12 | Context `<select>` eliminated from all templates. DB columns (`grant_contexts`, `context` on `access_grants`) and routes (`/categorize`, `/context`) remain dormant but functional. See git history for the cut commit. |
 
 ### Test Suite
 
@@ -208,9 +209,9 @@ The following rulings were established during development and are preserved as b
 |---|---|---|
 | Public card scope | **Resolved** | Anonymous sees bio only; all fields/cards require grant. Supersedes Work-card public default. |
 | Standing posture | **Resolved** | Personal-local now; public deployment deferred — standing decision. |
-| Photo originals | **OPEN** | Keep or discard after 512-square encode? |
-| Bio length cap | **OPEN** | Current 2,000 character cap; reopened for captain's decision. |
-| Context layer | **OPEN** | Revive the 2026-09-12 cut or keep it removed? DB columns + routes remain dormant either way. |
+| Photo originals | **Resolved** | Kept after 512-square encode; code follow-up pending (current impl discards). |
+| Bio length cap | **Resolved** | 2,000 characters confirmed for now. |
+| Context layer | **Resolved** | Bookshelved; moved to Deferred section below. |
 | Seed default cards | **All owners** | `seed_default_cards()` seeds Work + Personal for every profile. |
 | Revocation cascade | **None** | Revoking a grant doesn't cascade to audit rows or scan_events. |
 | Scan event IP tracking | **Disabled** | Privacy default — no IP or user-agent stored. |
