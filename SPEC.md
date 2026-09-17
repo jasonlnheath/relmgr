@@ -1,6 +1,6 @@
 # WhiteList / relmgr — Product Specification
 
-> Consolidated from the recovered plan archive (`~/.hermes/plans/`) and the codebase at commit `c0345a4`. Last updated 2026-09-18.
+> Consolidated from the recovered plan archive (`~/.hermes/plans/`) and the codebase at commit `c0345a4`. Last updated 2026-09-18 (refined 2026-09-18).
 
 ## One-liner
 
@@ -60,24 +60,23 @@ QR              — profile URL only, never baked-in vCard data
 
 | Tier | Who | What they see |
 |---|---|---|
-| **Anonymous** | Anyone who scans the QR without being approved | Profile info (name, company, title) + fields marked `visibility='public'` |
-| **Card holder** | Proves possession of one shared field (call matched work number / scanned QR) | Same as anonymous (holder tier collapses to anonymous in MVP; the concept lives for later) |
-| **Granted** | Explicitly approved by owner | All fields the owner's card exposes + all granted-tier fields |
+| **Anonymous** | Anyone who scans the QR without being approved | Profile bio only; all fields and cards require a grant |
+| **Granted** | Explicitly approved by owner | All fields the owner's card exposes |
 | **Owner** | The profile's human owner | Everything, plus edit + verification controls |
 
 ### Time-Bound Access
 
-Every permission has an expiration policy:
+Every permission has an expiration policy. Exactly three durations:
 
 | Duration type | Behavior |
 |---|---|
 | **Lifetime** | Permanent access (`expires_at IS NULL`). Rare, high trust. |
-| **14-day** | Expires 14 days after approval. |
-| **90-day** | Expires 90 days after approval. |
-| **Quarter** | Expires at the end of the current UTC calendar quarter. |
-| **Revoked** | Access revoked by owner; `revoked_at` stamped; audit row preserved. |
+| **While employed** | Access while the relationship persists (e.g. employment). |
+| **Till next quarterly review** | Expires at the next quarterly review; owner must promote to lifetime or while employed, or revoke. |
 
-The system suggests duration based on relationship type (recruiter → 14 days, friend → lifetime, colleague → employment-based). Duration defaults are configurable by the owner.
+**Quarterly review flow:** at review time the owner is prompted per contact: promote to lifetime, promote to while-employed, or revoke. The revocation path preserves audit rows (append-only).
+
+*Transaction-based and event-based durations were considered and cut during refinement to keep the model minimal.*
 
 ### Communication Firewall (Vision — Unbuilt)
 
@@ -102,6 +101,18 @@ The app sits between the world and the user's devices. Unauthorized contacts are
 
 This feature is **not implemented**. The `firewall_logs` table was never created. The inbox/review flow (request → approve/deny) exists as a lightweight approximation.
 
+### Request Flow Design
+
+The public profile is the contact entry point — a **friend-request model**.
+
+- The reaching-out person must **provide a reason** when requesting access.
+- The owner gets to see the requester's bio before deciding.
+- **Social-proof links attach by intent:**
+  - Friendship requests → link the requester's Facebook/Instagram
+  - Work requests → link the requester's LinkedIn
+- The owner reviews the request (with bio + social proof) and decides: grant or deny.
+- Denials land in the junk view, never greyed inline.
+
 ## Standing Captain Rulings (Behavioral Constraints)
 
 The following rulings were established during development and are preserved as binding constraints:
@@ -109,18 +120,19 @@ The following rulings were established during development and are preserved as b
 | Ruling | Constraint |
 |---|---|
 | User decides, app enforces | The system never overrides user preference. No auto-approvals. |
-| Context/category UI removed (2026-09-12) | The context `<select>` is eliminated from the UI. The `grant_contexts` registry and columns remain in the DB (dormant) but are never exposed in any template. Routes `/owner/{token}/categorize` and `/context` stay functional for backward compat. |
+| Context layer | **OPEN** — revived for decision: revive the 2026-09-12 cut or keep it removed. DB columns + routes remain dormant either way. |
 | Denials live in the junk view | Denied contacts go to a separate `/owner/{token}/junk` view — never greyed out inline. |
 | Tests never write the prod DB | All tests use tmp_db fixtures. The live `contacts.db` is never modified by the test suite. Hermeticity is verified by a row-sha digest. |
 | `merge_all` / `merge_and_dedup` never called | These scripts `DROP TABLE contacts`. They are dead ends. Never executed. |
 | `grant_logs` is append-only | The audit log table is never purged. Rows are permanent — the "alibi" convention. |
 | No revoke cascade | Revoking a grant marks only that grant as `'revoked'` and stamps `revoked_at`. Audit rows and scan_events are left alone. |
 | Scan events stay IP-less | `scan_events` records `profile_handle`, `scan_at`, and optional `viewer_email` — no IP address or user-agent tracking. |
-| Public card = Work only | By default, a public-facing card shows only the "Work" card's fields. |
-| Photos follow card visibility | Card photos are served only when the viewer has appropriate tier access. |
+| Standing posture | **Personal-local now, public deployment deferred** — this is a standing decision. |
+| Bio only for anonymous | Anonymous visitors see the profile bio only; all fields and cards require a grant. Supersedes the Work-card public default. |
+| Photo originals | **OPEN** — keep or discard after 512-square encode? |
 | Contact list shows all live contacts | The contact list view shows all contacts from `contacts.db` (1,920+), not just whitelist-approved ones. |
-| Bio cap 2000 characters | Profile bios are capped at 2,000 characters. |
-| No originals kept | The system stores normalized values; raw originals are not persisted beyond what's needed for audit. |
+| Bio cap | **OPEN** — current 2,000 character cap; captain reopened for decision. |
+| Photo originals kept | **OPEN** — same decision as above: keep or discard after 512-square encode. |
 | Seed default cards cover all owners | `seed_default_cards()` now seeds Work (email fields) and Personal (phone fields) cards for every profile, not just the default owner. |
 
 ## Implementation Status Map (as of commit c0345a4)
@@ -152,7 +164,6 @@ The following rulings were established during development and are preserved as b
 | Feature | Status | Notes |
 |---|---|---|
 | QR code generation (print-ready PNG) | ✅ Built | `scripts/seed_demo.py` generates QRs |
-| Book Me (calendar availability) | ❌ Unbuilt | Intended as Cal.com embed or Google Calendar API |
 | Firewall / voicemail interception | ❌ Unbuilt | Preserved as vision in § above |
 | Social verification (Discord, etc.) | ❌ Unbuilt | Manual entry + API verification was the MVP plan |
 | Google Contacts write-back | ❌ Unbuilt | OAuth scope granted; E2E verified; not wired into approvals |
@@ -160,6 +171,13 @@ The following rulings were established during development and are preserved as b
 | Browser extension | ❌ Unbuilt | Thin once hosted API exists |
 | Social media integration | ❌ Unbuilt | Phase 3 plan: full OAuth for real-time sync |
 | Deploy / hosting | ❌ Unbuilt | Render free tier, personal account, custom domain + TLS |
+
+### Deferred (Bookshelf)
+
+| Feature | Status | Notes |
+|---|---|---|
+| Book Me (calendar availability) | ❌ Deferred | Explicitly not MVP. Intended as Cal.com embed or Google Calendar API. |
+| GUI evaluation pass | ❌ Deferred | GUI evaluation before QR generation; verification-loop testing deferred until after QR. |
 
 ### Test Suite
 
@@ -181,21 +199,22 @@ The following rulings were established during development and are preserved as b
 | **6** | Browser extension (hover Gmail → "in registry? pull card") | ~2 weeks | ❌ Not started |
 
 > **Note:** Phases 4 and 5 were merged into the P4/P5 development sessions. The original roadmap from the founding spec (contact-registry-mvp.md) listed 7 phases (0–6); P5 subsumed what was originally planned as Phase 4 (Google Contacts write + Graph adapter) into later work.
+>
+> **Build order note:** GUI evaluation pass first, then QR generation; verification-loop testing deferred until after QR.
 
 ## Open Decisions & Current Defaults
 
-| Decision | Default | Notes |
+| Decision | State | Notes |
 |---|---|---|
-| Public card scope | **Work only** | Default card shown to anonymous viewers is the "Work" card. |
-| Photos visibility | **Follow card visibility** | Photos served only to viewers with appropriate tier access. |
-| Contact list scope | **All live contacts** | Shows all contacts from `contacts.db`, not just whitelist-approved. |
-| Bio character cap | **2,000** | Profile bios capped at 2K characters. |
-| Original values | **Not kept** | Normalized values stored; raw originals discarded. |
+| Public card scope | **Resolved** | Anonymous sees bio only; all fields/cards require grant. Supersedes Work-card public default. |
+| Standing posture | **Resolved** | Personal-local now; public deployment deferred — standing decision. |
+| Photo originals | **OPEN** | Keep or discard after 512-square encode? |
+| Bio length cap | **OPEN** | Current 2,000 character cap; reopened for captain's decision. |
+| Context layer | **OPEN** | Revive the 2026-09-12 cut or keep it removed? DB columns + routes remain dormant either way. |
 | Seed default cards | **All owners** | `seed_default_cards()` seeds Work + Personal for every profile. |
 | Revocation cascade | **None** | Revoking a grant doesn't cascade to audit rows or scan_events. |
 | Scan event IP tracking | **Disabled** | Privacy default — no IP or user-agent stored. |
 | `grant_logs` purging | **Never** | Append-only alibi convention. |
-| Context categories in UI | **Removed** | UI eliminated 2026-09-12; DB columns + routes dormant but functional. |
 | Denials display | **Junk view only** | Denied contacts appear in `/owner/{token}/junk`, never greyed inline. |
 | Domain / BASE_URL | `https://whitelist.app` | Placeholder; set via `.env` at deploy time. |
 | Hosting | Render free tier, personal account | Never Walther-branded. |
