@@ -94,9 +94,13 @@ Every permission has an expiration policy. Exactly three durations:
 |---|---|
 | **Lifetime** | Permanent access (`expires_at IS NULL`). Rare, high trust. |
 | **While employed** | Access while the relationship persists (e.g. employment). |
-| **Till next quarterly review** | Expires at the next quarterly review; owner must promote to lifetime or while employed, or revoke. |
+| **Till next quarterly review** | Greylist — pending quarterly confirmation; expires at the next quarterly review. |
 
-**Quarterly review flow:** at review time the owner is prompted per contact: promote to lifetime, promote to while-employed, or revoke. The revocation path preserves audit rows (append-only).
+**Quarterly review flow:** the whitelist emails the owner every quarter. The email lists all greylisted contacts and prompts the owner to make each contact permanent (Lifetime) or revoke it. Greylist = pending quarterly confirmation. The revocation path preserves audit rows (append-only). *This is spec direction only; email-sending machinery is future work.*
+
+### Blocked State
+
+Revoked and denied (blocked) merge into a single **Blocked** state with one red badge. There is no distinct "Revoked" badge anywhere in the UI. Both revoked grants (owner-initiated revocation) and denied requests (denial) render as `Blocked` in the contact list. The database retains the `status` distinction (`'revoked'` vs `'denied'`) for audit purposes, but the UI treats them identically.
 
 *Transaction-based and event-based durations were considered and cut during refinement to keep the model minimal.*
 

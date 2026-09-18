@@ -943,6 +943,46 @@ def create_app(db_path: Path = None) -> FastAPI:
     # 2026-09-12 — feature cut from the product. DB layer untouched; if it's
     # ever revived it's app-layer work only (git history has the code).
 
+    @application.get("/owner/{token}/contact/{grant_id}", response_class=HTMLResponse)
+    async def owner_contact_card(request: Request, token: str, grant_id: str):
+        """Contact card — single-surface view of one contact from the dashboard.
+        Ruling: revoke lives on the contact card, not the list details expander.
+        """
+        payload = wl_tokens.consume_token(_get_secret(), "owner_dashboard", token)
+        if payload is None:
+            return HTMLResponse("Invalid or expired link", status_code=403)
+
+        conn = whitelist_db.wl_connect(path)
+        try:
+            grant = whitelist_db.get_grant(conn, grant_id)
+            if not grant:
+                return HTMLResponse("Grant not found", status_code=404)
+            profile = whitelist_db.get_profile_by_id(conn, grant["profile_id"])
+            cards = whitelist_db.list_cards(conn, grant["profile_id"])
+            for card in cards:
+                card["photo_path"] = card.get("photo_path")
+                card["field_ids"] = [f["id"] for f in card.get("fields", [])]
+                # Enrich visible_fields
+                if card.get("fields"):
+                    card["visible_fields"] = card["fields"]
+                else:
+                    card["visible_fields"] = []
+            stale = is_verified_stale(profile.get("verified_at"))
+            # Determine tier for this grant
+            if grant["status"] == "granted":
+                tier = "granted"
+            elif grant["status"] == "pending":
+                tier = "pending"
+            else:
+                tier = "denied"
+        finally:
+            conn.close()
+
+        return HTMLResponse(jinja.get_template("contact_card.html").render(
+            request=request, profile=profile, grant=grant, cards=cards,
+            tier=tier, stale=stale, days_since=days_since, token=token,
+            grant_id=grant_id))
+
     @application.post("/owner/{token}/bulk", response_class=HTMLResponse)
     async def owner_bulk(request: Request, token: str):
         """P4-T2: one decision over many grants. Per-grant scoping lives in

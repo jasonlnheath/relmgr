@@ -75,16 +75,9 @@
                         Whitelist
                     </span>
                     {% elif row.perm == 'temp' %}
-                    {% set exp = days_until(row.live_grant.expires_at) %}
-                    {% if exp <= 0 %}
                     <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs wl-badge-greylist">
-                        Expired
+                        Greylist
                     </span>
-                    {% else %}
-                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs wl-badge-greylist">
-                        Greylist — {{ exp }}d
-                    </span>
-                    {% endif %}
                     {% endif %}
                     {% else %}
                     <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs wl-badge-blocked">
@@ -110,7 +103,7 @@
                     {% endif %}
                 </div>
 
-                {# Actions — approve/deny for pending, revoke for granted #}
+                {# Actions — approve/deny for pending, View Contact for granted #}
                 {% if row.is_pending %}
                 <form method="POST" action="/owner/{{ token }}/decision" class="mt-3 flex gap-2">
                     <input type="hidden" name="grant_id" value="{{ row.live_grant.id }}">
@@ -124,13 +117,8 @@
                     </button>
                 </form>
                 {% elif row.granted and row.contact_id %}
-                <form method="POST" action="/owner/{{ token }}/revoke" class="mt-3">
-                    <input type="hidden" name="grant_id" value="{{ row.live_grant.id }}">
-                    <button type="submit"
-                            class="wl-btn-revoke px-3 py-1 rounded text-xs">
-                        Revoke
-                    </button>
-                </form>
+                <a href="/owner/{{ token }}/contact/{{ row.live_grant.id }}"
+                   class="inline-block mt-3 text-xs wl-link">View Contact →</a>
                 {% endif %}
             </details>
         </div>
