@@ -5,11 +5,11 @@
 <div class="wl-card p-6">
     <h1 class="wl-heading wl-heading-md mb-4">
         {% if decision == 'approve' %}
-        <span style="color: #5F7A5E;">✓ Access Approved</span>
+        <span style="color: var(--wl-success);">✓ Access Approved</span>
         {% elif decision == 'revoke' %}
         <span class="wl-text-sub">↩ Access Revoked</span>
         {% else %}
-        <span style="color: #8C2F2F;">✗ Access Denied</span>
+        <span style="color: var(--wl-danger);">✗ Access Denied</span>
         {% endif %}
     </h1>
 

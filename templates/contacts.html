@@ -5,7 +5,7 @@
 <div class="wl-glass-rail mb-4">
     <div class="flex">
         <a href="/owner/{{ token }}"
-           class="px-4 py-2 text-sm font-medium wl-link border-b-2 wl-border">
+           class="px-4 py-2 text-sm font-medium wl-link border-b-2" style="border-color: var(--wl-ink);">
             Contact List
         </a>
         <a href="/owner/{{ token }}/profile"
@@ -18,7 +18,7 @@
 
 {% block content %}
 <div class="wl-card p-4">
-    <h1 class="wl-heading wl-heading-sm mb-4">Contact List</h1>
+    <h1 class="wl-heading wl-heading-md mb-4">Contact List</h1>
 
     {# Pending requests — "needs decision" at top #}
     {% if pending_grants %}
@@ -26,7 +26,7 @@
         <h2 class="wl-heading wl-heading-sm font-semibold wl-text-sub mb-2">Needs Decision ({{ pending_grants|length }})</h2>
         <div class="space-y-3">
             {% for entry in pending_grants %}
-            <div class="border rounded-md p-3" style="border-color: var(--wl-bunny-200); background: var(--wl-amber-field);">
+            <div class="border rounded-md p-3" style="border-left: 3px solid var(--wl-amber); border-color: var(--wl-bunny-200); background: var(--wl-amber-field);">
                 <div class="flex items-start justify-between">
                     <div class="flex-1">
                         <div class="flex items-center gap-2">

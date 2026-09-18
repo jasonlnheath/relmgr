@@ -9,9 +9,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Arapey:ital@0;1&display=swap" rel="stylesheet">
     <style>
-        /* === RelMgr theme tokens (captain rulings 2026-09-18) === */
+        /* === RelMgr theme tokens (captain rulings 2026-09-18; pairing-review fixes §6) === */
         :root {
-            /* Darker, moodier grey ramp */
+            /* Bunny-grey ramp (captain baseline: land as-is per §7) */
             --wl-ink: #0B0B0C;
             --wl-paper: #FFFFFF;
             --wl-charcoal: #333338;
@@ -19,10 +19,12 @@
             --wl-bunny-100: #DDD8D1;
             --wl-bunny-200: #C6BFB5;
             --wl-bunny-400: #A29A8E;
-            --wl-bunny-500: #857D72;
+            --wl-bunny-500: #756D62;
             --wl-bunny-700: #5F584E;
-            --wl-amber: #8A6D1F;
+            --wl-amber: #6E5616;
             --wl-amber-field: #F5EEDA;
+            --wl-danger: #8C2F2F;
+            --wl-success: #5F7A5E;
 
             /* Subtle glass (even more subtle than mockup) */
             --wl-glass-fill: rgba(255,255,255,0.60);
@@ -33,7 +35,6 @@
         /* Semantic utility classes */
         .wl-page-bg { background: var(--wl-bunny-100); }
         .wl-card { background: var(--wl-paper); border: 1px solid var(--wl-bunny-200); border-radius: 0; }
-        .wl-heading { font-family: "Arapey", Georgia, serif; font-weight: 400; color: var(--wl-ink); }
         .wl-text { color: var(--wl-ink); }
         .wl-text-sub { color: var(--wl-charcoal); }
         .wl-text-muted { color: var(--wl-bunny-700); }
@@ -41,12 +42,12 @@
         .wl-border { border-color: var(--wl-bunny-200); }
         .wl-link { color: var(--wl-ink); text-decoration: underline; }
         .wl-link:hover { opacity: 0.75; }
-        .wl-btn-approve { background: #5F7A5E; color: #FFFFFF; }
+        .wl-btn-approve { background: var(--wl-success); color: #FFFFFF; }
         .wl-btn-approve:hover { background: #4E684D; }
-        .wl-btn-deny { background: #8C2F2F; color: #FFFFFF; }
+        .wl-btn-deny { background: var(--wl-danger); color: #FFFFFF; }
         .wl-btn-deny:hover { background: #7A2828; }
-        .wl-btn-revoke { background: #A08040; color: #FFFFFF; }
-        .wl-btn-revoke:hover { background: #8E7035; }
+        .wl-btn-revoke { background: #7A5F1E; color: #FFFFFF; }
+        .wl-btn-revoke:hover { background: #6A5018; }
         .wl-btn-submit { background: var(--wl-ink); color: var(--wl-paper); }
         .wl-btn-submit:hover { opacity: 0.85; }
         .wl-btn-ink { background: var(--wl-ink); color: var(--wl-paper); }
@@ -56,6 +57,7 @@
         .wl-badge-amber { background: var(--wl-amber-field); color: var(--wl-amber); }
         .wl-badge-approved { background: #E8F0E8; color: #3D6B3D; }
         .wl-badge-charcoal { background: #EDEDED; color: var(--wl-charcoal); }
+        .wl-badge-danger { background: #F5E8E8; color: var(--wl-danger); }
 
         /* Glass effect on tabs rail */
         .wl-glass-rail {
@@ -65,10 +67,10 @@
             border-bottom: 1px solid var(--wl-glass-border);
         }
 
-        /* Arapey size floor — headings >= 18px */
-        .wl-heading-sm { font-size: 18px; line-height: 24px; }
-        .wl-heading-md { font-size: 22px; line-height: 28px; }
-        .wl-heading-lg { font-size: 30px; line-height: 36px; }
+        /* Heading scale — mockup: h1 30 / h2 22; all Arapey 400 weight */
+        .wl-heading { font-family: "Arapey", Georgia, serif; font-weight: 400; color: var(--wl-ink); }
+        .wl-heading-sm { font-size: 22px; line-height: 28px; }
+        .wl-heading-md { font-size: 30px; line-height: 36px; }
     </style>
 </head>
 <body class="wl-page-bg min-h-screen">

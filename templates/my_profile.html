@@ -9,7 +9,7 @@
             Contact List
         </a>
         <a href="/owner/{{ token }}/profile"
-           class="px-4 py-2 text-sm font-medium wl-link border-b-2 wl-border">
+           class="px-4 py-2 text-sm font-medium wl-link border-b-2" style="border-color: var(--wl-ink);">
             My Profile
         </a>
     </div>
@@ -45,7 +45,7 @@
             <label class="text-sm font-medium wl-text-sub">Bio</label>
             <form method="POST" action="/owner/{{ token }}/bio" class="mt-1">
                 <textarea name="bio" rows="3"
-                          class="w-full border rounded-md px-3 py-2 text-sm wl-text"
+                          class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm wl-text focus:border-[#0B0B0C] focus:ring-[#0B0B0C]"
                           placeholder="Tell us about yourself...">{{ profile.bio or '' }}</textarea>
                 <div class="flex items-center justify-between mt-1">
                     <span class="text-xs wl-text-faint">{{ bio_len }}/2000 characters</span>
@@ -56,7 +56,7 @@
                 </div>
             </form>
             {% if bio_error %}
-            <p class="text-xs text-red-600 mt-1">{{ bio_error }}</p>
+            <p class="text-xs" style="color: var(--wl-danger);">{{ bio_error }}</p>
             {% endif %}
         </div>
     </div>
@@ -72,14 +72,14 @@
         </div>
 
         {# New card form (hidden by default) #}
-        <div id="new-card-form" class="hidden mb-4 p-3 rounded-md" style="background: #F5F3F0;">
+        <div id="new-card-form" class="hidden mb-4 p-3 rounded-md" style="background: var(--wl-bunny-100);">
             <form method="POST" action="/owner/{{ token }}/cards/new">
                 <label class="text-sm font-medium wl-text-sub">Card name</label>
                 <input type="text" name="name" maxlength="60"
-                       class="w-full border rounded-md px-3 py-2 text-sm mt-1 wl-text"
+                       class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm mt-1 wl-text focus:border-[#0B0B0C] focus:ring-[#0B0B0C]"
                        placeholder="e.g. Sales, Partners">
                 {% if new_card_error %}
-                <p class="text-xs text-red-600 mt-1">{{ new_card_error }}</p>
+                <p class="text-xs" style="color: var(--wl-danger);">{{ new_card_error }}</p>
                 {% endif %}
                 <button type="submit"
                         class="wl-btn-ink px-3 py-1 rounded text-xs mt-2">
@@ -101,7 +101,8 @@
                              alt="{{ card.name }} photo"
                              class="w-10 h-10 rounded-full object-cover">
                         {% else %}
-                        <div class="w-10 h-10 rounded-full" style="background: var(--wl-bunny-100); display: flex; align-items: center; justify-content: center;">
+                        <div class="w-10 h-10 rounded-full flex items-center justify-center"
+                             style="background: var(--wl-bunny-100);">
                             <span class="text-sm font-medium wl-text-muted">
                                 {{ card.name[:2].upper() }}
                             </span>
@@ -118,7 +119,7 @@
                             Preview
                         </a>
                         <form method="POST" action="/owner/{{ token }}/cards/{{ card.id }}/fields">
-                            <select name="field_ids" multiple class="text-xs border rounded px-1 py-0.5" size="3">
+                            <select name="field_ids" multiple class="text-xs border border-gray-300 rounded px-1 py-0.5" size="3">
                                 {% for pf in all_fields %}
                                 <option value="{{ pf.id }}"
                                         {% if pf.id in card.field_ids %}selected{% endif %}>
@@ -140,13 +141,13 @@
                         <div id="add-field-{{ card.id }}" class="hidden mt-1">
                             <form method="POST" action="/owner/{{ token }}/fields/new">
                                 <input type="hidden" name="card_id" value="{{ card.id }}">
-                                <select name="field_type" class="text-xs border rounded px-1 py-0.5">
+                                <select name="field_type" class="text-xs border border-gray-300 rounded px-1 py-0.5 focus:border-[#0B0B0C] focus:ring-[#0B0B0C]">
                                     <option value="email">Email</option>
                                     <option value="phone">Phone</option>
                                 </select>
                                 <input type="text" name="field_value" placeholder="value"
-                                       class="text-xs border rounded px-2 py-0.5 wl-text">
-                                <select name="visibility" class="text-xs border rounded px-1 py-0.5">
+                                       class="text-xs border border-gray-300 rounded px-2 py-0.5 wl-text focus:border-[#0B0B0C] focus:ring-[#0B0B0C]">
+                                <select name="visibility" class="text-xs border border-gray-300 rounded px-1 py-0.5 focus:border-[#0B0B0C] focus:ring-[#0B0B0C]">
                                     <option value="public">Public</option>
                                     <option value="granted">Granted</option>
                                 </select>

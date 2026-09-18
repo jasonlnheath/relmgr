@@ -15,14 +15,14 @@
           class="flex items-center gap-2 mb-4 rounded-md px-3 py-2"
           style="background: var(--wl-amber-field); border: 1px solid var(--wl-bunny-200);">
         <span class="text-xs font-medium wl-text-sub">Bulk:</span>
-        <select name="expiry" class="text-xs border rounded px-1 py-0.5">
+        <select name="expiry" class="text-xs border border-gray-300 rounded px-1 py-0.5 focus:border-[#0B0B0C] focus:ring-[#0B0B0C]">
             <option value="14">14d</option>
             <option value="90" selected>90d</option>
             <option value="quarter">End of quarter</option>
             <option value="lifetime">Lifetime</option>
         </select>
         <button type="submit" name="decision" value="approve" form="bulkform"
-                class="wl-btn-approve rounded text-xs hover:bg-green-700">
+                class="wl-btn-approve rounded text-xs">
             Approve selected
         </button>
         <button type="submit" name="decision" value="deny" form="bulkform"
@@ -71,14 +71,14 @@
                     {% for day in entry.scan_stats %}
                     <div class="relative flex-1 group" data-date="{{ day.date }}" data-scans="{{ day.scans }}">
                         <div class="absolute bottom-0 left-0 right-0 rounded-t"
-                             style="height: {{ (day.scans * 100 / entry.scan_max) if entry.scan_max else 0 }}%; background: #857D72; opacity: 0.7;"></div>
+                             style="height: {{ (day.scans * 100 / entry.scan_max) if entry.scan_max else 0 }}%; background: var(--wl-bunny-500); opacity: 0.7;"></div>
                     </div>
                     {% endfor %}
                 </div>
             </div>
 
             {% for grant in entry.grants %}
-            <div class="wl-card p-3 mb-2" style="background: #F5F3F0;">
+            <div class="wl-card p-3 mb-2" style="background: var(--wl-bunny-100);">
                 <div class="flex items-start justify-between">
                     <div class="flex-1">
                         <p class="wl-heading wl-heading-sm font-medium wl-text">{{ grant.requester_name }}</p>
@@ -99,7 +99,7 @@
                         </span>
                         <form method="POST" action="/owner/{{ token }}/decision" class="inline-flex gap-1">
                             <input type="hidden" name="grant_id" value="{{ grant.id }}">
-                            <select name="expiry" class="text-xs border rounded px-1 py-0.5">
+                            <select name="expiry" class="text-xs border border-gray-300 rounded px-1 py-0.5 focus:border-[#0B0B0C] focus:ring-[#0B0B0C]">
                                 <option value="14">14d</option>
                                 <option value="90" selected>90d</option>
                                 <option value="quarter">End of quarter</option>
