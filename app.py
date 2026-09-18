@@ -352,27 +352,46 @@ def create_app(db_path: Path = None) -> FastAPI:
             else:
                 denied_count = 0
 
-            # Split rows into sections
-            pending_rows = [r for r in rows if r["is_pending"]]
-            active_rows = [r for r in rows if not r["is_pending"] and r["granted"]]
-            revoked_rows = [r for r in rows if not r["is_pending"] and not r["granted"] and r["live_grant"] is not None]
-            plain_rows = [r for r in rows if not r["is_pending"] and r["live_grant"] is None]
+            # Unified row list for single-surface contact list (round-2)
+            all_rows = rows
+            total_contacts = total_rows
+
+            # Owner's own card for the "my card" section
+            my_card = None
+            owner_profile = conn.execute("SELECT * FROM profiles WHERE id = ?", (profile_id,)).fetchone()
+            if owner_profile:
+                owner_cards = whitelist_db.list_cards(conn, profile_id)
+                if owner_cards:
+                    first_card = owner_cards[0]
+                    my_card = {
+                        "owner_id": profile_id,
+                        "id": first_card["id"],
+                        "name": owner_profile["display_name"],
+                        "email": "",
+                        "photo_path": first_card.get("photo_path"),
+                    }
+                    # Grab email from owner's fields
+                    owner_fields = conn.execute(
+                        "SELECT * FROM profile_fields WHERE profile_id = ? AND field_type = 'email' LIMIT 1",
+                        (profile_id,)
+                    ).fetchall()
+                    if owner_fields:
+                        my_card["email"] = owner_fields[0]["field_value"]
 
             # Fetch all cards for approve forms (pending rows) — use first profile
             all_cards = whitelist_db.list_cards(conn, all_profile_ids[0] if all_profile_ids else profile_id)
 
             return HTMLResponse(jinja.get_template("contact_list.html").render(
                 request=request,
-                pending_rows=pending_rows,
-                active_rows=active_rows,
-                revoked_rows=revoked_rows,
-                plain_rows=plain_rows,
+                all_rows=all_rows,
+                my_card=my_card,
                 all_cards=all_cards,
                 token=token,
                 q=q,
                 page=page,
                 per_page=per_page,
                 total_rows=total_rows,
+                total_contacts=total_contacts,
                 denied_count=denied_count,
                 days_since=days_since,
                 days_until=days_until,
