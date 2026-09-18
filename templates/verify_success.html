@@ -2,13 +2,15 @@
 {% block title %}Verification Updated — {{ profile.display_name }}{% endblock %}
 
 {% block content %}
-<div class="wl-card p-6">
-    <h1 class="wl-heading wl-heading-md mb-2" style="color: var(--wl-success);">✓ Verification Updated</h1>
-    <p class="wl-text-sub mb-4">
-        <strong class="wl-text">{{ profile.display_name }}</strong>'s verification date has been updated to today.
-    </p>
-    <p class="wl-text-faint text-sm">
-        Verified at: {{ profile.verified_at }}
-    </p>
+<div class="max-w-2xl mx-auto py-8 px-4">
+    <div class="wl-card p-6">
+        <h1 class="wl-heading wl-heading-md mb-2" style="color: var(--wl-success);">✓ Verification Updated</h1>
+        <p class="wl-text-sub mb-4">
+            <strong class="wl-text">{{ profile.display_name }}</strong>'s verification date has been updated to today.
+        </p>
+        <p class="wl-text-faint text-sm">
+            Verified at: {{ profile.verified_at }}
+        </p>
+    </div>
 </div>
 {% endblock %}

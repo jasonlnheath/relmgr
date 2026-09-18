@@ -1,34 +1,36 @@
 {% extends "base.html" %}
-{% block title %}Whitelist — Junk{% endblock %}
+{% block title %}Whitelist — Denied{% endblock %}
 
 {% block content %}
-<div class="wl-card p-4">
-    <h1 class="wl-heading wl-heading-sm mb-4">Denied Requests</h1>
+<div class="max-w-2xl mx-auto py-8 px-4">
+    <div class="wl-card p-4">
+        <h1 class="wl-heading wl-heading-sm mb-4">Denied Requests</h1>
 
-    {% if not denied %}
-    <div class="text-center py-6">
-        <p class="wl-text-faint text-sm">No denied requests</p>
-    </div>
-    {% else %}
-    <div class="space-y-2">
-        {% for d in denied %}
-        <div class="wl-card p-3" style="background: #F5E8E8;">
-            <div class="flex items-center justify-between">
-                <div>
-                    <p class="wl-heading wl-heading-sm wl-text">{{ d.requester_name or d.requester_email }}</p>
-                    <p class="text-xs wl-text-sub">{{ d.requester_email }}</p>
-                    <p class="text-xs wl-text-faint mt-0.5">
-                        {% set dd = days_since(d.created_at) %}
-                        {% if dd == 0 %}today{% elif dd == 1 %}1 day ago{% else %}{{ dd }} days ago{% endif %}
-                    </p>
-                </div>
-                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium wl-badge-charcoal">
-                    Denied
-                </span>
-            </div>
+        {% if not denied %}
+        <div class="text-center py-6">
+            <p class="wl-text-faint text-sm">No denied requests</p>
         </div>
-        {% endfor %}
+        {% else %}
+        <div class="space-y-2">
+            {% for d in denied %}
+            <div class="wl-card p-3" style="background: rgba(239,68,68,0.08);">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="wl-heading wl-heading-sm wl-text">{{ d.requester_name or d.requester_email }}</p>
+                        <p class="text-xs wl-text-sub">{{ d.requester_email }}</p>
+                        <p class="text-xs wl-text-faint mt-0.5">
+                            {% set dd = days_since(d.created_at) %}
+                            {% if dd == 0 %}today{% elif dd == 1 %}1 day ago{% else %}{{ dd }} days ago{% endif %}
+                        </p>
+                    </div>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium wl-badge-blocked">
+                        Denied
+                    </span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
     </div>
-    {% endif %}
 </div>
 {% endblock %}

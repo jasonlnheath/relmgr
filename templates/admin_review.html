@@ -2,43 +2,45 @@
 {% block title %}Review Access Request — {{ profile.display_name }}{% endblock %}
 
 {% block content %}
-<div class="wl-card p-6">
-    <h1 class="wl-heading wl-heading-md mb-4">Review Access Request</h1>
+<div class="max-w-2xl mx-auto py-8 px-4">
+    <div class="wl-card p-6">
+        <h1 class="wl-heading wl-heading-md mb-4">Review Access Request</h1>
 
-    <div class="mb-4">
-        <p class="wl-text-sub">
-            <strong class="wl-text">{{ profile.display_name }}</strong> received a request from:
-        </p>
-        <ul class="mt-2 space-y-1 wl-text-sub">
-            <li>Name: {{ grant.requester_name }}</li>
-            <li>Email: {{ grant.requester_email }}</li>
-            <li>Received: {{ grant.created_at }}</li>
-        </ul>
-    </div>
-
-    <form method="POST" action="/a/{{ token }}/decision" class="space-y-4">
-        <div>
-            <label for="expiry" class="block text-sm font-medium wl-text-sub">Access Expiry</label>
-            <select id="expiry" name="expiry"
-                    class="mt-1 block w-full rounded-md border border-gray-300 shadow-sm focus:border-[#0B0B0C] focus:ring-[#0B0B0C] px-3 py-2">
-                <option value="14">14 days</option>
-                <option value="90" selected>90 days</option>
-                <option value="quarter">End of quarter</option>
-                <option value="lifetime">Lifetime</option>
-            </select>
+        <div class="mb-4">
+            <p class="wl-text-sub">
+                <strong class="wl-text">{{ profile.display_name }}</strong> received a request from:
+            </p>
+            <ul class="mt-2 space-y-1 wl-text-sub">
+                <li>Name: {{ grant.requester_name }}</li>
+                <li>Email: {{ grant.requester_email }}</li>
+                <li>Received: {{ grant.created_at }}</li>
+            </ul>
         </div>
-        <button type="submit" name="decision" value="approve"
-                class="w-full wl-btn-approve px-4 py-2 rounded-md">
-            ✓ Approve
-        </button>
-        <button type="submit" name="decision" value="deny"
-                class="w-full wl-btn-deny px-4 py-2 rounded-md">
-            ✗ Deny
-        </button>
-    </form>
 
-    <a href="/p/{{ profile.handle }}" class="wl-link text-sm mt-4 block">
-        ← Back to profile
-    </a>
+        <form method="POST" action="/a/{{ token }}/decision" class="space-y-4">
+            <div>
+                <label for="expiry" class="block text-sm font-medium wl-text-sub">Access Expiry</label>
+                <select id="expiry" name="expiry"
+                        class="mt-1 block w-full rounded-lg border border-gray-600 bg-transparent shadow-sm focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8] px-3 py-2">
+                    <option value="14">14 days</option>
+                    <option value="90" selected>90 days</option>
+                    <option value="quarter">End of quarter</option>
+                    <option value="lifetime">Lifetime</option>
+                </select>
+            </div>
+            <button type="submit" name="decision" value="approve"
+                    class="w-full wl-btn-approve px-4 py-2 rounded-lg text-sm">
+                ✓ Approve
+            </button>
+            <button type="submit" name="decision" value="deny"
+                    class="w-full wl-btn-deny px-4 py-2 rounded-lg text-sm">
+                ✗ Deny
+            </button>
+        </form>
+
+        <a href="/p/{{ profile.handle }}" class="wl-link text-sm mt-4 block">
+            ← Back to profile
+        </a>
+    </div>
 </div>
 {% endblock %}
