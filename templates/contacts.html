@@ -23,7 +23,7 @@
     {# Pending requests — "needs decision" at top #}
     {% if pending_grants %}
     <div class="mb-4">
-        <h2 class="wl-heading wl-heading-sm font-semibold wl-text-sub mb-2">Needs Decision ({{ pending_grants|length }})</h2>
+        <h2 class="wl-heading wl-heading-sm wl-text-sub mb-2">Needs Decision ({{ pending_grants|length }})</h2>
         <div class="space-y-3">
             {% for entry in pending_grants %}
             <div class="border rounded-md p-3" style="border-left: 3px solid var(--wl-amber); border-color: var(--wl-bunny-200); background: var(--wl-amber-field);">
@@ -36,7 +36,7 @@
                             {% elif entry.logo_state == 'stale' %}
                             <svg class="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L3 7v5c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z"/></svg>
                             {% endif %}
-                            <span class="wl-heading wl-heading-sm font-medium wl-text">{{ entry.display_name }}</span>
+                            <span class="wl-heading wl-heading-sm wl-text">{{ entry.display_name }}</span>
                         </div>
                         <p class="text-xs wl-text-sub mt-0.5">{{ entry.email }}</p>
                         <p class="text-xs wl-text-faint mt-0.5">
@@ -79,7 +79,7 @@
     {# Active / history grants #}
     {% if active_entries %}
     <div class="mb-4">
-        <h2 class="wl-heading wl-heading-sm font-semibold wl-text-sub mb-2">Active & History</h2>
+        <h2 class="wl-heading wl-heading-sm wl-text-sub mb-2">Active & History</h2>
         <div class="space-y-2">
             {% for entry in active_entries %}
             <div class="wl-card p-3">
@@ -92,7 +92,7 @@
                             {% elif entry.logo_state == 'stale' %}
                             <svg class="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L3 7v5c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z"/></svg>
                             {% endif %}
-                            <span class="wl-heading wl-heading-sm font-medium wl-text">{{ entry.display_name }}</span>
+                            <span class="wl-heading wl-heading-sm wl-text">{{ entry.display_name }}</span>
                         </div>
                         <p class="text-xs wl-text-sub mt-0.5">{{ entry.email }}</p>
                         {# Card badges #}

@@ -15,7 +15,7 @@
         <div class="wl-card p-3" style="background: #F5E8E8;">
             <div class="flex items-center justify-between">
                 <div>
-                    <p class="wl-heading wl-heading-sm font-medium wl-text">{{ d.requester_name or d.requester_email }}</p>
+                    <p class="wl-heading wl-heading-sm wl-text">{{ d.requester_name or d.requester_email }}</p>
                     <p class="text-xs wl-text-sub">{{ d.requester_email }}</p>
                     <p class="text-xs wl-text-faint mt-0.5">
                         {% set dd = days_since(d.created_at) %}

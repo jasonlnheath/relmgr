@@ -24,7 +24,7 @@
     <div class="border-b pb-4 mb-4" style="border-color: var(--wl-bunny-200);">
         <div class="flex items-center justify-between mb-2">
             <div>
-                <h2 class="wl-heading wl-heading-sm font-semibold wl-text">{{ profile.display_name }}</h2>
+                <h2 class="wl-heading wl-heading-sm wl-text">{{ profile.display_name }}</h2>
                 {% if profile.title or profile.company %}
                 <p class="text-sm wl-text-sub">
                     {% if profile.title %}{{ profile.title }}{% endif %}
@@ -64,7 +64,7 @@
     {# Cards section #}
     <div>
         <div class="flex items-center justify-between mb-3">
-            <h2 class="wl-heading wl-heading-sm font-semibold wl-text">Cards</h2>
+            <h2 class="wl-heading wl-heading-sm wl-text">Cards</h2>
             <button type="button" onclick="document.getElementById('new-card-form').classList.toggle('hidden')"
                     class="wl-link text-sm">
                 + Create card
@@ -109,7 +109,7 @@
                         </div>
                         {% endif %}
                         <div>
-                            <h3 class="wl-heading wl-heading-sm font-medium wl-text">{{ card.name }}</h3>
+                            <h3 class="wl-heading wl-heading-sm wl-text">{{ card.name }}</h3>
                             <p class="text-xs wl-text-faint">{{ card.fields|length }} fields</p>
                         </div>
                     </div>

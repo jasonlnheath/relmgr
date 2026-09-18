@@ -30,7 +30,7 @@
     {# Pending requests — "needs decision" at top #}
     {% if pending_rows %}
     <div class="mb-4">
-        <h2 class="wl-heading wl-heading-sm font-semibold wl-text-sub mb-2">Needs Decision ({{ pending_rows|length }})</h2>
+        <h2 class="wl-heading wl-heading-sm wl-text-sub mb-2">Needs Decision ({{ pending_rows|length }})</h2>
         <div class="space-y-3">
             {% for row in pending_rows %}
             <div class="border rounded-md p-3" style="border-left: 3px solid var(--wl-amber); border-color: var(--wl-bunny-200); background: var(--wl-amber-field);">
@@ -43,7 +43,7 @@
                             {% elif row.logo_state == 'stale' %}
                             <svg class="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L3 7v5c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z"/></svg>
                             {% endif %}
-                            <span class="wl-heading wl-heading-sm font-medium wl-text">{{ row.name }}</span>
+                            <span class="wl-heading wl-heading-sm wl-text">{{ row.name }}</span>
                         </div>
                         <p class="text-xs wl-text-sub mt-0.5">{{ row.email }}</p>
                         <p class="text-xs wl-text-faint mt-0.5">
@@ -81,7 +81,7 @@
     {# Active grants + contacts #}
     {% if active_rows %}
     <div class="mb-4">
-        <h2 class="wl-heading wl-heading-sm font-semibold wl-text-sub mb-2">Granted & History</h2>
+        <h2 class="wl-heading wl-heading-sm wl-text-sub mb-2">Granted & History</h2>
         <div class="space-y-2">
             {% for row in active_rows %}
             <div class="wl-card p-3">
@@ -108,7 +108,7 @@
                                 </div>
                             </details>
                             {% endif %}
-                            <span class="wl-heading wl-heading-sm font-medium wl-text">{{ row.name }}</span>
+                            <span class="wl-heading wl-heading-sm wl-text">{{ row.name }}</span>
                         </div>
                         <p class="text-xs wl-text-sub mt-0.5">{{ row.email }}</p>
                         {# Card badges #}
@@ -170,12 +170,12 @@
     {# Revoked grants — history stays visible, no logo, no controls #}
     {% if revoked_rows %}
     <div class="mb-4">
-        <h2 class="wl-heading wl-heading-sm font-semibold wl-text-sub mb-2">Revoked ({{ revoked_rows|length }})</h2>
+        <h2 class="wl-heading wl-heading-sm wl-text-sub mb-2">Revoked ({{ revoked_rows|length }})</h2>
         <div class="space-y-2">
             {% for row in revoked_rows %}
             <div class="wl-card p-3" style="background: var(--wl-bunny-100);">
                 <div class="flex items-center gap-2">
-                    <span class="wl-heading wl-heading-sm font-medium wl-text-muted">{{ row.name }}</span>
+                    <span class="wl-heading wl-heading-sm wl-text-muted">{{ row.name }}</span>
                     <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium wl-badge-charcoal">
                         Revoked
                     </span>
@@ -190,12 +190,12 @@
     {# Plain contacts (no grant) #}
     {% if plain_rows %}
     <div class="mb-4">
-        <h2 class="wl-heading wl-heading-sm font-semibold wl-text-sub mb-2">Contacts ({{ plain_rows|length }})</h2>
+        <h2 class="wl-heading wl-heading-sm wl-text-sub mb-2">Contacts ({{ plain_rows|length }})</h2>
         <div class="space-y-2">
             {% for row in plain_rows %}
             <div class="wl-card p-3">
                 <div class="flex items-center gap-2">
-                    <span class="wl-heading wl-heading-sm font-medium wl-text">{{ row.name }}</span>
+                    <span class="wl-heading wl-heading-sm wl-text">{{ row.name }}</span>
                 </div>
                 <p class="text-xs wl-text-sub mt-0.5">{{ row.email }}</p>
             </div>

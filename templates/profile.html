@@ -5,7 +5,7 @@
 <div class="wl-card p-6">
     <div class="flex items-center justify-between mb-4">
         <div>
-            <h1 class="wl-heading wl-heading-lg">{{ profile.display_name }}</h1>
+            <h1 class="wl-heading wl-heading-md">{{ profile.display_name }}</h1>
             {% if profile.title or profile.company %}
             <p class="wl-text-sub">
                 {% if profile.title %}{{ profile.title }}{% endif %}
@@ -28,7 +28,7 @@
     {% endif %}
 
     <div class="border-t pt-4 mt-4" style="border-color: var(--wl-bunny-200);">
-        <h2 class="wl-heading wl-heading-sm font-semibold wl-text mb-3">Contact Information</h2>
+        <h2 class="wl-heading wl-heading-sm wl-text mb-3">Contact Information</h2>
 
         {% if cards %}
         {# B4: card-driven public page #}
@@ -45,7 +45,7 @@
                     <span class="wl-text-faint text-lg font-medium">{{ profile.display_name[:1] }}</span>
                 </div>
                 {% endif %}
-                <h3 class="wl-heading wl-heading-sm font-semibold wl-text">{{ card.name }}</h3>
+                <h3 class="wl-heading wl-heading-sm wl-text">{{ card.name }}</h3>
             </div>
             <div class="ml-19 space-y-2">
                 {% for f in card.visible_fields %}

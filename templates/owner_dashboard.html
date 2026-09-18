@@ -47,7 +47,7 @@
         <div class="border-t pt-4">
             <div class="flex items-center justify-between mb-3">
                 <div>
-                    <h2 class="wl-heading wl-heading-sm font-semibold wl-text">{{ entry.profile.display_name }}</h2>
+                    <h2 class="wl-heading wl-heading-sm wl-text">{{ entry.profile.display_name }}</h2>
                     <p class="text-sm wl-text-sub">
                         {% if entry.profile.title or entry.profile.company %}
                             {% if entry.profile.title %}{{ entry.profile.title }}{% endif %}
@@ -81,7 +81,7 @@
             <div class="wl-card p-3 mb-2" style="background: var(--wl-bunny-100);">
                 <div class="flex items-start justify-between">
                     <div class="flex-1">
-                        <p class="wl-heading wl-heading-sm font-medium wl-text">{{ grant.requester_name }}</p>
+                        <p class="wl-heading wl-heading-sm wl-text">{{ grant.requester_name }}</p>
                         <p class="text-sm wl-text-sub">{{ grant.requester_email }}</p>
                         {# context badge + categorize form removed per Jason ruling 2026-09-12 #}
                         <p class="text-xs wl-text-faint mt-1">
