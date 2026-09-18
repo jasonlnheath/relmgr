@@ -46,10 +46,7 @@
         <div class="wl-card p-3">
             <div class="flex items-center gap-3">
                 {# Picture / avatar #}
-                {% if row.photo_path %}
-                <img src="{{ row.photo_path }}" alt="{{ row.name }} photo"
-                     class="w-10 h-10 rounded-full object-cover flex-shrink-0">
-                {% elif row.logo_state == 'fresh' %}
+                {% if row.logo_state == 'fresh' %}
                 <svg class="w-10 h-10 rounded-full flex-shrink-0" style="background: var(--wl-btn-slate);" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L3 7v5c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z"/></svg>
                 {% elif row.logo_state == 'stale' %}
                 <svg class="w-10 h-10 rounded-full flex-shrink-0" style="background: var(--wl-charcoal-deep);" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L3 7v5c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z"/></svg>
@@ -66,7 +63,7 @@
                     <p class="text-xs wl-text-sub truncate">{{ row.email }}</p>
                 </div>
 
-                {# Freshness + access badges #}
+                {# Access badges #}
                 <div class="flex flex-col items-end gap-1 flex-shrink-0">
                     {% if row.is_pending %}
                     <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs wl-badge-greylist">
@@ -93,9 +90,6 @@
                     <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs wl-badge-blocked">
                         Blocked
                     </span>
-                    {% endif %}
-                    {% if row.freshness_days is defined %}
-                    <span class="text-xs wl-text-faint">{{ row.freshness_days }}</span>
                     {% endif %}
                 </div>
             </div>

@@ -56,13 +56,10 @@
         {% endif %}
 
         {# QR code — scannable access key #}
-        {% set qr_path = '/exports/qr_' + profile.handle + '.png' %}
-        {% if qr_path is file_exists %}
         <div class="mb-6 pb-4" style="border-bottom: 1px solid var(--wl-glass-border);">
             <p class="text-xs wl-text-faint mb-2">Scan to connect</p>
-            <img src="{{ qr_path }}" alt="QR code" class="w-32 h-32 rounded-lg" style="background: #fff; padding: 8px;">
+            <img src="/exports/qr_{{ profile.handle }}.png" alt="QR code" class="w-32 h-32 rounded-lg" style="background: #fff; padding: 8px;">
         </div>
-        {% endif %}
 
         {# Communication icons — round call/text/facetime/email #}
         {% if tier == 'granted' and cards %}
