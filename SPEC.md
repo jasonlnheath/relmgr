@@ -43,7 +43,7 @@ aliases         — many handles → one person (profile_aliases)
   profile_id    — FK → profiles.id
 
 Field           — NOT records. Each field is a contact attribute attached to a Card.
-  field_type    — "email" | "phone" | "title" | "company" | "address" | "website" | "other"
+  field_type    — "email" | "phone" (live; CHECK constraint in profile_fields table)
   field_value   — the actual value
   visibility    — "public" | "granted" (public shown to anonymous viewers; "granted" shown only to authorized viewers)
 
@@ -58,15 +58,16 @@ Standard contact field set (v2, round-2 ruling 2026-09-18):
   | phone       | +1-555-123-4567                   | TEL         | E.164 normalized       |
   | title       | VP Engineering                    | TITLE       | Displayed on profile   |
   | company     | Acme Inc.                         | ORG         | Displayed on profile   |
-  | address     | 123 Main St, City, ST 12345       | ADR         | Not yet in schema      |
-  | website     | https://acme.com                  | URL         | Not yet in schema      |
-  | other       | Any freeform attribute            | —           | Fallback               |
+  | address     | 123 Main St, City, ST 12345       | ADR         | Future schema          |
+  | website     | https://acme.com                  | URL         | Future schema          |
+  | other       | Any freeform attribute            | —           | Future schema          |
 
-  The `title` and `company` fields are also stored as top-level `profiles.title` and
-  `profiles.company` columns (seeded from the canonical profile). Field-level title/company
-  values override the profile-level values when attached to a Card. The `address` and
-  `website` types are reserved for future schema expansion; they are accepted in input but
-  require a schema migration before they can be persisted.
+  Note: the `profiles` table has `title` and `company` columns (top-level profile metadata,
+  seeded from the canonical profile). These are NOT stored as profile_fields rows — they are
+  separate columns. The `title` and `company` field_type values exist in the spec table above
+  but are NOT yet active in the `profile_fields` CHECK constraint, which currently only allows
+  `'email'` and `'phone'`. Adding those types requires a schema migration. The `address`,
+  `website`, and `other` types are reserved for future expansion.
 
 Card            — an owner-defined field group (e.g. "Work" = email fields; "Personal" = phone fields)
   name          — human-readable label
