@@ -5,8 +5,73 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Whitelist{% endblock %}</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Arapey:ital@0;1&display=swap" rel="stylesheet">
+    <style>
+        /* === RelMgr theme tokens (captain rulings 2026-09-18) === */
+        :root {
+            /* Darker, moodier grey ramp */
+            --wl-ink: #0B0B0C;
+            --wl-paper: #FFFFFF;
+            --wl-charcoal: #333338;
+            --wl-charcoal-deep: #2B2B2E;
+            --wl-bunny-100: #DDD8D1;
+            --wl-bunny-200: #C6BFB5;
+            --wl-bunny-400: #A29A8E;
+            --wl-bunny-500: #857D72;
+            --wl-bunny-700: #5F584E;
+            --wl-amber: #8A6D1F;
+            --wl-amber-field: #F5EEDA;
+
+            /* Subtle glass (even more subtle than mockup) */
+            --wl-glass-fill: rgba(255,255,255,0.60);
+            --wl-glass-blur: 8px;
+            --wl-glass-border: rgba(11,11,12,0.10);
+        }
+
+        /* Semantic utility classes */
+        .wl-page-bg { background: var(--wl-bunny-100); }
+        .wl-card { background: var(--wl-paper); border: 1px solid var(--wl-bunny-200); border-radius: 0; }
+        .wl-heading { font-family: "Arapey", Georgia, serif; font-weight: 400; color: var(--wl-ink); }
+        .wl-text { color: var(--wl-ink); }
+        .wl-text-sub { color: var(--wl-charcoal); }
+        .wl-text-muted { color: var(--wl-bunny-700); }
+        .wl-text-faint { color: var(--wl-bunny-500); }
+        .wl-border { border-color: var(--wl-bunny-200); }
+        .wl-link { color: var(--wl-ink); text-decoration: underline; }
+        .wl-link:hover { opacity: 0.75; }
+        .wl-btn-approve { background: #5F7A5E; color: #FFFFFF; }
+        .wl-btn-approve:hover { background: #4E684D; }
+        .wl-btn-deny { background: #8C2F2F; color: #FFFFFF; }
+        .wl-btn-deny:hover { background: #7A2828; }
+        .wl-btn-revoke { background: #A08040; color: #FFFFFF; }
+        .wl-btn-revoke:hover { background: #8E7035; }
+        .wl-btn-submit { background: var(--wl-ink); color: var(--wl-paper); }
+        .wl-btn-submit:hover { opacity: 0.85; }
+        .wl-btn-ink { background: var(--wl-ink); color: var(--wl-paper); }
+        .wl-btn-ink:hover { opacity: 0.85; }
+        .wl-btn-gray { background: var(--wl-charcoal-deep); color: var(--wl-paper); }
+        .wl-btn-gray:hover { opacity: 0.85; }
+        .wl-badge-amber { background: var(--wl-amber-field); color: var(--wl-amber); }
+        .wl-badge-approved { background: #E8F0E8; color: #3D6B3D; }
+        .wl-badge-charcoal { background: #EDEDED; color: var(--wl-charcoal); }
+
+        /* Glass effect on tabs rail */
+        .wl-glass-rail {
+            background: var(--wl-glass-fill);
+            backdrop-filter: blur(var(--wl-glass-blur));
+            -webkit-backdrop-filter: blur(var(--wl-glass-blur));
+            border-bottom: 1px solid var(--wl-glass-border);
+        }
+
+        /* Arapey size floor — headings >= 18px */
+        .wl-heading-sm { font-size: 18px; line-height: 24px; }
+        .wl-heading-md { font-size: 22px; line-height: 28px; }
+        .wl-heading-lg { font-size: 30px; line-height: 36px; }
+    </style>
 </head>
-<body class="bg-gray-50 min-h-screen">
+<body class="wl-page-bg min-h-screen">
     <div class="max-w-2xl mx-auto py-8 px-4">
         {% block tabs %}{% endblock %}
         {% block content %}{% endblock %}

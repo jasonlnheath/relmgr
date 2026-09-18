@@ -2,12 +2,12 @@
 {% block title %}Verification Updated — {{ profile.display_name }}{% endblock %}
 
 {% block content %}
-<div class="bg-white rounded-lg shadow p-6">
-    <h1 class="text-2xl font-bold text-green-600 mb-2">✓ Verification Updated</h1>
-    <p class="text-gray-600 mb-4">
-        <strong>{{ profile.display_name }}</strong>'s verification date has been updated to today.
+<div class="wl-card p-6">
+    <h1 class="wl-heading wl-heading-md mb-2" style="color: #5F7A5E;">✓ Verification Updated</h1>
+    <p class="wl-text-sub mb-4">
+        <strong class="wl-text">{{ profile.display_name }}</strong>'s verification date has been updated to today.
     </p>
-    <p class="text-gray-500 text-sm">
+    <p class="wl-text-faint text-sm">
         Verified at: {{ profile.verified_at }}
     </p>
 </div>

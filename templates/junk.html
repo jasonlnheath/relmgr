@@ -2,27 +2,27 @@
 {% block title %}Whitelist — Junk{% endblock %}
 
 {% block content %}
-<div class="bg-white rounded-lg shadow p-4">
-    <h1 class="text-xl font-bold text-gray-900 mb-4">Denied Requests</h1>
+<div class="wl-card p-4">
+    <h1 class="wl-heading wl-heading-sm mb-4">Denied Requests</h1>
 
     {% if not denied %}
     <div class="text-center py-6">
-        <p class="text-gray-500 text-sm">No denied requests</p>
+        <p class="wl-text-faint text-sm">No denied requests</p>
     </div>
     {% else %}
     <div class="space-y-2">
         {% for d in denied %}
-        <div class="border border-red-200 rounded-md p-3 bg-red-50">
+        <div class="wl-card p-3" style="background: #F5E8E8;">
             <div class="flex items-center justify-between">
                 <div>
-                    <p class="text-sm font-medium text-gray-900">{{ d.requester_name or d.requester_email }}</p>
-                    <p class="text-xs text-gray-600">{{ d.requester_email }}</p>
-                    <p class="text-xs text-gray-400 mt-0.5">
+                    <p class="wl-heading wl-heading-sm font-medium wl-text">{{ d.requester_name or d.requester_email }}</p>
+                    <p class="text-xs wl-text-sub">{{ d.requester_email }}</p>
+                    <p class="text-xs wl-text-faint mt-0.5">
                         {% set dd = days_since(d.created_at) %}
                         {% if dd == 0 %}today{% elif dd == 1 %}1 day ago{% else %}{{ dd }} days ago{% endif %}
                     </p>
                 </div>
-                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium wl-badge-charcoal">
                     Denied
                 </span>
             </div>
