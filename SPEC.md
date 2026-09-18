@@ -42,10 +42,31 @@ aliases         — many handles → one person (profile_aliases)
   alias         — lowercase [a-z0-9_] slug, case-insensitive unique
   profile_id    — FK → profiles.id
 
-Field           — NOT records. Each field (work phone, cell, email, title, company, social handle)
-  field_type    — "email" | "phone" | "other"
+Field           — NOT records. Each field is a contact attribute attached to a Card.
+  field_type    — "email" | "phone" | "title" | "company" | "address" | "website" | "other"
   field_value   — the actual value
   visibility    — "public" | "granted" (public shown to anonymous viewers; "granted" shown only to authorized viewers)
+
+Standard contact field set (v2, round-2 ruling 2026-09-18):
+  The field_type enum was expanded from the original 3-value set (email/phone/other) to
+  cover the standard contact attributes used across iOS Contacts, Google Contacts, and
+  vCard 4.0. The full set:
+
+  | field_type  | Example values                    | vCard prop  | Notes                  |
+  |-------------|-----------------------------------|-------------|------------------------|
+  | email       | jason@example.com                 | EMAIL       | Primary key for grants |
+  | phone       | +1-555-123-4567                   | TEL         | E.164 normalized       |
+  | title       | VP Engineering                    | TITLE       | Displayed on profile   |
+  | company     | Acme Inc.                         | ORG         | Displayed on profile   |
+  | address     | 123 Main St, City, ST 12345       | ADR         | Not yet in schema      |
+  | website     | https://acme.com                  | URL         | Not yet in schema      |
+  | other       | Any freeform attribute            | —           | Fallback               |
+
+  The `title` and `company` fields are also stored as top-level `profiles.title` and
+  `profiles.company` columns (seeded from the canonical profile). Field-level title/company
+  values override the profile-level values when attached to a Card. The `address` and
+  `website` types are reserved for future schema expansion; they are accepted in input but
+  require a schema migration before they can be persisted.
 
 Card            — an owner-defined field group (e.g. "Work" = email fields; "Personal" = phone fields)
   name          — human-readable label

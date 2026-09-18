@@ -1,9 +1,10 @@
-"""Phase A1: Dashboard tabs — tab chrome + routes.
+"""Phase A1: Dashboard tabs — tab chrome removed in round-2.
 
 Tests pin:
-- Tab nav present on both /owner/{token} and /owner/{token}/profile
+- Tab nav is ABSENT from contact list and profile pages (round-2 ruling)
 - /owner/{token}/profile → 200 with valid token, 403 tampered/expired
-- The two pages show different content ("Contact List" heading vs "My Profile" heading)
+- The two pages show different content ("Contacts" heading vs "My Profile" heading)
+- Contact list shows "Contacts" header with count, no "Contact List" text
 """
 import os
 import sys
@@ -48,48 +49,29 @@ def _tampered_token():
 
 
 # ============================================================
-# Tab chrome on Contact List page
+# Tab chrome REMOVED (round-2 ruling)
 # ============================================================
 
-class TestTabChromeContactList:
-    def test_tab_nav_present_on_contact_list(self, tmp_path):
-        """Tab nav must be present on /owner/{token}."""
+class TestTabChromeRemoved:
+    """Round-2: single-surface design, no tab chrome."""
+
+    def test_no_tab_nav_on_contact_list(self, tmp_path):
+        """Tab nav must NOT be present on /owner/{token} (round-2: no tabs)."""
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
         resp = client.get(f"/owner/{_owner_token()}")
         assert resp.status_code == 200
-        # Tab nav contains "Contact List" link
-        assert "Contact List" in resp.text
+        # The contacts.html tab chrome uses <div class="wl-glass-rail"> — must be absent
+        # (CSS definition in base.html is OK; we check for the HTML element)
+        assert '<div class="wl-glass-rail' not in resp.text
 
-    def test_tab_nav_contains_my_profile_link(self, tmp_path):
-        """Tab nav must include link to My Profile."""
-        db = _make_db(tmp_path)
-        client = TestClient(create_app(db))
-        resp = client.get(f"/owner/{_owner_token()}")
-        assert resp.status_code == 200
-        assert "/profile" in resp.text
-
-
-# ============================================================
-# Tab chrome on My Profile page
-# ============================================================
-
-class TestTabChromeMyProfile:
-    def test_tab_nav_present_on_my_profile(self, tmp_path):
-        """Tab nav must be present on /owner/{token}/profile."""
+    def test_no_tab_nav_on_my_profile(self, tmp_path):
+        """Tab nav must NOT be present on /owner/{token}/profile (round-2: no tabs)."""
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
         resp = client.get(f"/owner/{_owner_token()}/profile")
         assert resp.status_code == 200
-        assert "My Profile" in resp.text
-
-    def test_tab_nav_contains_contact_list_link(self, tmp_path):
-        """Tab nav on /profile must link back to Contact List."""
-        db = _make_db(tmp_path)
-        client = TestClient(create_app(db))
-        resp = client.get(f"/owner/{_owner_token()}/profile")
-        assert resp.status_code == 200
-        assert "Contact List" in resp.text
+        assert '<div class="wl-glass-rail' not in resp.text
 
 
 # ============================================================
@@ -120,17 +102,17 @@ class TestProfileRoute:
 
 
 # ============================================================
-# Different content on each page
+# Different content on each page (updated for round-2)
 # ============================================================
 
 class TestDifferentContent:
-    def test_contact_list_has_contact_list_heading(self, tmp_path):
-        """Contact List page has 'Contact List' heading."""
+    def test_contact_list_has_contacts_heading(self, tmp_path):
+        """Contact List page has 'Contacts' heading (round-2: renamed from Contact List)."""
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
         resp = client.get(f"/owner/{_owner_token()}")
         assert resp.status_code == 200
-        assert "Contact List" in resp.text
+        assert "Contacts" in resp.text
 
     def test_my_profile_has_my_profile_heading(self, tmp_path):
         """My Profile page has 'My Profile' heading."""

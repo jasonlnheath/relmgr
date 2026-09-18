@@ -911,6 +911,16 @@ def create_app(db_path: Path = None) -> FastAPI:
         from fastapi.responses import FileResponse
         return FileResponse(full_path, media_type="image/jpeg")
 
+    @application.get("/exports/qr_{handle}.png")
+    async def serve_qr(handle: str):
+        """Serve QR code PNG for the given profile handle."""
+        qr_dir = Path(__file__).parent / "exports"
+        qr_path = qr_dir / f"qr_{handle}.png"
+        if not qr_path.exists():
+            return HTMLResponse("QR not found", status_code=404)
+        from fastapi.responses import FileResponse
+        return FileResponse(qr_path, media_type="image/png")
+
     @application.post("/owner/{token}/decision")
     async def owner_decision(request: Request, token: str):
         payload = wl_tokens.consume_token(_get_secret(), "owner_dashboard", token)

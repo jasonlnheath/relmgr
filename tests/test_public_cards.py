@@ -57,7 +57,7 @@ def _seed_full(tmp_path: Path) -> Path:
 
 
 def test_anon_sees_default_card_only(tmp_path):
-    """Anon: default (lowest id) card only; public fields only; hidden notice kept."""
+    """Anon: default (lowest id) card only; public fields only; no hidden notice (round-2)."""
     db = _seed_full(tmp_path)
     client = TestClient(create_app(db))
     html = client.get("/p/jasonheath").text
@@ -68,31 +68,30 @@ def test_anon_sees_default_card_only(tmp_path):
     assert "public@waltheremc.com" in html
     assert "jheath@waltheremc.com" not in html
     assert "555-1234" not in html
-    # Existing taunt stays exactly as now for anon.
-    assert "Some information is hidden" in html
-    assert "Request access" in html
+    # round-2: no hidden notice or request-access taunt on public profile
+    assert "Some information is hidden" not in html
+    assert "Request access" not in html
+    assert "Connect" in html  # round-2: Connect button replaces Request access
 
 
 def test_anon_shows_bio_and_photo_block(tmp_path):
-    """Anon default card includes bio text; photo renders when set."""
+    """Anon default card includes bio text; QR renders; per-card photos removed round-2."""
     db = _seed_full(tmp_path)
-    # Give the default card a photo path (file absence is fine for markup).
     conn = whitelist_db.wl_connect(db)
     default_card = conn.execute(
         "SELECT * FROM cards WHERE owner_profile_id = 1 ORDER BY id LIMIT 1"
     ).fetchone()
-    whitelist_db.update_card_photo(conn, default_card["id"],
-                                   f"1_{default_card['id']}.jpg")
     conn.close()
 
     client = TestClient(create_app(db))
     html = client.get("/p/jasonheath").text
     assert "I sell wheel bushings." in html, "bio must render on the public page"
-    assert f"/photos/1/{default_card['id']}" in html, "default card photo missing"
+    assert f"/exports/qr_jasonheath.png" in html, "QR code must render"
+    # round-2: per-card photos removed from public profile (only QR + bio)
 
 
 def test_granted_tier_sees_all_cards_and_fields(tmp_path):
-    """Granted viewer: every card with >=1 visible field; photos + bio."""
+    """Granted viewer: every card with >=1 visible field; bio + QR."""
     db = _seed_full(tmp_path)
     conn = whitelist_db.wl_connect(db)
     gid = whitelist_db.create_grant(conn, 1, "visitor@x.com", "Visitor")
@@ -106,20 +105,18 @@ def test_granted_tier_sees_all_cards_and_fields(tmp_path):
     # Granted-visibility fields now visible.
     assert "jheath@waltheremc.com" in html
     assert "555-1234" in html
-    # No taunt for granted viewers.
+    # round-2: no request-access taunt; Connect button only for non-granted tier
     assert "Request access" not in html
+    assert "Connect" not in html  # granted tier doesn't see Connect button
 
 
 def test_owner_self_view_shows_all_cards_photos_bio(tmp_path):
-    """Self-view (?e= own email -> tier granted): all cards, photos, bio."""
+    """Self-view (?e= own email -> tier granted): all cards, bio, QR.
+
+    round-2: per-card photos removed from profile page (only QR on profile).
+    round-2: Connect button only for non-granted tier.
+    """
     db = _seed_full(tmp_path)
-    conn = whitelist_db.wl_connect(db)
-    # Photo on the second card too — self-view must show it.
-    cards = list(conn.execute(
-        "SELECT * FROM cards WHERE owner_profile_id = 1 ORDER BY id").fetchall())
-    for c in cards:
-        whitelist_db.update_card_photo(conn, c["id"], f"1_{c['id']}.jpg")
-    conn.close()
 
     client = TestClient(create_app(db))
     me = client.get("/p/jasonheath?e=jheath%40waltheremc.com").text
@@ -128,15 +125,23 @@ def test_owner_self_view_shows_all_cards_photos_bio(tmp_path):
     assert "jheath@waltheremc.com" in me
     assert "555-1234" in me
     assert "I sell wheel bushings." in me, "bio missing from self-view"
-    assert f"/photos/1/{cards[0]['id']}" in me
-    assert f"/photos/1/{cards[1]['id']}" in me
+    assert "/exports/qr_jasonheath.png" in me, "QR must render on self-view"
     assert "Request access" not in me
+    assert "Connect" not in me  # self-view (granted tier) doesn't see Connect button
 
 
 def test_anon_still_hides_granted_fields_pin_kept(tmp_path):
-    """Regression guard for the pre-B4 anonymous strip (AC #7 first half)."""
+    """Regression guard for the pre-B4 anonymous strip (AC #7 first half).
+
+    round-2: no longer shows "Some information is hidden" text, but still
+    hides granted-visibility fields from anonymous viewers.
+    """
     db = _seed_full(tmp_path)
     client = TestClient(create_app(db))
     anon = client.get("/p/jasonheath").text
-    assert "Some information is hidden" in anon
+    # granted-visibility fields must still be hidden
     assert "jheath@waltheremc.com" not in anon
+    assert "555-1234" not in anon
+    # round-2: no hidden notice text, but Connect button present
+    assert "Some information is hidden" not in anon
+    assert "Connect" in anon

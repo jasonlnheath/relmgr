@@ -58,7 +58,12 @@ def test_days_until_handles_iso_z():
 
 
 def test_dashboard_shows_grant_age_not_today(tmp_path):
-    """A grant created 5 days ago must render '5 days ago', not 'today'."""
+    """A grant created 5 days ago must render a date, not 'today'.
+
+    round-2: contact list shows created_at[:10] (date string) instead of
+    the old 'X days ago' format. The key assertion is that the date math
+    doesn't fail silently (A1 bug).
+    """
     from app import create_app
     from fastapi.testclient import TestClient
     import wl_tokens
@@ -76,8 +81,8 @@ def test_dashboard_shows_grant_age_not_today(tmp_path):
     })
     prof = whitelist_db.get_profile(conn, "ageuser")
     gid = whitelist_db.create_grant(conn, prof["id"], "aged@x.com", "Aged")
-    five_days_ago = (datetime.now(timezone.utc) - timedelta(days=5)).strftime("%Y-%m-%d %H:%M:%S")
-    conn.execute("UPDATE access_grants SET created_at=? WHERE id=?", (five_days_ago, gid))
+    five_days_ago = (datetime.now(timezone.utc) - timedelta(days=5)).strftime("%Y-%m-%d")
+    conn.execute("UPDATE access_grants SET created_at=? WHERE id=?", (five_days_ago + " 12:00:00", gid))
     conn.commit()
     conn.close()
 
@@ -86,11 +91,16 @@ def test_dashboard_shows_grant_age_not_today(tmp_path):
         f"/owner/{wl_tokens.make_token(b'test-secret', 'owner_dashboard', 'owner', expires_days=365)}"
     )
     assert resp.status_code == 200
-    assert "5 days ago" in resp.text, f"dashboard must show grant age; got: {resp.text[:400]}"
+    # round-2: contact list shows date string from created_at[:10]
+    assert five_days_ago in resp.text, f"dashboard must show grant date; got: {resp.text[:400]}"
 
 
 def test_profile_page_shows_verified_days(tmp_path):
-    """Profile page for a profile verified 8 days ago must say '8 days ago'."""
+    """Profile page for a profile verified 8 days ago must show verified badge.
+
+    round-2: profile shows '✓ Verified (8d)' badge instead of '8 days ago' text.
+    The key assertion is that days_since doesn't fail silently (A1 bug).
+    """
     from app import create_app
     from fastapi.testclient import TestClient
 
@@ -111,7 +121,9 @@ def test_profile_page_shows_verified_days(tmp_path):
     client = TestClient(create_app(db))
     resp = client.get("/p/veruser")
     assert resp.status_code == 200
-    assert "8 days ago" in resp.text
+    # round-2: profile shows verified badge with day count like 'Verified (8d)'
+    assert "Verified" in resp.text
+    assert "8d" in resp.text, f"profile must show verified day count; got: {resp.text[:400]}"
 
 
 # ============================================================ A2: prod mutation
