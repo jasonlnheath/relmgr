@@ -128,10 +128,9 @@ class TestBuildQuarterlyReview:
             gid = create_grant(conn, owner_id, f"multi{i}@test.com", f"Multi User {i}")
             apply_decision(conn, gid, "approve", "quarter", merge_contacts=True)
             set_grant_cards(conn, gid, [work_id if i % 2 == 0 else personal_id])
-            # Expire to make grey
+            # Expire to make grey (derived: expired + not_punted)
             conn.execute(
-                "UPDATE access_grants SET expires_at = '2020-01-01T00:00:00Z', "
-                "quarter_status = 'punted' WHERE id = ?",
+                "UPDATE access_grants SET expires_at = '2020-01-01T00:00:00Z' WHERE id = ?",
                 (gid,),
             )
         conn.commit()

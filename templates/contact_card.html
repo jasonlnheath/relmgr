@@ -96,9 +96,9 @@
                         {% if grant.quarter_status == 'pending_review' %}wl-badge-greylist
                         {% elif grant.quarter_status == 'punted' %}wl-badge-greylist
                         {% else %}wl-badge-approved{% endif %}">
-                        {% if grant.quarter_status == 'pending_review' %}⏳ Pending Review
-                        {% elif grant.quarter_status == 'punted' %}🔄 Punted
-                        {% else %}✓ Active{% endif %}
+                        {% if grant.quarter_status == 'pending_review' %}Pending Review
+                        {% elif grant.quarter_status == 'punted' %}Punted
+                        {% else %}Active{% endif %}
                     </span>
                 </div>
                 {% endif %}
@@ -165,7 +165,7 @@
                         <input type="hidden" name="grant_id" value="{{ grant.id }}">
                         <button type="submit"
                                 class="wl-btn-approve px-4 py-2 rounded-lg text-sm">
-                            ⭐ Make Permanent
+                            Make Permanent
                         </button>
                     </form>
                     {# Revoke #}
@@ -173,7 +173,7 @@
                         <input type="hidden" name="grant_id" value="{{ grant.id }}">
                         <button type="submit"
                                 class="wl-btn-revoke px-4 py-2 rounded-lg text-sm">
-                            ✕ Revoke
+                            Revoke
                         </button>
                     </form>
                     {# Punt Another Quarter #}
@@ -181,7 +181,7 @@
                         <input type="hidden" name="grant_id" value="{{ grant.id }}">
                         <button type="submit"
                                 class="wl-btn-punt px-4 py-2 rounded-lg text-sm">
-                            ⏰ Punt Another Quarter
+                            Punt Another Quarter
                         </button>
                     </form>
                 </div>

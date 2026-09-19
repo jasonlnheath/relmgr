@@ -23,7 +23,6 @@ from whitelist_db import (
     get_active_cards_for_grant,
     get_grey_contacts_by_owner,
     get_grey_contacts,
-    get_profile,
     _now_iso,
 )
 
@@ -49,12 +48,6 @@ def build_quarterly_review(conn) -> str | None:
     total_contacts = sum(len(contacts) for contacts in grey_by_owner.values())
     total_owners = len(grey_by_owner)
 
-    # Build a map of grant_id -> requested_expiry from grant_logs
-    log_rows = conn.execute(
-        "SELECT grant_id, requested_expiry FROM grant_logs WHERE action = 'approved'"
-    ).fetchall()
-    grant_expiry = {r["grant_id"]: r["requested_expiry"] for r in log_rows}
-
     # Build a map of grant_id -> cards
     grant_cards: dict[str, list[str]] = {}
     for g in get_grey_contacts(conn):
@@ -69,7 +62,7 @@ def build_quarterly_review(conn) -> str | None:
     lines.append("")
 
     for profile_id, contacts in sorted(grey_by_owner.items()):
-        profile = get_profile(conn, profile_id)
+        profile = get_profile_by_id(conn, profile_id)
         profile_name = profile["display_name"] if profile else f"Profile {profile_id}"
         lines.append(f"Owner: {profile_name} (profile_id={profile_id})")
         lines.append("-" * 40)

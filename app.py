@@ -1059,8 +1059,6 @@ def create_app(db_path: Path = None) -> FastAPI:
             updated = whitelist_db.make_grant_permanent(conn, grant_id)
             if updated is None:
                 return HTMLResponse("Grant not found", status_code=404)
-            if updated.get("status") != "granted":
-                return HTMLResponse("Cannot make permanent a non-granted grant", status_code=409)
         except ValueError as exc:
             return HTMLResponse(str(exc), status_code=409)
         finally:
@@ -1112,8 +1110,6 @@ def create_app(db_path: Path = None) -> FastAPI:
             updated = whitelist_db.punt_grant(conn, grant_id)
             if updated is None:
                 return HTMLResponse("Grant not found", status_code=404)
-            if updated.get("status") != "granted":
-                return HTMLResponse("Cannot punt a non-granted grant", status_code=409)
         except ValueError as exc:
             return HTMLResponse(str(exc), status_code=409)
         finally:

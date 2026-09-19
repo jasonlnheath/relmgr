@@ -616,26 +616,9 @@ CREATE TABLE access_grants (
 )"""
 
 # V3: quarterly rhythm — tracks grey-list review state.
-# Values: NULL (legacy/never-quarter), 'active' (live quarter grant),
-#         'pending_review' (expired, awaiting quarterly decision),
-#         'punted' (owner chose to extend for another quarter).
-_ACCESS_GRANTS_V3_DDL = """
-CREATE TABLE access_grants_v3 (
-    id TEXT PRIMARY KEY,
-    profile_id INTEGER NOT NULL,
-    requester_email TEXT NOT NULL,
-    requester_name TEXT,
-    status TEXT NOT NULL CHECK(status IN ('pending', 'granted', 'denied', 'revoked')),
-    context TEXT,
-    granted_at TEXT,
-    expires_at TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-    quarter_status TEXT CHECK(quarter_status IN ('active', 'pending_review', 'punted')),
-    last_reviewed_at TEXT,
-    FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
-)"""
-
+# Uses ALTER TABLE (additive) instead of table swap since we only need
+# two optional nullable columns. V2 was a table swap because the v1
+# CHECK constraint lacked 'revoked'.
 
 # Single source of truth for the grant_logs audit vocabulary. Every writer
 # routes through _log_action; every table-creation site (wl_init,
@@ -1032,11 +1015,11 @@ def revoke_grant(conn: sqlite3.Connection, grant_id: str) -> Optional[dict]:
 def is_grey(grant: dict) -> bool:
     """Return True if a grant is in the grey state.
 
-    A grant is grey when:
+    Grey state is derived: a grant is grey when:
     - status == 'granted'
     - expires_at is set (not lifetime)
     - expires_at has passed (the grant has expired)
-    - quarter_status is 'pending_review' or 'punted'
+    - quarter_status is not 'punted' with a future expiry (punt extends to next quarter)
 
     Grey contacts are pending a quarterly decision: make permanent,
     revoke, or punt for another quarter.
@@ -1051,7 +1034,12 @@ def is_grey(grant: dict) -> bool:
     if grant["expires_at"] > now:
         return False  # not yet expired
     qs = grant.get("quarter_status")
-    return qs in ("pending_review", "punted")
+    # 'punted' with a future expiry means the owner just punted — not grey yet.
+    # 'active' (including NULL, which means legacy/never-quarter) with a past
+    # expiry is grey: the grant expired and needs review.
+    if qs == "punted":
+        return False  # punted extends to next quarter — not grey while live
+    return True  # active/NULL + expired → grey (derived state)
 
 
 def mark_grey_pending_review(conn: sqlite3.Connection, profile_id: int) -> int:
@@ -1062,8 +1050,12 @@ def mark_grey_pending_review(conn: sqlite3.Connection, profile_id: int) -> int:
 
     Only affects grants where:
     - status = 'granted'
-    - quarter_status is NULL or 'active' (not yet in review)
+    - quarter_status is 'active' (not yet in review)
     - expires_at has passed
+
+    Note: with derived-grey, this helper is optional — grey is computed
+    from (expired + not_punted) at query time. This function is kept for
+    explicit state-tracking use cases.
     """
     now = _now_iso()
     cur = conn.execute(
@@ -1071,7 +1063,7 @@ def mark_grey_pending_review(conn: sqlite3.Connection, profile_id: int) -> int:
            SET quarter_status = 'pending_review'
            WHERE profile_id = ?
              AND status = 'granted'
-             AND quarter_status IN ('active', NULL)
+             AND (quarter_status = 'active' OR quarter_status IS NULL)
              AND expires_at IS NOT NULL
              AND expires_at GLOB '[0-9]*Z'
              AND expires_at <= ?""",
@@ -1084,8 +1076,9 @@ def mark_grey_pending_review(conn: sqlite3.Connection, profile_id: int) -> int:
 def get_grey_contacts(conn: sqlite3.Connection) -> list[dict]:
     """Return all grey contacts across all profiles.
 
-    A grey contact is a grant where status='granted', expires_at has passed,
-    and quarter_status is 'pending_review' or 'punted'.
+    Grey state is derived: a grant is grey when status='granted',
+    expires_at has passed, and quarter_status is not 'punted' with
+    a future expiry (punt extends to next quarter).
 
     Returns a list of dicts with grant info plus profile info attached.
     """
@@ -1094,9 +1087,9 @@ def get_grey_contacts(conn: sqlite3.Connection) -> list[dict]:
            FROM access_grants ag
            JOIN profiles p ON ag.profile_id = p.id
            WHERE ag.status = 'granted'
-             AND ag.quarter_status IN ('pending_review', 'punted')
              AND ag.expires_at IS NOT NULL
              AND ag.expires_at <= ?
+             AND ag.quarter_status != 'punted'
            ORDER BY p.display_name, ag.created_at""",
         (_now_iso(),),
     ).fetchall()
@@ -1120,14 +1113,18 @@ def get_grey_contacts_by_owner(conn: sqlite3.Connection) -> dict:
 
 
 def get_grey_contact_count(conn: sqlite3.Connection, profile_id: int) -> int:
-    """Count grey contacts for a specific profile."""
+    """Count grey contacts for a specific profile.
+
+    Grey state is derived: status='granted', expires_at passed,
+    quarter_status != 'punted' (punted extends to next quarter).
+    """
     row = conn.execute(
         """SELECT COUNT(*) FROM access_grants
            WHERE profile_id = ?
              AND status = 'granted'
-             AND quarter_status IN ('pending_review', 'punted')
              AND expires_at IS NOT NULL
-             AND expires_at <= ?""",
+             AND expires_at <= ?
+             AND quarter_status != 'punted'""",
         (profile_id, _now_iso()),
     ).fetchone()
     return row[0]

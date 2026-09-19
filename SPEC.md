@@ -127,7 +127,7 @@ Every permission has an expiration policy. Exactly three durations:
 | `punted` | Owner chose to extend for another quarter |
 | `NULL` | Lifetime grant or legacy grant |
 
-**Quarterly review email** uses the existing `notify.py` infrastructure (`build_quarterly_review()`). It groups grey contacts by owner, shows review status per contact, and links to the owner dashboard. No new external services or queues — the email is sent via the same SMTP/Gmail path as other notifications.
+**Quarterly review email** uses the existing `notify.py` infrastructure (`build_quarterly_review()`). It groups grey contacts by owner, shows review status per contact, and links to the owner dashboard. No new external services or queues — the digest is built via `build_quarterly_review()`; sending machinery (SMTP/Gmail) is future work.
 
 **Grey contacts become prompt-eligible at each quarterly boundary** for their owner. No age minimums, no countdown display, no auto-expiry. The quarterly email is the sole decision mechanism.
 

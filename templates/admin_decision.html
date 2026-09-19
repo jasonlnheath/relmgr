@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Access {{ 'Approved' if decision == 'approve' else 'Denied' }} — {{ profile.display_name }}{% endblock %}
+{% block title %}Quarterly Review — {{ profile.display_name }}{% endblock %}
 
 {% block content %}
 <div class="max-w-2xl mx-auto py-8 px-4">
@@ -9,6 +9,10 @@
             <span style="color: var(--wl-success);">✓ Access Approved</span>
             {% elif decision == 'revoke' %}
             <span class="wl-text-sub">↩ Access Revoked</span>
+            {% elif decision == 'make_permanent' %}
+            <span style="color: var(--wl-success);">⭐ Access Made Permanent</span>
+            {% elif decision == 'punt' %}
+            <span style="color: var(--wl-amber);">⏰ Punted Another Quarter</span>
             {% else %}
             <span style="color: var(--wl-danger);">✗ Access Denied</span>
             {% endif %}
@@ -20,6 +24,10 @@
             {% elif decision == 'revoke' %}
             Access for <strong class="wl-text">{{ grant.requester_name }}</strong> ({{ grant.requester_email }}) has been revoked.
             They no longer see connection fields and may re-request access if needed.
+            {% elif decision == 'make_permanent' %}
+            Access for <strong class="wl-text">{{ grant.requester_name }}</strong> ({{ grant.requester_email }}) is now permanent. No further quarterly reviews.
+            {% elif decision == 'punt' %}
+            Access for <strong class="wl-text">{{ grant.requester_name }}</strong> ({{ grant.requester_email }}) has been punted for another quarter.
             {% else %}
             The request from <strong class="wl-text">{{ grant.requester_name }}</strong> ({{ grant.requester_email }}) has been denied.
             {% endif %}

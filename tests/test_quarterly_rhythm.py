@@ -100,7 +100,7 @@ class TestIsGrey:
         conn.close()
 
     def test_expired_pending_review_is_grey(self, db):
-        """Expired grant with pending_review is grey."""
+        """Expired grant with quarter_status='pending_review' is grey."""
         conn, owner_id, _ = db
         gid = create_grant(conn, owner_id, "a@test.com", "A")
         apply_decision(conn, gid, "approve", "quarter")
@@ -113,8 +113,22 @@ class TestIsGrey:
         assert is_grey(dict(grant)) is True
         conn.close()
 
-    def test_expired_punted_is_grey(self, db):
-        """Expired grant with punted is grey."""
+    def test_expired_active_is_grey_derived(self, db):
+        """Expired grant with quarter_status='active' is grey (derived state)."""
+        conn, owner_id, _ = db
+        gid = create_grant(conn, owner_id, "a@test.com", "A")
+        apply_decision(conn, gid, "approve", "quarter")
+        conn.execute(
+            "UPDATE access_grants SET expires_at = '2020-01-01T00:00:00Z' WHERE id = ?",
+            (gid,),
+        )
+        conn.commit()
+        grant = conn.execute("SELECT * FROM access_grants WHERE id = ?", (gid,)).fetchone()
+        assert is_grey(dict(grant)) is True
+        conn.close()
+
+    def test_expired_punted_is_not_grey(self, db):
+        """Expired grant with punted is NOT grey (owner just punted)."""
         conn, owner_id, _ = db
         gid = create_grant(conn, owner_id, "a@test.com", "A")
         apply_decision(conn, gid, "approve", "quarter")
@@ -124,7 +138,7 @@ class TestIsGrey:
         )
         conn.commit()
         grant = conn.execute("SELECT * FROM access_grants WHERE id = ?", (gid,)).fetchone()
-        assert is_grey(dict(grant)) is True
+        assert is_grey(dict(grant)) is False
         conn.close()
 
     def test_denied_not_grey(self, db):
@@ -190,6 +204,23 @@ class TestMarkGreyPendingReview:
         assert count == 0
         conn.close()
 
+    def test_marks_null_quarter_status(self, db):
+        """NULL quarter_status expired grants are also marked pending_review."""
+        conn, owner_id, _ = db
+        # 14-day grant gets quarter_status=NULL
+        gid = create_grant(conn, owner_id, "a@test.com", "A")
+        apply_decision(conn, gid, "approve", "14")
+        conn.execute(
+            "UPDATE access_grants SET expires_at = '2020-01-01T00:00:00Z' WHERE id = ?",
+            (gid,),
+        )
+        conn.commit()
+        count = mark_grey_pending_review(conn, owner_id)
+        assert count == 1
+        grant = conn.execute("SELECT quarter_status FROM access_grants WHERE id = ?", (gid,)).fetchone()
+        assert grant["quarter_status"] == "pending_review"
+        conn.close()
+
 
 # ============================================================
 # get_grey_contacts / get_grey_contacts_by_owner tests
@@ -197,13 +228,13 @@ class TestMarkGreyPendingReview:
 
 class TestGetGreyContacts:
     def test_returns_grey_contacts(self, db):
-        """Returns grey contacts with profile info."""
+        """Returns grey contacts with profile info (derived: expired + not_punted)."""
         conn, owner_id, _ = db
 
         gid = create_grant(conn, owner_id, "grey@test.com", "Grey User")
         apply_decision(conn, gid, "approve", "quarter")
         conn.execute(
-            "UPDATE access_grants SET expires_at = '2020-01-01T00:00:00Z', quarter_status = 'pending_review' WHERE id = ?",
+            "UPDATE access_grants SET expires_at = '2020-01-01T00:00:00Z' WHERE id = ?",
             (gid,),
         )
         conn.commit()
@@ -236,17 +267,29 @@ class TestGetGreyContacts:
         assert len(grey) == 0
         conn.close()
 
+    def test_excludes_punted_grants(self, db):
+        """Punted grants are not grey (owner just punted)."""
+        conn, owner_id, _ = db
+        gid = create_grant(conn, owner_id, "punted@test.com", "Punted User")
+        apply_decision(conn, gid, "approve", "quarter")
+        punt_grant(conn, gid)
+        conn.commit()
+
+        grey = get_grey_contacts(conn)
+        assert len(grey) == 0
+        conn.close()
+
 
 class TestGetGreyContactsByOwner:
     def test_groups_by_owner(self, db):
-        """Returns dict mapping profile_id -> list of grey contacts."""
+        """Returns dict mapping profile_id -> list of grey contacts (derived)."""
         conn, owner_id, _ = db
 
         for i in range(3):
             gid = create_grant(conn, owner_id, f"grey{i}@test.com", f"Grey User {i}")
             apply_decision(conn, gid, "approve", "quarter")
             conn.execute(
-                "UPDATE access_grants SET expires_at = '2020-01-01T00:00:00Z', quarter_status = 'punted' WHERE id = ?",
+                "UPDATE access_grants SET expires_at = '2020-01-01T00:00:00Z' WHERE id = ?",
                 (gid,),
             )
         conn.commit()
@@ -259,14 +302,14 @@ class TestGetGreyContactsByOwner:
 
 class TestGetGreyContactCount:
     def test_counts_grey_contacts(self, db):
-        """Returns correct count for a profile."""
+        """Returns correct count for a profile (derived: expired + not_punted)."""
         conn, owner_id, _ = db
 
         for i in range(2):
             gid = create_grant(conn, owner_id, f"grey{i}@test.com", f"Grey User {i}")
             apply_decision(conn, gid, "approve", "quarter")
             conn.execute(
-                "UPDATE access_grants SET expires_at = '2020-01-01T00:00:00Z', quarter_status = 'pending_review' WHERE id = ?",
+                "UPDATE access_grants SET expires_at = '2020-01-01T00:00:00Z' WHERE id = ?",
                 (gid,),
             )
         conn.commit()
@@ -288,7 +331,7 @@ class TestMakeGrantPermanent:
         gid = create_grant(conn, owner_id, "a@test.com", "A")
         apply_decision(conn, gid, "approve", "quarter")
         conn.execute(
-            "UPDATE access_grants SET expires_at = '2020-01-01T00:00:00Z', quarter_status = 'pending_review' WHERE id = ?",
+            "UPDATE access_grants SET expires_at = '2020-01-01T00:00:00Z' WHERE id = ?",
             (gid,),
         )
         conn.commit()
@@ -337,7 +380,7 @@ class TestPuntGrant:
         gid = create_grant(conn, owner_id, "a@test.com", "A")
         apply_decision(conn, gid, "approve", "quarter")
         conn.execute(
-            "UPDATE access_grants SET expires_at = '2020-01-01T00:00:00Z', quarter_status = 'pending_review' WHERE id = ?",
+            "UPDATE access_grants SET expires_at = '2020-01-01T00:00:00Z' WHERE id = ?",
             (gid,),
         )
         conn.commit()
@@ -477,7 +520,7 @@ class TestQuarterRoutes:
         gid = create_grant(conn, owner_id, "grey@test.com", "Grey User")
         apply_decision(conn, gid, "approve", "quarter")
         conn.execute(
-            "UPDATE access_grants SET expires_at = '2020-01-01T00:00:00Z', quarter_status = 'pending_review' WHERE id = ?",
+            "UPDATE access_grants SET expires_at = '2020-01-01T00:00:00Z' WHERE id = ?",
             (gid,),
         )
         conn.commit()
@@ -528,7 +571,7 @@ class TestQuarterRoutes:
         gid = create_grant(conn, owner_id, "grey@test.com", "Grey User")
         apply_decision(conn, gid, "approve", "quarter")
         conn.execute(
-            "UPDATE access_grants SET expires_at = '2020-01-01T00:00:00Z', quarter_status = 'pending_review' WHERE id = ?",
+            "UPDATE access_grants SET expires_at = '2020-01-01T00:00:00Z' WHERE id = ?",
             (gid,),
         )
         conn.commit()
@@ -575,7 +618,7 @@ class TestQuarterRoutes:
         gid = create_grant(conn, owner_id, "grey@test.com", "Grey User")
         apply_decision(conn, gid, "approve", "quarter")
         conn.execute(
-            "UPDATE access_grants SET expires_at = '2020-01-01T00:00:00Z', quarter_status = 'pending_review' WHERE id = ?",
+            "UPDATE access_grants SET expires_at = '2020-01-01T00:00:00Z' WHERE id = ?",
             (gid,),
         )
         conn.commit()
