@@ -208,7 +208,14 @@ def ensure_vcard_fields_schema(conn: sqlite3.Connection) -> None:
 
     # Swap: create v2 table, copy data (mapping anonymous→private), drop old,
     # rename v2 to old.
+    # F3 guard: a crashed prior migration may leave profile_fields_v2 behind.
+    conn.execute("DROP TABLE IF EXISTS profile_fields_v2")
     conn.execute(_PROFILE_FIELDS_V2_DDL)
+
+    # F1: disable FK enforcement around the swap so the DROP TABLE does NOT
+    # cascade-delete card_fields rows (which hold custom card mappings).  Ids
+    # are preserved, so surviving card_fields rows stay valid.
+    conn.execute("PRAGMA foreign_keys=OFF")
     conn.execute("""
         INSERT INTO profile_fields_v2
             (id, profile_id, field_type, field_value,
@@ -222,6 +229,7 @@ def ensure_vcard_fields_schema(conn: sqlite3.Connection) -> None:
     """)
     conn.execute("DROP TABLE profile_fields")
     conn.execute("ALTER TABLE profile_fields_v2 RENAME TO profile_fields")
+    conn.execute("PRAGMA foreign_keys=ON")
 
     # Now seed title/company as profile_fields rows from profiles.* columns.
     _seed_title_company_fields(conn)
