@@ -108,9 +108,9 @@ def wl_init(conn: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS profile_fields (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             profile_id INTEGER NOT NULL,
-            field_type TEXT NOT NULL CHECK(field_type IN ('email', 'phone')),
+            field_type TEXT NOT NULL CHECK(field_type IN ('email', 'phone', 'title', 'company', 'address', 'website', 'birthday', 'note')),
             field_value TEXT NOT NULL,
-            visibility TEXT NOT NULL CHECK(visibility IN ('public', 'granted', 'anonymous')),
+            visibility TEXT NOT NULL CHECK(visibility IN ('public', 'granted', 'private')),
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             updated_at TEXT NOT NULL DEFAULT (datetime('now')),
             UNIQUE(profile_id, field_type, field_value),
@@ -160,6 +160,111 @@ def wl_init(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+# ============================================================
+# VCard field expansion migration (2026-09-18)
+# ============================================================
+
+# The vCard field expansion adds new field_type values and renames 'anonymous'
+# visibility to 'private'.  SQLite cannot ALTER a CHECK constraint, so we use
+# the table-swap pattern (same as the access_grants v2 migration).
+
+_VCARD_FIELD_TYPES = ('email', 'phone', 'title', 'company', 'address', 'website', 'birthday', 'note')
+_VCARD_VISIBILITY = ('public', 'granted', 'private')
+
+_PROFILE_FIELDS_V2_DDL = f"""
+CREATE TABLE profile_fields_v2 (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_id INTEGER NOT NULL,
+    field_type TEXT NOT NULL CHECK(field_type IN {_VCARD_FIELD_TYPES!r}),
+    field_value TEXT NOT NULL,
+    visibility TEXT NOT NULL CHECK(visibility IN {_VCARD_VISIBILITY!r}),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(profile_id, field_type, field_value),
+    FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+)
+"""
+
+
+def ensure_vcard_fields_schema(conn: sqlite3.Connection) -> None:
+    """Migrate profile_fields to support the full vCard field set.
+
+    Additive migration — safe to run on any existing DB:
+    1. If the table already has the new CHECK, do nothing.
+    2. Otherwise, swap to a v2 table with expanded field_type and visibility
+       CHECK constraints, mapping 'anonymous' → 'private'.
+    3. Seed title/company rows from profiles.* columns if they exist.
+    """
+    # Fast path: check if the table already has the expanded CHECK.
+    # We look at the CREATE TABLE DDL in sqlite_master.
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='profile_fields'"
+    ).fetchone()
+    if row and row[0] and _VCARD_FIELD_TYPES[0] in row[0] and _VCARD_FIELD_TYPES[-1] in row[0]:
+        # Already migrated — but still run the title/company seed below.
+        _seed_title_company_fields(conn)
+        conn.commit()
+        return
+
+    # Swap: create v2 table, copy data (mapping anonymous→private), drop old,
+    # rename v2 to old.
+    conn.execute(_PROFILE_FIELDS_V2_DDL)
+    conn.execute("""
+        INSERT INTO profile_fields_v2
+            (id, profile_id, field_type, field_value,
+             visibility, created_at, updated_at)
+        SELECT id, profile_id, field_type, field_value,
+               CASE WHEN visibility = 'anonymous' THEN 'private'
+                    ELSE visibility
+               END,
+               created_at, updated_at
+        FROM profile_fields
+    """)
+    conn.execute("DROP TABLE profile_fields")
+    conn.execute("ALTER TABLE profile_fields_v2 RENAME TO profile_fields")
+
+    # Now seed title/company as profile_fields rows from profiles.* columns.
+    _seed_title_company_fields(conn)
+    conn.commit()
+
+
+def _seed_title_company_fields(conn: sqlite3.Connection) -> None:
+    """Migrate profiles.title and profiles.company into profile_fields rows.
+
+    Only inserts rows that don't already exist (idempotent). Existing
+    profile_fields rows for the same type+value are preserved.
+
+    Handles legacy profiles tables that lack title/company columns (no-op).
+    """
+    # Check if title/company columns exist (legacy DBs may not have them)
+    has_title = conn.execute(
+        "PRAGMA table_info(profiles)"
+    ).fetchall()
+    col_names = {r[1] for r in has_title}
+    if "title" not in col_names and "company" not in col_names:
+        return  # legacy schema — nothing to migrate
+
+    profiles = conn.execute(
+        "SELECT id, title, company FROM profiles WHERE title IS NOT NULL OR company IS NOT NULL"
+    ).fetchall()
+    for p in profiles:
+        pid = p[0]
+        if "title" in col_names and p[1]:  # title
+            conn.execute(
+                "INSERT OR IGNORE INTO profile_fields (profile_id, field_type, field_value, visibility) VALUES (?, 'title', ?, 'granted')",
+                (pid, p[1]),
+            )
+        if "company" in col_names and p[2]:  # company
+            conn.execute(
+                "INSERT OR IGNORE INTO profile_fields (profile_id, field_type, field_value, visibility) VALUES (?, 'company', ?, 'granted')",
+                (pid, p[2]),
+            )
+
+
+# ============================================================
+# Profile seeding
+# ============================================================
+
 def seed_profile(conn: sqlite3.Connection, data: dict) -> None:
     """Upsert a whitelist profile and its fields from a canonical-JSON-like dict.
 
@@ -170,8 +275,12 @@ def seed_profile(conn: sqlite3.Connection, data: dict) -> None:
             - name.display (str)
             - org.company (str)
             - org.title (str)
-            - emails (list of {address, visibility})
-            - phones (list of {number, visibility})
+            - emails (list of {address, visibility, type?})
+            - phones (list of {number, visibility, type?})
+            - website (str, optional)
+            - address (str, optional)
+            - birthday (str, optional, ISO date)
+            - note (str, optional)
             - verified_at (str, optional)
     """
     handle = data["handle"]
@@ -201,16 +310,77 @@ def seed_profile(conn: sqlite3.Connection, data: dict) -> None:
     # Delete old fields for this profile (clean up before re-insert)
     conn.execute("DELETE FROM profile_fields WHERE profile_id = ?", (profile_id,))
 
-    # Every holder/connection visibility maps to "granted"; only public stays public.
-    for field_type, key, value_key in (("email", "emails", "address"), ("phone", "phones", "number")):
-        for item in data.get(key, []):
-            vis = item.get("visibility", "public")
-            field_vis = "public" if vis == "public" else "granted"
-            conn.execute(
-                """INSERT INTO profile_fields (profile_id, field_type, field_value, visibility)
-                   VALUES (?, ?, ?, ?)""",
-                (profile_id, field_type, item[value_key], field_vis),
-            )
+    # Email fields
+    for item in data.get("emails", []):
+        vis = item.get("visibility", "public")
+        field_vis = "public" if vis == "public" else "granted"
+        conn.execute(
+            """INSERT INTO profile_fields (profile_id, field_type, field_value, visibility)
+               VALUES (?, ?, ?, ?)""",
+            (profile_id, "email", item["address"], field_vis),
+        )
+
+    # Phone fields
+    for item in data.get("phones", []):
+        vis = item.get("visibility", "public")
+        field_vis = "public" if vis == "public" else "granted"
+        conn.execute(
+            """INSERT INTO profile_fields (profile_id, field_type, field_value, visibility)
+               VALUES (?, ?, ?, ?)""",
+            (profile_id, "phone", item["number"], field_vis),
+        )
+
+    # Title field (from org.title)
+    if title:
+        conn.execute(
+            """INSERT OR IGNORE INTO profile_fields (profile_id, field_type, field_value, visibility)
+               VALUES (?, 'title', ?, 'granted')""",
+            (profile_id, title),
+        )
+
+    # Company field (from org.company)
+    if company:
+        conn.execute(
+            """INSERT OR IGNORE INTO profile_fields (profile_id, field_type, field_value, visibility)
+               VALUES (?, 'company', ?, 'granted')""",
+            (profile_id, company),
+        )
+
+    # Website field
+    website = data.get("website")
+    if website:
+        conn.execute(
+            """INSERT OR IGNORE INTO profile_fields (profile_id, field_type, field_value, visibility)
+               VALUES (?, 'website', ?, 'granted')""",
+            (profile_id, website),
+        )
+
+    # Address field
+    address = data.get("address")
+    if address:
+        conn.execute(
+            """INSERT OR IGNORE INTO profile_fields (profile_id, field_type, field_value, visibility)
+               VALUES (?, 'address', ?, 'granted')""",
+            (profile_id, address),
+        )
+
+    # Birthday field
+    birthday = data.get("birthday")
+    if birthday:
+        conn.execute(
+            """INSERT OR IGNORE INTO profile_fields (profile_id, field_type, field_value, visibility)
+               VALUES (?, 'birthday', ?, 'granted')""",
+            (profile_id, birthday),
+        )
+
+    # Note field
+    note = data.get("note")
+    if note:
+        conn.execute(
+            """INSERT OR IGNORE INTO profile_fields (profile_id, field_type, field_value, visibility)
+               VALUES (?, 'note', ?, 'granted')""",
+            (profile_id, note),
+        )
 
     conn.commit()
 
@@ -1517,8 +1687,9 @@ def cards_for_public_view(
     Contract:
     - tier 'granted' (includes owner self-view): all of the owner's cards in
       id order. A card is hidden only when it has zero fields with visibility
-      in ('public', 'granted') — cards are lenses on the same field data, not
-      access boundaries.
+      in ('public', 'granted', 'private') — cards are lenses on the same field
+      data, not access boundaries. Private fields are visible to granted
+      viewers but hidden from anonymous viewers.
     - otherwise (anonymous): the default card only — lowest `cards.id` for the
       owner — public fields only.
 
@@ -1526,7 +1697,7 @@ def cards_for_public_view(
     fields the viewer may see (same row shape as ``fields`` from
     ``get_card_by_id``).
     """
-    visible_vis = (("public", "granted") if tier == "granted" else ("public",))
+    visible_vis = (("public", "granted", "private") if tier == "granted" else ("public",))
     rows = conn.execute(
         "SELECT id FROM cards WHERE owner_profile_id = ? ORDER BY id",
         (profile_id,),
@@ -1652,6 +1823,7 @@ def ensure_whitelist_schema(conn: sqlite3.Connection) -> None:
     ensure_scan_events(conn)              # P3-T4 profile-view events
     ensure_access_grants_context(conn)    # v2-without-context prod case, LAST
     ensure_cards_schema(conn)             # P5 cards tables (depends on profiles/fields)
+    ensure_vcard_fields_schema(conn)      # VCard field expansion (field_type + visibility)
     ensure_profile_bio_column(conn)       # Phase A1: profiles.bio
     ensure_card_photo_column(conn)        # Phase A1: cards.photo_path
     ensure_access_grants_v3(conn)         # quarterly rhythm: quarter_status columns
@@ -1659,17 +1831,25 @@ def ensure_whitelist_schema(conn: sqlite3.Connection) -> None:
 
 
 def seed_default_cards(conn: sqlite3.Connection) -> None:
-    """Seed / self-heal the default Work + Personal cards (idempotent).
+    """Seed / self-heal the default cards (idempotent).
 
-    Work = email fields, Personal = phone fields. Two roles:
-    1. First boot after a profile appears: create both cards.
+    Default cards and their field types:
+    - Identity: title, company
+    - Work: email
+    - Contact: phone
+    - Location: address, website
+    - Details: birthday, note
+
+    Two roles:
+    1. First boot after a profile appears: create cards for field types that
+       have data.
     2. Reseed heal: seed_profile() DELETEs all profile_fields and reinserts
        with fresh ids — card_fields' ON DELETE CASCADE silently empties every
        card, and the old "cards exist -> skip" logic never repaired it. So a
        default-named card with zero fields gets its field mapping rebuilt by
-       type on every boot. Cost of the heal: an intentionally emptied Work/
-       Personal card refills; deliberate per-card curation should use other
-       names. Custom (non-default) cards are never touched.
+       type on every boot. Cost of the heal: an intentionally emptied card
+       refills; deliberate per-card curation should use other names. Custom
+       (non-default) cards are never touched.
     """
     # Fresh empty DB pre-wl_init has no profiles table yet — seeding is a
     # no-op there; boot re-runs this on every real request path.
@@ -1680,14 +1860,29 @@ def seed_default_cards(conn: sqlite3.Connection) -> None:
     # curate on their My Profile page).
     owners = conn.execute("SELECT id FROM profiles ORDER BY id").fetchall()
 
+    # Card name → set of field types that belong to it
+    # Order matters: the first card (lowest id) is the default card for
+    # anonymous viewers. Work must come first so its public fields are
+    # visible to anon viewers.
+    CARD_FIELD_TYPES = {
+        "Work": {"email"},
+        "Contact": {"phone"},
+        "Identity": {"title", "company"},
+        "Location": {"address", "website"},
+        "Details": {"birthday", "note"},
+    }
+
     now = _now_iso()
     for owner in owners:
         owner_id = owner["id"]
-        for card_name, field_type in (("Work", "email"), ("Personal", "phone")):
-            field_ids = [r["id"] for r in conn.execute(
-                "SELECT id FROM profile_fields WHERE profile_id = ? AND field_type = ?",
-                (owner_id, field_type),
-            ).fetchall()]
+        for card_name, field_types in CARD_FIELD_TYPES.items():
+            # Collect field ids for all field types in this card
+            field_ids = []
+            for ft in field_types:
+                field_ids.extend(r["id"] for r in conn.execute(
+                    "SELECT id FROM profile_fields WHERE profile_id = ? AND field_type = ?",
+                    (owner_id, ft),
+                ).fetchall())
 
             card = conn.execute(
                 "SELECT id FROM cards WHERE owner_profile_id = ? AND name = ?",
@@ -1772,6 +1967,12 @@ def add_profile_field(conn: sqlite3.Connection, profile_id: int,
                       field_type: str, field_value: str,
                       visibility: str) -> dict:
     """Add a new field to a profile.
+
+    Valid field_type values: email, phone, title, company, address, website,
+    birthday, note.
+
+    Valid visibility values: public (everyone), granted (granted contacts only),
+    private (granted contacts only, but marked as private).
 
     Raises ValueError on UNIQUE violation (duplicate value for same type).
     """

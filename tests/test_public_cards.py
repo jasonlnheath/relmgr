@@ -23,7 +23,7 @@ from app import create_app
 
 
 def _seed_full(tmp_path: Path) -> Path:
-    """Profile with a public email, a granted phone, bio, and two cards."""
+    """Profile with a public email, a granted phone, bio, and cards."""
     db = tmp_path / "test.db"
     conn = whitelist_db.wl_connect(db)
     whitelist_db.wl_init(conn)
@@ -63,7 +63,7 @@ def test_anon_sees_default_card_only(tmp_path):
     html = client.get("/p/jasonheath").text
     # Work is the default card (lowest id from seed_default_cards).
     assert "Work" in html
-    assert "Personal" not in html, "anon must not see non-default cards"
+    assert "Contact" not in html, "anon must not see non-default cards"
     # Public field visible, granted-visibility fields hidden.
     assert "public@waltheremc.com" in html
     assert "jheath@waltheremc.com" not in html
@@ -101,7 +101,7 @@ def test_granted_tier_sees_all_cards_and_fields(tmp_path):
     client = TestClient(create_app(db))
     html = client.get("/p/jasonheath?e=visitor%40x.com").text
     assert "Work" in html
-    assert "Personal" in html, "granted tier must see all cards"
+    assert "Contact" in html, "granted tier must see all cards"
     # Granted-visibility fields now visible.
     assert "jheath@waltheremc.com" in html
     assert "555-1234" in html
@@ -121,7 +121,7 @@ def test_owner_self_view_shows_all_cards_photos_bio(tmp_path):
     client = TestClient(create_app(db))
     me = client.get("/p/jasonheath?e=jheath%40waltheremc.com").text
     assert "Work" in me
-    assert "Personal" in me
+    assert "Contact" in me
     assert "jheath@waltheremc.com" in me
     assert "555-1234" in me
     assert "I sell wheel bushings." in me, "bio missing from self-view"

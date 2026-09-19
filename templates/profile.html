@@ -105,20 +105,25 @@
         </div>
         {% endif %}
 
-        {# Contact fields — card-driven, scannable layout #}
+        {# Card-driven field rendering — grouped by card name #}
         {% if cards %}
         {% for card in cards %}
+        {% if card.visible_fields %}
         <div class="mb-6 {% if not loop.last %}pb-4 border-b{% endif %}" style="border-color: var(--wl-glass-border);">
             <h2 class="wl-heading wl-heading-sm wl-text mb-3">{{ card.name }}</h2>
             <div class="space-y-2">
                 {% for f in card.visible_fields %}
-                <div class="flex items-center wl-text-sub">
-                    <span class="w-20 text-xs wl-text-faint uppercase tracking-wide">{{ f.field_type }}</span>
+                <div class="flex items-start wl-text-sub">
+                    <span class="w-24 text-xs wl-text-faint uppercase tracking-wide pt-0.5">{{ _field_label(f.field_type) }}</span>
                     <span class="wl-text">{{ f.field_value }}</span>
+                    {% if f.visibility == 'private' %}
+                    <span class="ml-2 text-xs wl-text-faint" title="Private field">🔒</span>
+                    {% endif %}
                 </div>
                 {% endfor %}
             </div>
         </div>
+        {% endif %}
         {% endfor %}
 
         {# Card-less profile: legacy flat field list #}
@@ -126,9 +131,12 @@
         {% if tier == 'granted' %}
         <div class="space-y-2">
             {% for f in profile.fields %}
-            <div class="flex items-center wl-text-sub">
-                <span class="w-20 text-xs wl-text-faint uppercase tracking-wide">{{ f.field_type }}</span>
+            <div class="flex items-start wl-text-sub">
+                <span class="w-24 text-xs wl-text-faint uppercase tracking-wide pt-0.5">{{ _field_label(f.field_type) }}</span>
                 <span class="wl-text">{{ f.field_value }}</span>
+                {% if f.visibility == 'private' %}
+                <span class="ml-2 text-xs wl-text-faint" title="Private field">🔒</span>
+                {% endif %}
             </div>
             {% endfor %}
         </div>
@@ -147,3 +155,16 @@
     </div>
 </div>
 {% endblock %}
+
+{% macro _field_label(field_type) %}
+    {%- if field_type == 'email' -%}email
+    {%- elif field_type == 'phone' -%}phone
+    {%- elif field_type == 'title' -%}title
+    {%- elif field_type == 'company' -%}company
+    {%- elif field_type == 'address' -%}address
+    {%- elif field_type == 'website' -%}website
+    {%- elif field_type == 'birthday' -%}birthday
+    {%- elif field_type == 'note' -%}note
+    {%- else -%}{{ field_type }}
+    {%- endif -%}
+{% endmacro %}
