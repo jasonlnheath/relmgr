@@ -190,7 +190,7 @@ class TestSeedAllOwners:
             "SELECT cf.field_id FROM card_fields cf JOIN cards c ON cf.card_id=c.id "
             "WHERE c.owner_profile_id=2 AND c.name='Work'").fetchall()
         conn.close()
-        assert sorted(names) == ["Personal", "Work"], f"second owner cards: {names}"
+        assert sorted(names) == ["Contact", "Work"], f"second owner cards: {names}"
         assert len(work_emails) == 1
 
     def test_seed_is_idempotent_for_two_owners(self, tmp_path):

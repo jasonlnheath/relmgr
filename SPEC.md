@@ -43,33 +43,42 @@ aliases         — many handles → one person (profile_aliases)
   profile_id    — FK → profiles.id
 
 Field           — NOT records. Each field is a contact attribute attached to a Card.
-  field_type    — "email" | "phone" (live; CHECK constraint in profile_fields table)
+  field_type    — one of the vCard field types below (CHECK constraint in profile_fields table)
   field_value   — the actual value
-  visibility    — "public" | "granted" (public shown to anonymous viewers; "granted" shown only to authorized viewers)
+  visibility    — "public" | "granted" | "private"
+    - **public**: shown to anonymous viewers and granted contacts
+    - **granted**: shown only to granted contacts
+    - **private**: shown only to granted contacts (marked as private with 🔒 indicator)
+    - The owner always sees all fields regardless of visibility
 
-Standard contact field set (v2, round-2 ruling 2026-09-18):
-  The field_type enum was expanded from the original 3-value set (email/phone/other) to
-  cover the standard contact attributes used across iOS Contacts, Google Contacts, and
-  vCard 4.0. The full set:
+Standard contact field set (v3, 2026-09-18):
+  The field_type enum covers the standard contact attributes used across iOS Contacts,
+  Google Contacts, and vCard 4.0. The full set:
 
-  | field_type  | Example values                    | vCard prop  | Notes                  |
-  |-------------|-----------------------------------|-------------|------------------------|
-  | email       | jason@example.com                 | EMAIL       | Primary key for grants |
-  | phone       | +1-555-123-4567                   | TEL         | E.164 normalized       |
-  | title       | VP Engineering                    | TITLE       | Displayed on profile   |
-  | company     | Acme Inc.                         | ORG         | Displayed on profile   |
-  | address     | 123 Main St, City, ST 12345       | ADR         | Future schema          |
-  | website     | https://acme.com                  | URL         | Future schema          |
-  | other       | Any freeform attribute            | —           | Future schema          |
+  | field_type  | Example values                    | vCard prop  | Default card    |
+  |-------------|-----------------------------------|-------------|-----------------|
+  | email       | jason@example.com                 | EMAIL       | Work            |
+  | phone       | +1-555-123-4567                   | TEL         | Contact         |
+  | title       | VP Engineering                    | TITLE       | Identity        |
+  | company     | Acme Inc.                         | ORG         | Identity        |
+  | address     | 123 Main St, City, ST 12345       | ADR         | Location        |
+  | website     | https://acme.com                  | URL         | Location        |
+  | birthday    | 1985-06-15                        | BDAY        | Details         |
+  | note        | Freeform attribute                | NOTE        | Details         |
 
-  Note: the `profiles` table has `title` and `company` columns (top-level profile metadata,
-  seeded from the canonical profile). These are NOT stored as profile_fields rows — they are
-  separate columns. The `title` and `company` field_type values exist in the spec table above
-  but are NOT yet active in the `profile_fields` CHECK constraint, which currently only allows
-  `'email'` and `'phone'`. Adding those types requires a schema migration. The `address`,
-  `website`, and `other` types are reserved for future expansion.
+  Default cards (auto-seeded per owner):
+  - **Identity**: title, company
+  - **Work**: email
+  - **Contact**: phone
+  - **Location**: address, website
+  - **Details**: birthday, note
 
-Card            — an owner-defined field group (e.g. "Work" = email fields; "Personal" = phone fields)
+  The `profiles` table has `title` and `company` columns (top-level profile metadata).
+  On migration, these values are also stored as `profile_fields` rows (field_type
+  'title'/'company', visibility 'granted') so they appear in the card rendering.
+  Existing rows are preserved — migration is additive.
+
+Card            — an owner-defined field group (e.g. "Work" = email fields)
   name          — human-readable label
   card_fields   — which profile_fields belong to this card (card_fields table)
 

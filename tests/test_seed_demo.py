@@ -138,10 +138,10 @@ def test_seed_demo_apply_creates_backup_and_profiles(tmp_path: Path, canonical_d
     count = conn.execute("SELECT count(*) FROM profiles").fetchone()[0]
     assert count == 2
 
-    # Jason: 2 emails + 2 phones = 4 fields
-    # Dana: 1 email + 1 phone = 2 fields
-    # Total = 6
+    # Jason: 2 emails + 2 phones + 1 title + 1 company = 6 fields
+    # Dana: 1 email + 1 phone + 1 title + 1 company = 4 fields
+    # Total = 10
     field_count = conn.execute("SELECT count(*) FROM profile_fields").fetchone()[0]
-    assert field_count == 6
+    assert field_count == 10
 
     conn.close()

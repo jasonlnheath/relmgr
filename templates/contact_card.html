@@ -57,28 +57,59 @@
         </div>
         {% endif %}
 
-        {# Contact details #}
-        <div class="mb-6 pb-4" style="border-bottom: 1px solid var(--wl-glass-border);">
-            <h2 class="wl-heading wl-heading-sm wl-text mb-3">Contact Info</h2>
+        {# Card-driven field rendering — grouped by card name #}
+        {% if cards and tier == 'granted' %}
+        {% for card in cards %}
+        {% if card.visible_fields %}
+        <div class="mb-6 {% if not loop.last %}pb-4 border-b{% endif %}" style="border-color: var(--wl-glass-border);">
+            <h2 class="wl-heading wl-heading-sm wl-text mb-3">{{ card.name }}</h2>
             <div class="space-y-2">
-                {% if profile.emails %}
-                {% for email in profile.emails %}
-                <div class="flex items-center wl-text-sub">
-                    <span class="w-20 text-xs wl-text-faint uppercase tracking-wide">email</span>
-                    <span class="wl-text">{{ email }}</span>
+                {% for f in card.visible_fields %}
+                <div class="flex items-start wl-text-sub">
+                    <span class="w-24 text-xs wl-text-faint uppercase tracking-wide pt-0.5">{{ _field_label(f.field_type) }}</span>
+                    <span class="wl-text">{{ f.field_value }}</span>
+                    {% if f.visibility == 'private' %}
+                    <span class="ml-2 text-xs wl-text-faint" title="Private field">🔒</span>
+                    {% endif %}
                 </div>
                 {% endfor %}
-                {% endif %}
-                {% if profile.phones %}
-                {% for phone in profile.phones %}
-                <div class="flex items-center wl-text-sub">
-                    <span class="w-20 text-xs wl-text-faint uppercase tracking-wide">phone</span>
-                    <span class="wl-text">{{ phone }}</span>
-                </div>
-                {% endfor %}
-                {% endif %}
             </div>
         </div>
+        {% endif %}
+        {% endfor %}
+        {% elif cards and tier != 'anonymous' %}
+        {# Pending/denied tier — show what's available #}
+        {% for card in cards %}
+        {% if card.visible_fields %}
+        <div class="mb-6 {% if not loop.last %}pb-4 border-b{% endif %}" style="border-color: var(--wl-glass-border);">
+            <h2 class="wl-heading wl-heading-sm wl-text mb-3">{{ card.name }}</h2>
+            <div class="space-y-2">
+                {% for f in card.visible_fields %}
+                <div class="flex items-start wl-text-sub">
+                    <span class="w-24 text-xs wl-text-faint uppercase tracking-wide pt-0.5">{{ _field_label(f.field_type) }}</span>
+                    <span class="wl-text">{{ f.field_value }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        {% endfor %}
+        {% endif %}
+
+        {# Card-less profile: legacy flat field list #}
+        {% if not cards and tier == 'granted' %}
+        <div class="space-y-2">
+            {% for f in profile.fields %}
+            <div class="flex items-start wl-text-sub">
+                <span class="w-24 text-xs wl-text-faint uppercase tracking-wide pt-0.5">{{ _field_label(f.field_type) }}</span>
+                <span class="wl-text">{{ f.field_value }}</span>
+                {% if f.visibility == 'private' %}
+                <span class="ml-2 text-xs wl-text-faint" title="Private field">🔒</span>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
 
         {# Access details #}
         <div class="mb-6 pb-4" style="border-bottom: 1px solid var(--wl-glass-border);">
@@ -86,7 +117,7 @@
             <div class="space-y-2">
                 {% if grant %}
                 <div class="flex items-center wl-text-sub">
-                    <span class="w-20 text-xs wl-text-faint uppercase tracking-wide">status</span>
+                    <span class="w-24 text-xs wl-text-faint uppercase tracking-wide">status</span>
                     <span class="wl-text">{{ grant.status|capitalize }}</span>
                 </div>
                 {% if grant.quarter_status %}
@@ -104,13 +135,13 @@
                 {% endif %}
                 {% if grant.granted_at %}
                 <div class="flex items-center wl-text-sub">
-                    <span class="w-20 text-xs wl-text-faint uppercase tracking-wide">granted</span>
+                    <span class="w-24 text-xs wl-text-faint uppercase tracking-wide">granted</span>
                     <span class="wl-text">{{ grant.granted_at[:10] }}</span>
                 </div>
                 {% endif %}
                 {% if grant.expires_at %}
                 <div class="flex items-center wl-text-sub">
-                    <span class="w-20 text-xs wl-text-faint uppercase tracking-wide">expires</span>
+                    <span class="w-24 text-xs wl-text-faint uppercase tracking-wide">expires</span>
                     <span class="wl-text">{{ grant.expires_at[:10] }}</span>
                 </div>
                 {% endif %}
@@ -122,36 +153,19 @@
                 {% endif %}
                 {% if grant.requester_email %}
                 <div class="flex items-center wl-text-sub">
-                    <span class="w-20 text-xs wl-text-faint uppercase tracking-wide">requester</span>
+                    <span class="w-24 text-xs wl-text-faint uppercase tracking-wide">requester</span>
                     <span class="wl-text">{{ grant.requester_email }}</span>
                 </div>
                 {% endif %}
                 {% if grant.requester_name %}
                 <div class="flex items-center wl-text-sub">
-                    <span class="w-20 text-xs wl-text-faint uppercase tracking-wide">name</span>
+                    <span class="w-24 text-xs wl-text-faint uppercase tracking-wide">name</span>
                     <span class="wl-text">{{ grant.requester_name }}</span>
                 </div>
                 {% endif %}
                 {% endif %}
             </div>
         </div>
-
-        {# Cards — granted fields #}
-        {% if cards and tier == 'granted' %}
-        {% for card in cards %}
-        <div class="mb-6 {% if not loop.last %}pb-4 border-b{% endif %}" style="border-color: var(--wl-glass-border);">
-            <h2 class="wl-heading wl-heading-sm wl-text mb-3">{{ card.name }}</h2>
-            <div class="space-y-2">
-                {% for f in card.visible_fields %}
-                <div class="flex items-center wl-text-sub">
-                    <span class="w-20 text-xs wl-text-faint uppercase tracking-wide">{{ f.field_type }}</span>
-                    <span class="wl-text">{{ f.field_value }}</span>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-        {% endfor %}
-        {% endif %}
 
         {# Quarterly decision actions — only for granted tier #}
         {% if tier == 'granted' and grant %}
@@ -199,3 +213,16 @@
     </div>
 </div>
 {% endblock %}
+
+{% macro _field_label(field_type) %}
+    {%- if field_type == 'email' -%}email
+    {%- elif field_type == 'phone' -%}phone
+    {%- elif field_type == 'title' -%}title
+    {%- elif field_type == 'company' -%}company
+    {%- elif field_type == 'address' -%}address
+    {%- elif field_type == 'website' -%}website
+    {%- elif field_type == 'birthday' -%}birthday
+    {%- elif field_type == 'note' -%}note
+    {%- else -%}{{ field_type }}
+    {%- endif -%}
+{% endmacro %}

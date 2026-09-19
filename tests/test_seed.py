@@ -53,7 +53,8 @@ def test_seed_profile_and_fields(tmp_path: Path):
     fields = conn.execute(
         "SELECT * FROM profile_fields ORDER BY field_value"
     ).fetchall()
-    assert len(fields) == 3
+    # 2 emails + 1 phone + 1 title + 1 company = 5 fields
+    assert len(fields) == 5
 
     # Public email
     pub_email = [f for f in fields if f["field_value"] == "test@testco.com"]
@@ -71,6 +72,18 @@ def test_seed_profile_and_fields(tmp_path: Path):
     assert len(holder_phone) == 1
     assert holder_phone[0]["field_type"] == "phone"
     assert holder_phone[0]["visibility"] == "granted"
+
+    # Title field (migrated from profiles.title)
+    title_fields = [f for f in fields if f["field_type"] == "title"]
+    assert len(title_fields) == 1
+    assert title_fields[0]["field_value"] == "CTO"
+    assert title_fields[0]["visibility"] == "granted"
+
+    # Company field (migrated from profiles.company)
+    company_fields = [f for f in fields if f["field_type"] == "company"]
+    assert len(company_fields) == 1
+    assert company_fields[0]["field_value"] == "TestCo"
+    assert company_fields[0]["visibility"] == "granted"
 
     conn.close()
 
@@ -91,6 +104,6 @@ def test_seed_idempotent(tmp_path: Path):
     field_count = conn.execute(
         "SELECT count(*) FROM profile_fields"
     ).fetchone()[0]
-    assert field_count == 3  # same 3 fields, no duplicates
+    assert field_count == 5  # 2 emails + 1 phone + 1 title + 1 company, no duplicates
 
     conn.close()
