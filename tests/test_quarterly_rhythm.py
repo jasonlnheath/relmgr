@@ -127,8 +127,8 @@ class TestIsGrey:
         assert is_grey(dict(grant)) is True
         conn.close()
 
-    def test_expired_punted_is_not_grey(self, db):
-        """Expired grant with punted is NOT grey (owner just punted)."""
+    def test_expired_punted_is_grey(self, db):
+        """Expired grant with punted IS grey (punted lapsed — re-enters cycle)."""
         conn, owner_id, _ = db
         gid = create_grant(conn, owner_id, "a@test.com", "A")
         apply_decision(conn, gid, "approve", "quarter")
@@ -138,7 +138,7 @@ class TestIsGrey:
         )
         conn.commit()
         grant = conn.execute("SELECT * FROM access_grants WHERE id = ?", (gid,)).fetchone()
-        assert is_grey(dict(grant)) is False
+        assert is_grey(dict(grant)) is True
         conn.close()
 
     def test_denied_not_grey(self, db):
@@ -267,8 +267,8 @@ class TestGetGreyContacts:
         assert len(grey) == 0
         conn.close()
 
-    def test_excludes_punted_grants(self, db):
-        """Punted grants are not grey (owner just punted)."""
+    def test_excludes_live_punted_grants(self, db):
+        """Live punted grants (future expiry) are not grey."""
         conn, owner_id, _ = db
         gid = create_grant(conn, owner_id, "punted@test.com", "Punted User")
         apply_decision(conn, gid, "approve", "quarter")
@@ -276,7 +276,7 @@ class TestGetGreyContacts:
         conn.commit()
 
         grey = get_grey_contacts(conn)
-        assert len(grey) == 0
+        assert len(grey) == 0  # punt extends to next quarter, not expired
         conn.close()
 
 

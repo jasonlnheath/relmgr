@@ -981,7 +981,7 @@ def create_app(db_path: Path = None) -> FastAPI:
         return HTMLResponse(jinja.get_template("contact_card.html").render(
             request=request, profile=profile, grant=grant, cards=cards,
             tier=tier, stale=stale, days_since=days_since, token=token,
-            grant_id=grant_id))
+            grant_id=grant_id, is_grey=whitelist_db.is_grey(grant)))
 
     @application.post("/owner/{token}/bulk", response_class=HTMLResponse)
     async def owner_bulk(request: Request, token: str):
