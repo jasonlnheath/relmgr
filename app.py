@@ -199,6 +199,19 @@ def _resolve_owner(
     return None, None, None, False
 
 
+def _verify_grant_ownership(conn, grant, profile_id, is_explicit):
+    """Verify a grant belongs to the current owner.
+
+    For explicit (session-authenticated) owners, the grant's owner_id must
+    match. For legacy fallback (non-integer token payload), we accept any
+    grant (backward compat).
+    """
+    if is_explicit and grant and grant.get("owner_id") is not None:
+        if grant["owner_id"] != profile_id:
+            return False
+    return True
+
+
 def _decision_outcome(conn, jinja, request, grant_id, decision,
                       expiry_choice) -> HTMLResponse:
     """Apply a decision and render the outcome page (R4(b)) — shared by
@@ -663,13 +676,23 @@ def create_app(db_path: Path = None) -> FastAPI:
                 return HTMLResponse("Invalid or expired link", status_code=403)
             if result[2]:
                 return RedirectResponse(url=f"/owner/{result[2]}")
-            result = _decision_outcome(conn, jinja, request, grant_id,
+            profile_id = result[0]
+            is_explicit = result[3]
+
+            # Verify grant ownership
+            grant = whitelist_db.get_grant(conn, grant_id)
+            if not grant:
+                return HTMLResponse("Grant not found", status_code=404)
+            if not _verify_grant_ownership(conn, grant, profile_id, is_explicit):
+                return HTMLResponse("Not found", status_code=404)
+
+            outcome = _decision_outcome(conn, jinja, request, grant_id,
                                        decision, expiry_choice)
             # If approved, set the card assignments
-            if decision == "approve" and result.status_code == 200:
+            if decision == "approve" and outcome.status_code == 200:
                 card_ids = [int(c) for c in card_ids_raw]
                 whitelist_db.set_grant_cards(conn, grant_id, card_ids)
-            return result
+            return outcome
         finally:
             conn.close()
 
@@ -718,12 +741,17 @@ def create_app(db_path: Path = None) -> FastAPI:
                 return HTMLResponse("Invalid or expired link", status_code=403)
             if result[2]:
                 return RedirectResponse(url=f"/owner/{result[2]}")
-            # Update expiry if access changed
+            profile_id = result[0]
+            is_explicit = result[3]
+
+            # Verify grant ownership
             grant = whitelist_db.get_grant(conn, grant_id)
             if not grant:
                 return HTMLResponse("Grant not found", status_code=404)
+            if not _verify_grant_ownership(conn, grant, profile_id, is_explicit):
+                return HTMLResponse("Not found", status_code=404)
 
-            # Compute new expires_at
+            # Update expiry if access changed
             if grant["status"] == "granted":
                 if expiry_choice == "lifetime":
                     expires_at = None
@@ -1129,6 +1157,16 @@ def create_app(db_path: Path = None) -> FastAPI:
                 return HTMLResponse("Invalid or expired link", status_code=403)
             if result[2]:
                 return RedirectResponse(url=f"/owner/{result[2]}")
+            profile_id = result[0]
+            is_explicit = result[3]
+
+            # Verify grant ownership
+            grant = whitelist_db.get_grant(conn, grant_id)
+            if not grant:
+                return HTMLResponse("Grant not found", status_code=404)
+            if not _verify_grant_ownership(conn, grant, profile_id, is_explicit):
+                return HTMLResponse("Not found", status_code=404)
+
             return _decision_outcome(conn, jinja, request, grant_id,
                                      decision, expiry)
         finally:
@@ -1150,9 +1188,15 @@ def create_app(db_path: Path = None) -> FastAPI:
                 return HTMLResponse("Invalid or expired link", status_code=403)
             if result[2]:
                 return RedirectResponse(url=f"/owner/{result[2]}")
+            profile_id = result[0]
+            is_explicit = result[3]
+
             grant = whitelist_db.get_grant(conn, grant_id)
             if not grant:
                 return HTMLResponse("Grant not found", status_code=404)
+            if not _verify_grant_ownership(conn, grant, profile_id, is_explicit):
+                return HTMLResponse("Not found", status_code=404)
+
             profile = whitelist_db.get_profile_by_id(conn, grant["profile_id"])
             cards = whitelist_db.list_cards(conn, grant["profile_id"])
             for card in cards:
@@ -1199,6 +1243,15 @@ def create_app(db_path: Path = None) -> FastAPI:
                 return HTMLResponse("Invalid or expired link", status_code=403)
             if result[2]:
                 return RedirectResponse(url=f"/owner/{result[2]}")
+            profile_id = result[0]
+            is_explicit = result[3]
+
+            # Verify all grants belong to this owner
+            for gid in grant_ids:
+                grant = whitelist_db.get_grant(conn, gid)
+                if grant and not _verify_grant_ownership(conn, grant, profile_id, is_explicit):
+                    return HTMLResponse("Not found", status_code=404)
+
             try:
                 summary = whitelist_db.bulk_apply(conn, grant_ids, decision, expiry)
             except ValueError as exc:
@@ -1222,9 +1275,15 @@ def create_app(db_path: Path = None) -> FastAPI:
                 return HTMLResponse("Invalid or expired link", status_code=403)
             if result[2]:
                 return RedirectResponse(url=f"/owner/{result[2]}")
+            profile_id = result[0]
+            is_explicit = result[3]
+
             grant = whitelist_db.get_grant(conn, grant_id)
             if not grant:
                 return HTMLResponse("Grant not found", status_code=404)
+            if not _verify_grant_ownership(conn, grant, profile_id, is_explicit):
+                return HTMLResponse("Not found", status_code=404)
+
             profile = whitelist_db.get_profile_by_id(conn, grant["profile_id"])
             # Only active access can be revoked — anything else is an error,
             # surfaced (not swallowed): the helper raises ValueError.
