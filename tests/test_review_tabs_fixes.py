@@ -159,13 +159,17 @@ class TestLogoLiveOnly:
         conn.close()
 
     def test_expired_grant_no_logo_page(self, tmp_path):
-        """The rendered page: an expired granted row shows NO logo svg."""
+        """The rendered page: an expired granted row shows NO logo svg.
+
+        Ruling: expired grants dissolve into grey — no separate expired state.
+        The badge is now Greylist (pending quarterly confirmation).
+        """
         db = self._granted_fixture(tmp_path, expired=True)
         client = TestClient(create_app(db))
         html = client.get(f"/owner/{_owner_token()}").text
         assert "grantee@test.com" in html, "expired row must stay visible in history"
         assert "<svg" not in html, "logo leaked on an expired grant"
-        assert "Expired" in html, "expired badge missing from the row"
+        assert "Greylist" in html, "expired grants dissolve into grey/pending-quarterly"
 
     def test_live_grant_still_gets_logo(self, tmp_path):
         """Regression: a live (unexpired) granted contact keeps its logo."""

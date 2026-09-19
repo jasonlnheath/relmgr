@@ -96,7 +96,7 @@ Every permission has an expiration policy. Exactly three durations:
 | **While employed** | Access while the relationship persists (e.g. employment). |
 | **Till next quarterly review** | Greylist — pending quarterly confirmation; expires at the next quarterly review. |
 
-**Quarterly review flow:** the whitelist emails the owner every quarter. The email lists all greylisted contacts whose temporary grants are **90 days or older** and prompts the owner to make each contact permanent (Lifetime) or revoke it. Temporary access grants carry a **minimum 90-day life**. A contact granted fewer than 90 days ago is excluded from that cycle's prompt and first becomes eligible at 90 days of grant age. Greylist = pending quarterly confirmation. The revocation path preserves audit rows (append-only). *This is spec direction only; email-sending machinery is future work.*
+**Quarterly review flow:** the whitelist emails the owner every quarter. The email lists all greylisted contacts and offers three choices per contact: make permanent (Lifetime), revoke, or **PUNT for another quarter** (contact stays grey). There is no separate expired state and no auto-expiry — a temporary grant extends to the next quarterly review. Greylist = pending quarterly confirmation. The revocation path preserves audit rows (append-only). *This is spec direction only; email-sending machinery is future work.*
 
 ### Blocked State
 
