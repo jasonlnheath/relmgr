@@ -7,11 +7,14 @@ require WHITELIST_SECRET to be present.
 """
 
 from pathlib import Path
+import hmac
 import os
+import re
+import time
 from datetime import datetime, timedelta, timezone
 
 from fastapi import FastAPI, Request, Query
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from PIL import Image
 from io import BytesIO
 from starlette.templating import Jinja2Templates
@@ -91,6 +94,113 @@ def _make_jinja():
     return Jinja2Templates(directory=str(_JINJA_DIR))
 
 
+def _b64url_encode(data: bytes) -> str:
+    """Base64url encode without padding."""
+    import base64
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+
+
+def _b64url_decode(s: str) -> bytes:
+    """Base64url decode with padding restoration."""
+    import base64
+    s = s + "=" * (4 - len(s) % 4)
+    return base64.urlsafe_b64decode(s)
+
+
+def _make_session_cookie(profile_id: int, secret: bytes) -> str:
+    """Create a signed session cookie value (7-day expiry)."""
+    expiry = int(time.time()) + 7 * 86400
+    payload = f"{profile_id}|{expiry}"
+    payload_b64 = _b64url_encode(payload.encode())
+    sig = hmac.new(
+        secret, f"session|{payload_b64}".encode(), "sha256"
+    ).hexdigest()
+    return f"{payload_b64}.{sig}"
+
+
+def _consume_session_cookie(cookie_value: str, secret: bytes):
+    """Validate session cookie; returns profile_id int or None."""
+    try:
+        parts = cookie_value.split(".")
+        if len(parts) != 2:
+            return None
+        payload_b64, sig = parts
+        inner = _b64url_decode(payload_b64).decode()
+        parts2 = inner.rsplit("|", 1)
+        profile_id = int(parts2[0])
+        expiry = int(parts2[1])
+        if int(time.time()) > expiry:
+            return None
+        signing_input = f"session|{payload_b64}"
+        expected_sig = hmac.new(
+            secret, signing_input.encode(), "sha256"
+        ).hexdigest()
+        if not hmac.compare_digest(sig, expected_sig):
+            return None
+        return profile_id
+    except Exception:
+        return None
+
+
+def _resolve_owner(
+    conn, request, token: str, secret: bytes
+):
+    """Resolve the owner profile from URL token OR session cookie.
+
+    Returns (profile_id, profile_dict, redirect_token_or_None, is_explicit).
+    If redirect_token is set, the caller should redirect to /owner/{token}.
+    If profile_id is None, the caller should return 403.
+    is_explicit is True when the user was authenticated via session cookie
+    or a valid URL token (not via the legacy DB fallback).
+
+    Legacy fallback: when the token is valid but the payload is non-integer
+    (old system) OR when NO token is provided, falls back to the first
+    profile in the DB — matching the old `except (ValueError, TypeError)`
+    behaviour. When the token is tampered/expired (consume_token returns
+    None), this returns 403.
+    """
+    # Try URL token first
+    if token:
+        payload = wl_tokens.consume_token(secret, "owner_dashboard", token)
+        if payload is not None:
+            # Token is valid — check if payload is an integer profile ID
+            try:
+                profile_id = int(payload)
+            except (ValueError, TypeError):
+                profile_id = None
+            if profile_id:
+                profile = whitelist_db.get_profile_by_id(conn, profile_id)
+                if profile:
+                    return profile_id, profile, None, True
+            # Token valid but non-integer payload (legacy format) —
+            # fall through to legacy fallback below.
+        else:
+            # Token present but INVALID (tampered/expired) — return 403
+            return None, None, None, False
+
+    # Try session cookie (only when no URL token or legacy payload)
+    session_cookie = request.cookies.get("wl_session")
+    if session_cookie:
+        profile_id = _consume_session_cookie(session_cookie, secret)
+        if profile_id:
+            profile = whitelist_db.get_profile_by_id(conn, profile_id)
+            if profile:
+                fresh_token = wl_tokens.make_token(
+                    secret, "owner_dashboard", str(profile_id)
+                )
+                return None, None, fresh_token, True  # signal redirect
+
+    # Legacy fallback: first profile in DB (no token or legacy payload)
+    row = conn.execute("SELECT * FROM profiles ORDER BY id LIMIT 1").fetchone()
+    if row:
+        profile_id = row["id"]
+        profile = whitelist_db.get_profile_by_id(conn, profile_id)
+        if profile:
+            return profile_id, profile, None, False  # legacy fallback
+
+    return None, None, None, False
+
+
 def _decision_outcome(conn, jinja, request, grant_id, decision,
                       expiry_choice) -> HTMLResponse:
     """Apply a decision and render the outcome page (R4(b)) — shared by
@@ -145,6 +255,136 @@ def create_app(db_path: Path = None) -> FastAPI:
         whitelist_db.ensure_whitelist_schema(_mconn)
     finally:
         _mconn.close()
+
+    # ============================================================
+    # Sign-in / Sign-up / Sign-out (Phase B)
+    # ============================================================
+
+    @application.get("/signin", response_class=HTMLResponse)
+    async def signin_page(request: Request):
+        return HTMLResponse(jinja.get_template("signin.html").render(
+            request=request, error=None, email=""))
+
+    @application.post("/signin")
+    async def signin_submit(request: Request):
+        form = await request.form()
+        email = (form.get("email") or "").strip()
+        password = form.get("password") or ""
+
+        conn = whitelist_db.wl_connect(path)
+        try:
+            profile = whitelist_db.resolve_owner_by_credentials(conn, email, password)
+            if not profile:
+                return HTMLResponse(jinja.get_template("signin.html").render(
+                    request=request, error="Invalid email or password.", email=email))
+
+            # Set session cookie
+            secret = _get_secret()
+            session_cookie = _make_session_cookie(profile["id"], secret)
+            response = RedirectResponse(url="/")
+            response.set_cookie(
+                key="wl_session",
+                value=session_cookie,
+                httponly=True,
+                samesite="lax",
+                max_age=7 * 86400,
+            )
+            return response
+        finally:
+            conn.close()
+
+    @application.get("/signup", response_class=HTMLResponse)
+    async def signup_page(request: Request):
+        return HTMLResponse(jinja.get_template("signup.html").render(
+            request=request, error=None,
+            display_name="", handle="", email=""))
+
+    @application.post("/signup")
+    async def signup_submit(request: Request):
+        form = await request.form()
+        display_name = (form.get("display_name") or "").strip()
+        handle = (form.get("handle") or "").strip().lower()
+        email = (form.get("email") or "").strip().lower()
+        password = form.get("password") or ""
+
+        errors = []
+        if not display_name:
+            errors.append("Display name is required.")
+        if not handle or not re.match(r"^[a-z0-9][a-z0-9-]*[a-z0-9]$", handle):
+            errors.append("Handle must be 2-40 lowercase alphanumeric chars (hyphens ok).")
+        if not email or "@" not in email:
+            errors.append("Valid email is required.")
+        if len(password) < 8:
+            errors.append("Password must be at least 8 characters.")
+
+        if errors:
+            return HTMLResponse(jinja.get_template("signup.html").render(
+                request=request, error=errors[0],
+                display_name=display_name, handle=handle, email=email))
+
+        conn = whitelist_db.wl_connect(path)
+        try:
+            profile = whitelist_db.create_owner_profile(
+                conn, handle, display_name, email, password)
+
+            # Set session cookie
+            secret = _get_secret()
+            session_cookie = _make_session_cookie(profile["id"], secret)
+            response = RedirectResponse(url="/")
+            response.set_cookie(
+                key="wl_session",
+                value=session_cookie,
+                httponly=True,
+                samesite="lax",
+                max_age=7 * 86400,
+            )
+            return response
+        except ValueError as exc:
+            return HTMLResponse(jinja.get_template("signup.html").render(
+                request=request, error=str(exc),
+                display_name=display_name, handle=handle, email=email))
+        finally:
+            conn.close()
+
+    @application.post("/signout")
+    async def signout_submit(request: Request):
+        response = RedirectResponse(url="/signin")
+        response.delete_cookie(key="wl_session", path="/")
+        return response
+
+    # ============================================================
+    # Public routes
+    # ============================================================
+
+    @application.get("/", response_class=HTMLResponse)
+    async def landing_page(request: Request):
+        """Root landing: redirect to sign-in or dashboard based on session."""
+        conn = whitelist_db.wl_connect(path)
+        try:
+            secret = _get_secret()
+            result = _resolve_owner(conn, request, "", secret)
+            if result[2]:  # redirect needed (session valid, no URL token)
+                return RedirectResponse(url=f"/owner/{result[2]}")
+            if result[0] is not None and result[3]:  # explicitly authenticated (not legacy fallback)
+                return RedirectResponse(url=f"/owner/{wl_tokens.make_token(secret, 'owner_dashboard', str(result[0]))}")
+        finally:
+            conn.close()
+        return RedirectResponse(url="/signin")
+
+    @application.get("/owner/", response_class=HTMLResponse)
+    async def owner_root(request: Request):
+        """Owner root (/owner/) — checks session cookie, redirects to dashboard."""
+        conn = whitelist_db.wl_connect(path)
+        try:
+            secret = _get_secret()
+            result = _resolve_owner(conn, request, "", secret)
+            if result[0] is not None and result[3]:  # explicitly authenticated
+                return RedirectResponse(url=f"/owner/{wl_tokens.make_token(secret, 'owner_dashboard', str(result[0]))}")
+            if result[2]:
+                return RedirectResponse(url=f"/owner/{result[2]}")
+        finally:
+            conn.close()
+        return RedirectResponse(url="/signin")
 
     @application.get("/p/{handle}", response_class=HTMLResponse)
     async def profile_page(
@@ -311,20 +551,14 @@ def create_app(db_path: Path = None) -> FastAPI:
     # ------------------------------------------------------------------ Owner dashboard → contact list (Phase A2)
     @application.get("/owner/{token}", response_class=HTMLResponse)
     async def owner_dashboard(request: Request, token: str):
-        payload = wl_tokens.consume_token(_get_secret(), "owner_dashboard", token)
-        if payload is None:
-            return HTMLResponse("Invalid or expired link", status_code=403)
-
         conn = whitelist_db.wl_connect(path)
         try:
-            try:
-                profile_id = int(payload)
-            except (ValueError, TypeError):
-                row = conn.execute("SELECT * FROM profiles ORDER BY id LIMIT 1").fetchone()
-                if row:
-                    profile_id = row["id"]
-                else:
-                    return HTMLResponse("Profile not found", status_code=404)
+            result = _resolve_owner(conn, request, token, _get_secret())
+            if result[0] is None and result[2] is None:
+                return HTMLResponse("Invalid or expired link", status_code=403)
+            if result[2]:
+                return RedirectResponse(url=f"/owner/{result[2]}")
+            profile_id = result[0]
 
             # Get query params — junk input must degrade to page 0, not 500.
             q = request.query_params.get("q")
@@ -447,10 +681,6 @@ def create_app(db_path: Path = None) -> FastAPI:
     # ------------------------------------------------------------------ Approve with cards (P5-T3)
     @application.post("/owner/{token}/approve", response_class=HTMLResponse)
     async def owner_approve(request: Request, token: str):
-        payload = wl_tokens.consume_token(_get_secret(), "owner_dashboard", token)
-        if payload is None:
-            return HTMLResponse("Invalid or expired link", status_code=403)
-
         form = await request.form()
         grant_id = form.get("grant_id", "")
         decision = form.get("decision", "")
@@ -465,6 +695,11 @@ def create_app(db_path: Path = None) -> FastAPI:
 
         conn = whitelist_db.wl_connect(path)
         try:
+            result = _resolve_owner(conn, request, token, _get_secret())
+            if result[0] is None and result[2] is None:
+                return HTMLResponse("Invalid or expired link", status_code=403)
+            if result[2]:
+                return RedirectResponse(url=f"/owner/{result[2]}")
             result = _decision_outcome(conn, jinja, request, grant_id,
                                        decision, expiry_choice)
             # If approved, set the card assignments
@@ -478,20 +713,14 @@ def create_app(db_path: Path = None) -> FastAPI:
     # ------------------------------------------------------------------ Junk folder (P5-T3)
     @application.get("/owner/{token}/junk", response_class=HTMLResponse)
     async def owner_junk(request: Request, token: str):
-        payload = wl_tokens.consume_token(_get_secret(), "owner_dashboard", token)
-        if payload is None:
-            return HTMLResponse("Invalid or expired link", status_code=403)
-
         conn = whitelist_db.wl_connect(path)
         try:
-            try:
-                profile_id = int(payload)
-            except (ValueError, TypeError):
-                row = conn.execute("SELECT * FROM profiles ORDER BY id LIMIT 1").fetchone()
-                if row:
-                    profile_id = row["id"]
-                else:
-                    return HTMLResponse("Profile not found", status_code=404)
+            result = _resolve_owner(conn, request, token, _get_secret())
+            if result[0] is None and result[2] is None:
+                return HTMLResponse("Invalid or expired link", status_code=403)
+            if result[2]:
+                return RedirectResponse(url=f"/owner/{result[2]}")
+            profile_id = result[0]
             denied = conn.execute(
                 "SELECT * FROM access_grants WHERE profile_id = ? AND status = 'denied' ORDER BY created_at DESC",
                 (profile_id,),
@@ -509,10 +738,6 @@ def create_app(db_path: Path = None) -> FastAPI:
     # ------------------------------------------------------------------ Manage access (P5-T3)
     @application.post("/owner/{token}/access", response_class=HTMLResponse)
     async def owner_manage_access(request: Request, token: str):
-        payload = wl_tokens.consume_token(_get_secret(), "owner_dashboard", token)
-        if payload is None:
-            return HTMLResponse("Invalid or expired link", status_code=403)
-
         form = await request.form()
         grant_id = form.get("grant_id", "")
         card_ids_raw = form.getlist("card_ids")
@@ -525,6 +750,11 @@ def create_app(db_path: Path = None) -> FastAPI:
 
         conn = whitelist_db.wl_connect(path)
         try:
+            result = _resolve_owner(conn, request, token, _get_secret())
+            if result[0] is None and result[2] is None:
+                return HTMLResponse("Invalid or expired link", status_code=403)
+            if result[2]:
+                return RedirectResponse(url=f"/owner/{result[2]}")
             # Update expiry if access changed
             grant = whitelist_db.get_grant(conn, grant_id)
             if not grant:
@@ -628,26 +858,17 @@ def create_app(db_path: Path = None) -> FastAPI:
 
     @application.get("/owner/{token}/profile", response_class=HTMLResponse)
     async def owner_profile(request: Request, token: str):
-        payload = wl_tokens.consume_token(_get_secret(), "owner_dashboard", token)
-        if payload is None:
-            return HTMLResponse("Invalid or expired link", status_code=403)
-
         conn = whitelist_db.wl_connect(path)
         try:
-            try:
-                profile_id = int(payload)
-                profile = whitelist_db.get_profile_by_id(conn, profile_id)
-            except (ValueError, TypeError):
-                row = conn.execute("SELECT * FROM profiles ORDER BY id LIMIT 1").fetchone()
-                if row:
-                    profile = whitelist_db.get_profile(conn, row["handle"])
-                else:
-                    profile = None
+            result = _resolve_owner(conn, request, token, _get_secret())
+            if result[0] is None and result[2] is None:
+                return HTMLResponse("Invalid or expired link", status_code=403)
+            if result[2]:
+                return RedirectResponse(url=f"/owner/{result[2]}")
+            profile_id = result[0]
+            profile = result[1]
             if not profile:
                 return HTMLResponse("Profile not found", status_code=404)
-            # Deterministic rebind — the except-branch only sets `profile_id`
-            # in one sub-branch, and this route (and the render) depend on it.
-            profile_id = profile["id"]
 
             return _my_profile_html(conn, request, token, profile)
         finally:
@@ -655,10 +876,6 @@ def create_app(db_path: Path = None) -> FastAPI:
 
     @application.post("/owner/{token}/bio")
     async def owner_bio(request: Request, token: str):
-        payload = wl_tokens.consume_token(_get_secret(), "owner_dashboard", token)
-        if payload is None:
-            return HTMLResponse("Invalid or expired link", status_code=403)
-
         form = await request.form()
         bio = (form.get("bio") or "").strip()
         bio_error = None
@@ -668,15 +885,13 @@ def create_app(db_path: Path = None) -> FastAPI:
             bio_error = f"Bio must be 2000 characters or fewer (currently {len(bio)})."
             conn = whitelist_db.wl_connect(path)
             try:
-                try:
-                    profile_id = int(payload)
-                except (ValueError, TypeError):
-                    row = conn.execute("SELECT * FROM profiles ORDER BY id LIMIT 1").fetchone()
-                    if row:
-                        profile_id = row["id"]
-                    else:
-                        return HTMLResponse("Profile not found", status_code=404)
-                profile = whitelist_db.get_profile_by_id(conn, profile_id)
+                result = _resolve_owner(conn, request, token, _get_secret())
+                if result[0] is None and result[2] is None:
+                    return HTMLResponse("Invalid or expired link", status_code=403)
+                if result[2]:
+                    return RedirectResponse(url=f"/owner/{result[2]}")
+                profile_id = result[0]
+                profile = result[1]
                 if not profile:
                     return HTMLResponse("Profile not found", status_code=404)
                 return _my_profile_html(conn, request, token, profile,
@@ -687,14 +902,15 @@ def create_app(db_path: Path = None) -> FastAPI:
 
         conn = whitelist_db.wl_connect(path)
         try:
-            try:
-                profile_id = int(payload)
-            except (ValueError, TypeError):
-                row = conn.execute("SELECT * FROM profiles ORDER BY id LIMIT 1").fetchone()
-                if row:
-                    profile_id = row["id"]
-                else:
-                    return HTMLResponse("Profile not found", status_code=404)
+            result = _resolve_owner(conn, request, token, _get_secret())
+            if result[0] is None and result[2] is None:
+                return HTMLResponse("Invalid or expired link", status_code=403)
+            if result[2]:
+                return RedirectResponse(url=f"/owner/{result[2]}")
+            profile_id = result[0]
+            profile = result[1]
+            if not profile:
+                return HTMLResponse("Profile not found", status_code=404)
 
             whitelist_db.update_bio(conn, profile_id, bio)
             profile = whitelist_db.get_profile_by_id(conn, profile_id)
@@ -740,10 +956,6 @@ def create_app(db_path: Path = None) -> FastAPI:
 
     @application.post("/owner/{token}/cards/new")
     async def owner_create_card(request: Request, token: str):
-        payload = wl_tokens.consume_token(_get_secret(), "owner_dashboard", token)
-        if payload is None:
-            return HTMLResponse("Invalid or expired link", status_code=403)
-
         form = await request.form()
         name = (form.get("name") or "").strip()
         name_error = None
@@ -754,14 +966,12 @@ def create_app(db_path: Path = None) -> FastAPI:
 
         conn = whitelist_db.wl_connect(path)
         try:
-            try:
-                profile_id = int(payload)
-            except (ValueError, TypeError):
-                row = conn.execute("SELECT * FROM profiles ORDER BY id LIMIT 1").fetchone()
-                if row:
-                    profile_id = row["id"]
-                else:
-                    return HTMLResponse("Profile not found", status_code=404)
+            result = _resolve_owner(conn, request, token, _get_secret())
+            if result[0] is None and result[2] is None:
+                return HTMLResponse("Invalid or expired link", status_code=403)
+            if result[2]:
+                return RedirectResponse(url=f"/owner/{result[2]}")
+            profile_id = result[0]
 
             if not name_error:
                 try:
@@ -781,24 +991,18 @@ def create_app(db_path: Path = None) -> FastAPI:
 
     @application.post("/owner/{token}/cards/{card_id}/fields")
     async def owner_set_card_fields(request: Request, token: str, card_id: int):
-        payload = wl_tokens.consume_token(_get_secret(), "owner_dashboard", token)
-        if payload is None:
-            return HTMLResponse("Invalid or expired link", status_code=403)
-
         form = await request.form()
         field_ids_raw = form.getlist("field_ids")
         field_ids = [int(f) for f in field_ids_raw if f]
 
         conn = whitelist_db.wl_connect(path)
         try:
-            try:
-                profile_id = int(payload)
-            except (ValueError, TypeError):
-                row = conn.execute("SELECT * FROM profiles ORDER BY id LIMIT 1").fetchone()
-                if row:
-                    profile_id = row["id"]
-                else:
-                    return HTMLResponse("Profile not found", status_code=404)
+            result = _resolve_owner(conn, request, token, _get_secret())
+            if result[0] is None and result[2] is None:
+                return HTMLResponse("Invalid or expired link", status_code=403)
+            if result[2]:
+                return RedirectResponse(url=f"/owner/{result[2]}")
+            profile_id = result[0]
 
             # Cross-owner guard (AC #6): the token's profile must own this
             # card. Only an EXISTING foreign card 404s; a missing card falls
@@ -822,10 +1026,6 @@ def create_app(db_path: Path = None) -> FastAPI:
 
     @application.post("/owner/{token}/fields/new")
     async def owner_add_field(request: Request, token: str):
-        payload = wl_tokens.consume_token(_get_secret(), "owner_dashboard", token)
-        if payload is None:
-            return HTMLResponse("Invalid or expired link", status_code=403)
-
         form = await request.form()
         field_type = form.get("field_type", "")
         field_value = (form.get("field_value") or "").strip()
@@ -840,14 +1040,12 @@ def create_app(db_path: Path = None) -> FastAPI:
 
         conn = whitelist_db.wl_connect(path)
         try:
-            try:
-                profile_id = int(payload)
-            except (ValueError, TypeError):
-                row = conn.execute("SELECT * FROM profiles ORDER BY id LIMIT 1").fetchone()
-                if row:
-                    profile_id = row["id"]
-                else:
-                    return HTMLResponse("Profile not found", status_code=404)
+            result = _resolve_owner(conn, request, token, _get_secret())
+            if result[0] is None and result[2] is None:
+                return HTMLResponse("Invalid or expired link", status_code=403)
+            if result[2]:
+                return RedirectResponse(url=f"/owner/{result[2]}")
+            profile_id = result[0]
 
             whitelist_db.add_profile_field(conn, profile_id, field_type, field_value, visibility)
 
@@ -863,23 +1061,17 @@ def create_app(db_path: Path = None) -> FastAPI:
         from starlette.datastructures import UploadFile
         import os
 
-        payload = wl_tokens.consume_token(_get_secret(), "owner_dashboard", token)
-        if payload is None:
-            return HTMLResponse("Invalid or expired link", status_code=403)
-
         form = await request.form()
         remove_photo = form.get("remove_photo")
 
         conn = whitelist_db.wl_connect(path)
         try:
-            try:
-                profile_id = int(payload)
-            except (ValueError, TypeError):
-                row = conn.execute("SELECT * FROM profiles ORDER BY id LIMIT 1").fetchone()
-                if row:
-                    profile_id = row["id"]
-                else:
-                    return HTMLResponse("Profile not found", status_code=404)
+            result = _resolve_owner(conn, request, token, _get_secret())
+            if result[0] is None and result[2] is None:
+                return HTMLResponse("Invalid or expired link", status_code=403)
+            if result[2]:
+                return RedirectResponse(url=f"/owner/{result[2]}")
+            profile_id = result[0]
 
             # Cross-owner guard (same check as the card-preview route).
             card = whitelist_db.get_card_by_id(conn, card_id)
@@ -948,20 +1140,14 @@ def create_app(db_path: Path = None) -> FastAPI:
 
     @application.get("/owner/{token}/profile/card/{card_id}")
     async def owner_card_preview(request: Request, token: str, card_id: int):
-        payload = wl_tokens.consume_token(_get_secret(), "owner_dashboard", token)
-        if payload is None:
-            return HTMLResponse("Invalid or expired link", status_code=403)
-
         conn = whitelist_db.wl_connect(path)
         try:
-            try:
-                profile_id = int(payload)
-            except (ValueError, TypeError):
-                row = conn.execute("SELECT * FROM profiles ORDER BY id LIMIT 1").fetchone()
-                if row:
-                    profile_id = row["id"]
-                else:
-                    return HTMLResponse("Profile not found", status_code=404)
+            result = _resolve_owner(conn, request, token, _get_secret())
+            if result[0] is None and result[2] is None:
+                return HTMLResponse("Invalid or expired link", status_code=403)
+            if result[2]:
+                return RedirectResponse(url=f"/owner/{result[2]}")
+            profile_id = result[0]
 
             card = whitelist_db.get_card_by_id(conn, card_id)
             if not card:
@@ -1022,10 +1208,6 @@ def create_app(db_path: Path = None) -> FastAPI:
 
     @application.post("/owner/{token}/decision")
     async def owner_decision(request: Request, token: str):
-        payload = wl_tokens.consume_token(_get_secret(), "owner_dashboard", token)
-        if payload is None:
-            return HTMLResponse("Invalid or expired link", status_code=403)
-
         form = await request.form()
         grant_id = form.get("grant_id", "")
         decision = form.get("decision", "")
@@ -1033,6 +1215,11 @@ def create_app(db_path: Path = None) -> FastAPI:
 
         conn = whitelist_db.wl_connect(path)
         try:
+            result = _resolve_owner(conn, request, token, _get_secret())
+            if result[0] is None and result[2] is None:
+                return HTMLResponse("Invalid or expired link", status_code=403)
+            if result[2]:
+                return RedirectResponse(url=f"/owner/{result[2]}")
             return _decision_outcome(conn, jinja, request, grant_id,
                                      decision, expiry)
         finally:
@@ -1047,12 +1234,13 @@ def create_app(db_path: Path = None) -> FastAPI:
         """Contact card — single-surface view of one contact from the dashboard.
         Ruling: revoke lives on the contact card, not the list details expander.
         """
-        payload = wl_tokens.consume_token(_get_secret(), "owner_dashboard", token)
-        if payload is None:
-            return HTMLResponse("Invalid or expired link", status_code=403)
-
         conn = whitelist_db.wl_connect(path)
         try:
+            result = _resolve_owner(conn, request, token, _get_secret())
+            if result[0] is None and result[2] is None:
+                return HTMLResponse("Invalid or expired link", status_code=403)
+            if result[2]:
+                return RedirectResponse(url=f"/owner/{result[2]}")
             grant = whitelist_db.get_grant(conn, grant_id)
             if not grant:
                 return HTMLResponse("Grant not found", status_code=404)
@@ -1087,10 +1275,6 @@ def create_app(db_path: Path = None) -> FastAPI:
         """P4-T2: one decision over many grants. Per-grant scoping lives in
         bulk_apply (approve/deny -> pending only; revoke -> granted only);
         dead rows skip, they never abort the batch."""
-        payload = wl_tokens.consume_token(_get_secret(), "owner_dashboard", token)
-        if payload is None:
-            return HTMLResponse("Invalid or expired link", status_code=403)
-
         form = await request.form()
         grant_ids = form.getlist("grant_ids")
         decision = str(form.get("decision", ""))
@@ -1101,6 +1285,11 @@ def create_app(db_path: Path = None) -> FastAPI:
 
         conn = whitelist_db.wl_connect(path)
         try:
+            result = _resolve_owner(conn, request, token, _get_secret())
+            if result[0] is None and result[2] is None:
+                return HTMLResponse("Invalid or expired link", status_code=403)
+            if result[2]:
+                return RedirectResponse(url=f"/owner/{result[2]}")
             try:
                 summary = whitelist_db.bulk_apply(conn, grant_ids, decision, expiry)
             except ValueError as exc:
@@ -1115,14 +1304,15 @@ def create_app(db_path: Path = None) -> FastAPI:
 
     @application.post("/owner/{token}/revoke", response_class=HTMLResponse)
     async def owner_revoke(request: Request, token: str):
-        payload = wl_tokens.consume_token(_get_secret(), "owner_dashboard", token)
-        if payload is None:
-            return HTMLResponse("Invalid or expired link", status_code=403)
-
         form = await request.form()
         grant_id = form.get("grant_id", "")
         conn = whitelist_db.wl_connect(path)
         try:
+            result = _resolve_owner(conn, request, token, _get_secret())
+            if result[0] is None and result[2] is None:
+                return HTMLResponse("Invalid or expired link", status_code=403)
+            if result[2]:
+                return RedirectResponse(url=f"/owner/{result[2]}")
             grant = whitelist_db.get_grant(conn, grant_id)
             if not grant:
                 return HTMLResponse("Grant not found", status_code=404)
