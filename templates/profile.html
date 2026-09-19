@@ -48,17 +48,17 @@
             </div>
         </div>
 
-        {# Bio #}
-        {% if profile.bio %}
+        {# Bio — shown when public, or when granted-tier viewer (private = hidden from strangers only) #}
+        {% if profile.bio and (bio_visibility == 'public' or tier == 'granted') %}
         <div class="mb-6 pb-4" style="border-bottom: 1px solid var(--wl-glass-border);">
             <p class="wl-text-sub text-sm whitespace-pre-line">{{ profile.bio }}</p>
         </div>
         {% endif %}
 
-        {# QR code — scannable access key #}
+        {# QR code — scannable access key (dynamic generation) #}
         <div class="mb-6 pb-4" style="border-bottom: 1px solid var(--wl-glass-border);">
             <p class="text-xs wl-text-faint mb-2">Scan to connect</p>
-            <img src="/exports/qr_{{ profile.handle }}.png" alt="QR code" class="w-32 h-32 rounded-lg" style="background: #fff; padding: 8px;">
+            <img src="/qr/{{ profile.handle }}" alt="QR code" class="w-32 h-32 rounded-lg" style="background: #fff; padding: 8px;">
         </div>
 
         {# Communication icons — round call/text/facetime/email #}
@@ -133,6 +133,50 @@
             {% endfor %}
         </div>
         {% endif %}
+        {% endif %}
+
+        {# Trusted forwarding — granted contacts only #}
+        {% if tier == 'granted' %}
+        <div class="mt-6 pt-4" style="border-top: 1px solid var(--wl-glass-border);">
+            <h3 class="wl-heading wl-heading-sm wl-text mb-2">Forward your card</h3>
+            <p class="text-xs wl-text-faint mb-3">
+                Share this card with someone new. The owner will be notified of who you are and who you shared it with.
+            </p>
+            <form method="POST" action="/p/{{ profile.handle }}/forward" class="space-y-2">
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="text-xs wl-text-faint">Your name</label>
+                        <input type="text" name="forwarder_name"
+                               class="w-full text-xs border border-gray-600 rounded px-2 py-1 bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]"
+                               placeholder="Your name" required>
+                    </div>
+                    <div>
+                        <label class="text-xs wl-text-faint">Your email</label>
+                        <input type="email" name="forwarder_email"
+                               class="w-full text-xs border border-gray-600 rounded px-2 py-1 bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]"
+                               placeholder="you@example.com" required>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="text-xs wl-text-faint">Recipient name</label>
+                        <input type="text" name="recipient_name"
+                               class="w-full text-xs border border-gray-600 rounded px-2 py-1 bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]"
+                               placeholder="Their name">
+                    </div>
+                    <div>
+                        <label class="text-xs wl-text-faint">Recipient email</label>
+                        <input type="email" name="recipient_email"
+                               class="w-full text-xs border border-gray-600 rounded px-2 py-1 bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]"
+                               placeholder="them@example.com" required>
+                    </div>
+                </div>
+                <button type="submit"
+                        class="wl-btn-ink px-3 py-1.5 rounded text-xs">
+                    Forward card
+                </button>
+            </form>
+        </div>
         {% endif %}
 
         {# Connect button — request access #}

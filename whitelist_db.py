@@ -152,6 +152,18 @@ def wl_init(conn: sqlite3.Connection) -> None:
             scanned_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
         CREATE INDEX IF NOT EXISTS idx_scan_events_profile ON scan_events(profile_id);
+
+        -- Whitelist: trusted card forwarding (2026-09-18).
+        CREATE TABLE IF NOT EXISTS card_forwardings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            profile_id INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+            forwarder_email TEXT NOT NULL,
+            forwarder_name TEXT,
+            recipient_email TEXT NOT NULL,
+            recipient_name TEXT,
+            forwarded_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+        );
     """)
     # P3-T2: append-only audit trail — DDL comes from the shared _grant_logs_ddl()
     # so the action vocabulary can never drift between wl_init / ensure / heal.
@@ -626,7 +638,7 @@ CREATE TABLE access_grants (
 # new action word appears here first and can never drift between DDLs.
 _GRANT_LOGS_CHECK = (
     "CHECK(action IN ('created', 'approved', 'denied', 'revoked', "
-    "'merged', 'cards_set', 'permanent', 'punted'))"
+    "'merged', 'cards_set', 'permanent', 'punted', 'forwarded'))"
 )
 
 
@@ -674,7 +686,7 @@ def ensure_grant_log_actions(conn: sqlite3.Connection) -> None:
     if not row or not row[0]:
         return  # fresh DB pre-wl_init — nothing to heal
     ddl_sql = row[0]
-    if "'merged'" in ddl_sql and "'cards_set'" in ddl_sql and "'permanent'" in ddl_sql and "'punted'" in ddl_sql:
+    if "'merged'" in ddl_sql and "'cards_set'" in ddl_sql and "'permanent'" in ddl_sql and "'punted'" in ddl_sql and "'forwarded'" in ddl_sql:
         return  # current DDL
 
     new_ddl = (
@@ -1617,11 +1629,114 @@ def ensure_profile_bio_column(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE profiles ADD COLUMN bio TEXT")
 
 
+def ensure_profile_bio_visibility_column(conn: sqlite3.Connection) -> None:
+    """Add bio_visibility column to profiles if missing (idempotent).
+
+    Controls whether the bio is visible on public surfaces.
+    'public' = shown to everyone; 'private' = hidden until grant flow.
+    """
+    cols = [r["name"] for r in conn.execute("PRAGMA table_info(profiles)").fetchall()]
+    if "bio_visibility" not in cols:
+        conn.execute(
+            "ALTER TABLE profiles ADD COLUMN bio_visibility "
+            "TEXT NOT NULL DEFAULT 'public' "
+            "CHECK(bio_visibility IN ('public', 'private'))"
+        )
+
+
 def ensure_card_photo_column(conn: sqlite3.Connection) -> None:
     """Add photo_path column to cards if missing (idempotent)."""
     cols = [r["name"] for r in conn.execute("PRAGMA table_info(cards)").fetchall()]
     if "photo_path" not in cols:
         conn.execute("ALTER TABLE cards ADD COLUMN photo_path TEXT")
+
+
+# ============================================================
+# Trusted forwarding (Whitelist captain ruling 2026-09-18)
+# ============================================================
+
+def ensure_card_forwardings(conn: sqlite3.Connection) -> None:
+    """Create the card_forwardings table if it doesn't exist.
+
+    Tracks when a granted contact forwards the owner's shareable card
+    to a new person. The forwarding contact's identity is always
+    visible to the owner; the forwarded-to person never gets private
+    data access.
+    """
+    if _table_exists(conn, "card_forwardings"):
+        return
+    conn.execute("""
+        CREATE TABLE card_forwardings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            profile_id INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+            forwarder_email TEXT NOT NULL,
+            forwarder_name TEXT,
+            recipient_email TEXT NOT NULL,
+            recipient_name TEXT,
+            forwarded_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+        )
+    """)
+    conn.commit()
+
+
+def forward_card(
+    conn: sqlite3.Connection,
+    profile_id: int,
+    forwarder_email: str,
+    forwarder_name: str,
+    recipient_email: str,
+    recipient_name: str,
+) -> int:
+    """Record a card forwarding.
+
+    Returns the grant id. The owner is notified via a pending
+    access request so they can decide whether to grant access to the
+    new contact.
+    """
+    conn.execute(
+        "INSERT INTO card_forwardings "
+        "(profile_id, forwarder_email, forwarder_name, recipient_email, recipient_name) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (profile_id, forwarder_email, forwarder_name, recipient_email, recipient_name),
+    )
+    conn.commit()
+
+    # Create a pending access request for the forwarded-to person
+    # so the owner can review and decide.
+    # Build a display name that surfaces the forwarder to the owner:
+    # "Recipient Name (forwarded by Forwarder Name)".
+    display_name = recipient_name or recipient_email
+    if forwarder_name:
+        display_name = f"{display_name} (forwarded by {forwarder_name})"
+    grant_id = create_grant(
+        conn, profile_id, recipient_email, display_name
+    )
+    # F8: create_grant dedupes on profile+email — if a pending grant
+    # already exists, its requester_name won't carry the forwarder info.
+    # Update it so the owner's notification is always correct.
+    existing = get_grant(conn, grant_id)
+    if existing and existing["requester_name"] != display_name:
+        conn.execute(
+            "UPDATE access_grants SET requester_name = ?, updated_at = datetime('now') WHERE id = ?",
+            (display_name, grant_id),
+        )
+    # Audit: note the forward source
+    _log_action(conn, grant_id, profile_id, "forwarded")
+    conn.commit()
+    return grant_id
+
+
+def get_forwardings_for_profile(
+    conn: sqlite3.Connection, profile_id: int
+) -> list[dict]:
+    """Get all card forwardings for a profile, ordered newest first."""
+    rows = conn.execute(
+        "SELECT * FROM card_forwardings "
+        "WHERE profile_id = ? ORDER BY forwarded_at DESC",
+        (profile_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
 
 
 # ============================================================
@@ -1653,7 +1768,9 @@ def ensure_whitelist_schema(conn: sqlite3.Connection) -> None:
     ensure_access_grants_context(conn)    # v2-without-context prod case, LAST
     ensure_cards_schema(conn)             # P5 cards tables (depends on profiles/fields)
     ensure_profile_bio_column(conn)       # Phase A1: profiles.bio
-    ensure_card_photo_column(conn)        # Phase A1: cards.photo_path
+    ensure_card_photo_column(conn)            # Phase A1: cards.photo_path
+    ensure_profile_bio_visibility_column(conn)  # Whitelist: bio visibility toggle
+    ensure_card_forwardings(conn)             # Whitelist: trusted forwarding
     ensure_access_grants_v3(conn)         # quarterly rhythm: quarter_status columns
     seed_default_cards(conn)              # P5: seed Work/Personal cards
 
@@ -1735,6 +1852,24 @@ def update_bio(conn: sqlite3.Connection, profile_id: int, bio: str) -> None:
         (bio, profile_id),
     )
     conn.commit()
+
+
+def update_bio_visibility(conn: sqlite3.Connection, profile_id: int, bio_visibility: str) -> None:
+    """Set the bio visibility (public or private) for a profile."""
+    conn.execute(
+        "UPDATE profiles SET bio_visibility = ?, updated_at = datetime('now') WHERE id = ?",
+        (bio_visibility, profile_id),
+    )
+    conn.commit()
+
+
+def get_bio_visibility(conn: sqlite3.Connection, profile_id: int) -> str:
+    """Return the bio_visibility for a profile ('public' or 'private')."""
+    row = conn.execute(
+        "SELECT bio_visibility FROM profiles WHERE id = ?",
+        (profile_id,),
+    ).fetchone()
+    return row["bio_visibility"] if row else "public"
 
 
 def set_card_fields(conn: sqlite3.Connection, card_id: int, field_ids: list[int]) -> None:
