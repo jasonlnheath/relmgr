@@ -21,24 +21,33 @@ from whitelist_db import (
     get_all_grants_for_profile,
     get_profile_by_id,
     get_active_cards_for_grant,
+    get_grey_contacts_by_owner,
+    get_grey_contacts,
+    get_profile,
     _now_iso,
 )
 
 
 def build_quarterly_review(conn) -> str | None:
-    """Build the quarterly review digest for all live temporary grants.
+    """Build the quarterly review digest for all grey contacts.
+
+    Grey contacts are granted contacts whose quarter grant has expired
+    and are awaiting a quarterly decision (make permanent, revoke, or punt).
 
     Returns:
-        A plain-text digest string with:
-        - Subject line: "WhiteList — quarter review: N temporary contacts"
-        - Each row: email, name, cards, expiry
+        A plain-text digest string grouped by owner with:
+        - Subject line: "WhiteList — quarter review: N grey contacts across M owners"
+        - Per owner: their grey contacts with email, name, cards, expiry, status
         - Link to owner dashboard (placeholder URL)
-        Returns None when there are no temporary grants.
+        Returns None when there are no grey contacts.
     """
-    # Find all profiles that have grants
-    profiles = conn.execute(
-        "SELECT * FROM profiles ORDER BY display_name"
-    ).fetchall()
+    grey_by_owner = get_grey_contacts_by_owner(conn)
+
+    if not grey_by_owner:
+        return None
+
+    total_contacts = sum(len(contacts) for contacts in grey_by_owner.values())
+    total_owners = len(grey_by_owner)
 
     # Build a map of grant_id -> requested_expiry from grant_logs
     log_rows = conn.execute(
@@ -46,41 +55,37 @@ def build_quarterly_review(conn) -> str | None:
     ).fetchall()
     grant_expiry = {r["grant_id"]: r["requested_expiry"] for r in log_rows}
 
-    temp_grants = []
-    for prof in profiles:
-        p = dict(prof)
-        grants = get_all_grants_for_profile(conn, p["id"])
-        for g in grants:
-            gdict = dict(g)
-            # Only live temp grants: status=granted, expiry via grant_logs
-            requested = grant_expiry.get(gdict["id"], "")
-            if (gdict["status"] == "granted"
-                    and gdict.get("expires_at")
-                    and requested == "quarter"):
-                cards = get_active_cards_for_grant(conn, gdict["id"])
-                card_names = [c["name"] for c in cards]
-                temp_grants.append({
-                    "email": gdict["requester_email"],
-                    "name": gdict["requester_name"] or gdict["requester_email"],
-                    "cards": card_names,
-                    "expires_at": gdict["expires_at"],
-                })
-
-    if not temp_grants:
-        return None
+    # Build a map of grant_id -> cards
+    grant_cards: dict[str, list[str]] = {}
+    for g in get_grey_contacts(conn):
+        cards = get_active_cards_for_grant(conn, g["id"])
+        grant_cards[g["id"]] = [c["name"] for c in cards]
 
     # Build digest
     lines = []
-    lines.append(f"WhiteList — quarter review: {len(temp_grants)} temporary contacts")
+    lines.append(f"WhiteList — quarter review: {total_contacts} grey contacts across {total_owners} owners")
     lines.append("")
     lines.append("=" * 60)
     lines.append("")
 
-    for tg in temp_grants:
-        lines.append(f"  {tg['name']} <{tg['email']}>")
-        if tg["cards"]:
-            lines.append(f"    Cards: {', '.join(tg['cards'])}")
-        lines.append(f"    Expires: {tg['expires_at']}")
+    for profile_id, contacts in sorted(grey_by_owner.items()):
+        profile = get_profile(conn, profile_id)
+        profile_name = profile["display_name"] if profile else f"Profile {profile_id}"
+        lines.append(f"Owner: {profile_name} (profile_id={profile_id})")
+        lines.append("-" * 40)
+
+        for contact in contacts:
+            qs = contact.get("quarter_status", "unknown")
+            status_label = "pending review" if qs == "pending_review" else qs
+            lines.append(f"  {contact['requester_name'] or contact['requester_email']} <{contact['requester_email']}>")
+            lines.append(f"    Status: {status_label}")
+            lines.append(f"    Granted: {contact.get('granted_at', 'N/A')}")
+            lines.append(f"    Expires: {contact.get('expires_at', 'N/A')}")
+            cards = grant_cards.get(contact["id"], [])
+            if cards:
+                lines.append(f"    Cards: {', '.join(cards)}")
+            lines.append("")
+
         lines.append("")
 
     lines.append("=" * 60)

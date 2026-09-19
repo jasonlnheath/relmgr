@@ -93,10 +93,16 @@ class TestBuildQuarterlyReview:
         """Digest includes temp grants with email, name, cards, expiry."""
         conn, owner_id, work_id, personal_id = conn_with_schema
 
-        # Create a temp grant
+        # Create an expired quarter grant (grey contact)
         gid1 = create_grant(conn, owner_id, "temp1@test.com", "Temp User One")
         apply_decision(conn, gid1, "approve", "quarter", merge_contacts=True)
         set_grant_cards(conn, gid1, [work_id])
+        # Expire the grant so it becomes grey
+        conn.execute(
+            "UPDATE access_grants SET expires_at = '2020-01-01T00:00:00Z', "
+            "quarter_status = 'pending_review' WHERE id = ?",
+            (gid1,),
+        )
 
         # Create a permanent grant (should NOT appear in digest)
         gid2 = create_grant(conn, owner_id, "perm@test.com", "Perm User")
@@ -122,6 +128,12 @@ class TestBuildQuarterlyReview:
             gid = create_grant(conn, owner_id, f"multi{i}@test.com", f"Multi User {i}")
             apply_decision(conn, gid, "approve", "quarter", merge_contacts=True)
             set_grant_cards(conn, gid, [work_id if i % 2 == 0 else personal_id])
+            # Expire to make grey
+            conn.execute(
+                "UPDATE access_grants SET expires_at = '2020-01-01T00:00:00Z', "
+                "quarter_status = 'punted' WHERE id = ?",
+                (gid,),
+            )
         conn.commit()
 
         from notify import build_quarterly_review
@@ -137,6 +149,12 @@ class TestBuildQuarterlyReview:
 
         gid = create_grant(conn, owner_id, "subject@test.com", "Subject User")
         apply_decision(conn, gid, "approve", "quarter", merge_contacts=True)
+        # Expire to make grey
+        conn.execute(
+            "UPDATE access_grants SET expires_at = '2020-01-01T00:00:00Z', "
+            "quarter_status = 'pending_review' WHERE id = ?",
+            (gid,),
+        )
         conn.commit()
 
         from notify import build_quarterly_review
@@ -144,7 +162,7 @@ class TestBuildQuarterlyReview:
         assert result is not None
         assert "WhiteList" in result
         assert "quarter review" in result.lower() or "Quarter" in result
-        assert "1 temporary" in result.lower() or "1 temp" in result.lower()
+        assert "1 grey" in result.lower() or "1 contact" in result.lower()
 
 
 class TestQuarterEndIso:

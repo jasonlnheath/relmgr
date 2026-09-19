@@ -96,7 +96,42 @@ Every permission has an expiration policy. Exactly three durations:
 | **While employed** | Access while the relationship persists (e.g. employment). |
 | **Till next quarterly review** | Greylist — pending quarterly confirmation; expires at the next quarterly review. |
 
-**Quarterly review flow:** the whitelist emails the owner every quarter. The email lists all greylisted contacts and offers three choices per contact: make permanent (Lifetime), revoke, or **PUNT for another quarter** (contact stays grey). There is no separate expired state and no auto-expiry — a temporary grant extends to the next quarterly review. Greylist = pending quarterly confirmation. The revocation path preserves audit rows (append-only). *This is spec direction only; email-sending machinery is future work.*
+### Quarterly Rhythm
+
+**The quarterly email is the decision moment.** Each quarter, the whitelist emails the owner a digest of all grey contacts (granted contacts whose quarter grant has expired). The email lists each contact with their email, name, cards, expiry, and review status (pending review or punted). The owner reviews the digest and takes action on each contact.
+
+**Three decision actions on the contact card:**
+
+| Action | Effect |
+|---|---|
+| **Make Permanent** | Sets `expires_at = NULL`, `quarter_status = NULL`. Terminal — no more quarterly reviews for this contact until manually revoked. |
+| **Revoke** | Sets `status = 'revoked'`. Merges into the Blocked state (ruling: revoked and blocked are one state). Audit row preserved. |
+| **Punt Another Quarter** | Extends `expires_at` to the next quarter end, sets `quarter_status = 'punted'`, stamps `last_reviewed_at`. Contact stays grey. |
+
+**State model:**
+
+- **Grey contact stays grey while punted** — punting extends the grant and keeps the contact in the grey review cycle.
+- **Permanent is terminal until manually revoked** — once made permanent, the only way to remove access is revocation.
+- **Revoked and blocked are one state** — both rendered as `Blocked` with a red badge in the UI.
+- **No 90-day minimum** — a contact becomes prompt-eligible at each quarterly boundary for its owner while grey.
+- **No countdowns** — no "X days until review" anywhere in the UI.
+- **No auto-expiry** — grey contacts never auto-expire or auto-transition.
+- **No expired state** — the concept of "expired" is absorbed into the grey state; there is no separate expired badge or view.
+
+**Grey state** is derived: a grant is grey when `status='granted'`, `expires_at` has passed, and `quarter_status` is `'pending_review'` or `'punted'`. The `quarter_status` column tracks the review cycle:
+
+| quarter_status | Meaning |
+|---|---|
+| `active` | Live quarter grant — not yet expired |
+| `pending_review` | Expired, awaiting quarterly decision |
+| `punted` | Owner chose to extend for another quarter |
+| `NULL` | Lifetime grant or legacy grant |
+
+**Quarterly review email** uses the existing `notify.py` infrastructure (`build_quarterly_review()`). It groups grey contacts by owner, shows review status per contact, and links to the owner dashboard. No new external services or queues — the email is sent via the same SMTP/Gmail path as other notifications.
+
+**Grey contacts become prompt-eligible at each quarterly boundary** for their owner. No age minimums, no countdown display, no auto-expiry. The quarterly email is the sole decision mechanism.
+
+*The revocation path preserves audit rows (append-only). `last_reviewed_at` stamps when the owner last made a decision on a grey contact.*
 
 ### Blocked State
 

@@ -89,6 +89,19 @@
                     <span class="w-20 text-xs wl-text-faint uppercase tracking-wide">status</span>
                     <span class="wl-text">{{ grant.status|capitalize }}</span>
                 </div>
+                {% if grant.quarter_status %}
+                <div class="flex items-center wl-text-sub">
+                    <span class="w-20 text-xs wl-text-faint uppercase tracking-wide">quarter</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs
+                        {% if grant.quarter_status == 'pending_review' %}wl-badge-greylist
+                        {% elif grant.quarter_status == 'punted' %}wl-badge-greylist
+                        {% else %}wl-badge-approved{% endif %}">
+                        {% if grant.quarter_status == 'pending_review' %}⏳ Pending Review
+                        {% elif grant.quarter_status == 'punted' %}🔄 Punted
+                        {% else %}✓ Active{% endif %}
+                    </span>
+                </div>
+                {% endif %}
                 {% if grant.granted_at %}
                 <div class="flex items-center wl-text-sub">
                     <span class="w-20 text-xs wl-text-faint uppercase tracking-wide">granted</span>
@@ -99,6 +112,12 @@
                 <div class="flex items-center wl-text-sub">
                     <span class="w-20 text-xs wl-text-faint uppercase tracking-wide">expires</span>
                     <span class="wl-text">{{ grant.expires_at[:10] }}</span>
+                </div>
+                {% endif %}
+                {% if grant.last_reviewed_at %}
+                <div class="flex items-center wl-text-sub">
+                    <span class="w-20 text-xs wl-text-faint uppercase tracking-wide">reviewed</span>
+                    <span class="wl-text">{{ grant.last_reviewed_at[:10] }}</span>
                 </div>
                 {% endif %}
                 {% if grant.requester_email %}
@@ -134,16 +153,48 @@
         {% endfor %}
         {% endif %}
 
-        {# Revoke button — only for granted tier #}
+        {# Quarterly decision actions — only for granted tier #}
         {% if tier == 'granted' and grant %}
+        {% set is_grey = grant.quarter_status in ('pending_review', 'punted') %}
         <div class="mt-6 pt-4" style="border-top: 1px solid var(--wl-glass-border);">
-            <form method="POST" action="/owner/{{ token }}/revoke" class="inline">
-                <input type="hidden" name="grant_id" value="{{ grant.id }}">
-                <button type="submit"
-                        class="wl-btn-revoke px-6 py-2 rounded-lg text-sm">
-                    Revoke Access
-                </button>
-            </form>
+            {% if is_grey %}
+                <p class="text-xs wl-text-faint mb-2">Quarterly review — choose one:</p>
+                <div class="flex flex-wrap gap-2">
+                    {# Make Permanent #}
+                    <form method="POST" action="/owner/{{ token }}/quarter/make_permanent" class="inline">
+                        <input type="hidden" name="grant_id" value="{{ grant.id }}">
+                        <button type="submit"
+                                class="wl-btn-approve px-4 py-2 rounded-lg text-sm">
+                            ⭐ Make Permanent
+                        </button>
+                    </form>
+                    {# Revoke #}
+                    <form method="POST" action="/owner/{{ token }}/quarter/revoke" class="inline">
+                        <input type="hidden" name="grant_id" value="{{ grant.id }}">
+                        <button type="submit"
+                                class="wl-btn-revoke px-4 py-2 rounded-lg text-sm">
+                            ✕ Revoke
+                        </button>
+                    </form>
+                    {# Punt Another Quarter #}
+                    <form method="POST" action="/owner/{{ token }}/quarter/punt" class="inline">
+                        <input type="hidden" name="grant_id" value="{{ grant.id }}">
+                        <button type="submit"
+                                class="wl-btn-punt px-4 py-2 rounded-lg text-sm">
+                            ⏰ Punt Another Quarter
+                        </button>
+                    </form>
+                </div>
+            {% else %}
+                {# Non-grey granted contact: only revoke #}
+                <form method="POST" action="/owner/{{ token }}/revoke" class="inline">
+                    <input type="hidden" name="grant_id" value="{{ grant.id }}">
+                    <button type="submit"
+                            class="wl-btn-revoke px-6 py-2 rounded-lg text-sm">
+                        Revoke Access
+                    </button>
+                </form>
+            {% endif %}
         </div>
         {% endif %}
     </div>

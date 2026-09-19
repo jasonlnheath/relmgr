@@ -547,6 +547,14 @@ def apply_decision(conn: sqlite3.Connection, grant_id: str, decision: str, expir
 
     status = "granted" if decision == "approve" else "denied"
     merge_enabled = merge_contacts and decision == "approve"
+
+    # Quarterly rhythm: set quarter_status on approve.
+    quarter_status = None
+    if decision == "approve":
+        if expiry_choice == "quarter":
+            quarter_status = "active"  # live quarter grant
+        # lifetime grants keep quarter_status NULL
+
     update_grant_status(
         conn, grant_id,
         status,
@@ -554,6 +562,14 @@ def apply_decision(conn: sqlite3.Connection, grant_id: str, decision: str, expir
         expires_at=expires_at,
         commit=not merge_enabled,   # merge issues the single commit below
     )
+    if quarter_status is not None:
+        try:
+            conn.execute(
+                "UPDATE access_grants SET quarter_status = ?, updated_at = datetime('now') WHERE id = ?",
+                (quarter_status, grant_id),
+            )
+        except Exception:
+            pass  # old DB without quarter_status column — skip silently
     # P3-T2 audit row: approved/denied, with the requested expiry as logged.
     _log_action(conn, grant_id, grant["profile_id"],
                 "approved" if decision == "approve" else "denied",
@@ -599,6 +615,27 @@ CREATE TABLE access_grants (
     FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
 )"""
 
+# V3: quarterly rhythm — tracks grey-list review state.
+# Values: NULL (legacy/never-quarter), 'active' (live quarter grant),
+#         'pending_review' (expired, awaiting quarterly decision),
+#         'punted' (owner chose to extend for another quarter).
+_ACCESS_GRANTS_V3_DDL = """
+CREATE TABLE access_grants_v3 (
+    id TEXT PRIMARY KEY,
+    profile_id INTEGER NOT NULL,
+    requester_email TEXT NOT NULL,
+    requester_name TEXT,
+    status TEXT NOT NULL CHECK(status IN ('pending', 'granted', 'denied', 'revoked')),
+    context TEXT,
+    granted_at TEXT,
+    expires_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    quarter_status TEXT CHECK(quarter_status IN ('active', 'pending_review', 'punted')),
+    last_reviewed_at TEXT,
+    FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+)"""
+
 
 # Single source of truth for the grant_logs audit vocabulary. Every writer
 # routes through _log_action; every table-creation site (wl_init,
@@ -606,7 +643,7 @@ CREATE TABLE access_grants (
 # new action word appears here first and can never drift between DDLs.
 _GRANT_LOGS_CHECK = (
     "CHECK(action IN ('created', 'approved', 'denied', 'revoked', "
-    "'merged', 'cards_set'))"
+    "'merged', 'cards_set', 'permanent', 'punted'))"
 )
 
 
@@ -654,7 +691,7 @@ def ensure_grant_log_actions(conn: sqlite3.Connection) -> None:
     if not row or not row[0]:
         return  # fresh DB pre-wl_init — nothing to heal
     ddl_sql = row[0]
-    if "'merged'" in ddl_sql and "'cards_set'" in ddl_sql:
+    if "'merged'" in ddl_sql and "'cards_set'" in ddl_sql and "'permanent'" in ddl_sql and "'punted'" in ddl_sql:
         return  # current DDL
 
     new_ddl = (
@@ -926,6 +963,35 @@ def ensure_access_grants_v2(conn: sqlite3.Connection) -> None:
         raise
 
 
+def ensure_access_grants_v3(conn: sqlite3.Connection) -> None:
+    """One-time, idempotent v3 migration of access_grants (quarterly rhythm).
+
+    Adds two columns:
+    - quarter_status: tracks grey-list review state
+      ('active' = live quarter grant, 'pending_review' = awaiting decision,
+       'punted' = owner extended for another quarter)
+    - last_reviewed_at: when the owner last made a decision on this grant
+
+    Uses column-level ADD COLUMN (row-preserving) instead of table swap,
+    since we only need two optional nullable columns.
+    """
+    cols = [r["name"] for r in conn.execute("PRAGMA table_info(access_grants)")]
+    if "quarter_status" in cols:
+        return  # already has quarterly rhythm columns
+
+    conn.execute("ALTER TABLE access_grants ADD COLUMN quarter_status TEXT")
+    conn.execute("ALTER TABLE access_grants ADD COLUMN last_reviewed_at TEXT")
+
+    # Seed existing quarter grants: any granted grant with an expires_at
+    # that looks like a quarter-end timestamp gets quarter_status='active'.
+    conn.execute(
+        "UPDATE access_grants SET quarter_status = 'active' "
+        "WHERE status = 'granted' AND expires_at IS NOT NULL "
+        "AND expires_at GLOB '[0-9]*Z'"
+    )
+    conn.commit()
+
+
 def revoke_grant(conn: sqlite3.Connection, grant_id: str) -> Optional[dict]:
     """Revoke an ACTIVE (status='granted') grant — the "un-approve".
 
@@ -955,6 +1021,177 @@ def revoke_grant(conn: sqlite3.Connection, grant_id: str) -> Optional[dict]:
     )
     # P3-T2 audit row — same transaction as the status flip.
     _log_action(conn, grant_id, grant["profile_id"], "revoked")
+    conn.commit()
+    return get_grant(conn, grant_id)
+
+
+# ============================================================
+# Quarterly rhythm — grey state helpers
+# ============================================================
+
+def is_grey(grant: dict) -> bool:
+    """Return True if a grant is in the grey state.
+
+    A grant is grey when:
+    - status == 'granted'
+    - expires_at is set (not lifetime)
+    - expires_at has passed (the grant has expired)
+    - quarter_status is 'pending_review' or 'punted'
+
+    Grey contacts are pending a quarterly decision: make permanent,
+    revoke, or punt for another quarter.
+    """
+    if grant.get("status") != "granted":
+        return False
+    if grant.get("expires_at") is None:
+        return False  # lifetime grants are never grey
+    now = _now_iso()
+    if not re.fullmatch(r"[0-9].*Z", grant["expires_at"]):
+        return False  # legacy expiry strings are not grey
+    if grant["expires_at"] > now:
+        return False  # not yet expired
+    qs = grant.get("quarter_status")
+    return qs in ("pending_review", "punted")
+
+
+def mark_grey_pending_review(conn: sqlite3.Connection, profile_id: int) -> int:
+    """Mark all expired quarter grants for a profile as pending_review.
+
+    Called at boot to transition expired quarter grants into the grey
+    review state. Returns the count of rows updated.
+
+    Only affects grants where:
+    - status = 'granted'
+    - quarter_status is NULL or 'active' (not yet in review)
+    - expires_at has passed
+    """
+    now = _now_iso()
+    cur = conn.execute(
+        """UPDATE access_grants
+           SET quarter_status = 'pending_review'
+           WHERE profile_id = ?
+             AND status = 'granted'
+             AND quarter_status IN ('active', NULL)
+             AND expires_at IS NOT NULL
+             AND expires_at GLOB '[0-9]*Z'
+             AND expires_at <= ?""",
+        (profile_id, now),
+    )
+    conn.commit()
+    return cur.rowcount
+
+
+def get_grey_contacts(conn: sqlite3.Connection) -> list[dict]:
+    """Return all grey contacts across all profiles.
+
+    A grey contact is a grant where status='granted', expires_at has passed,
+    and quarter_status is 'pending_review' or 'punted'.
+
+    Returns a list of dicts with grant info plus profile info attached.
+    """
+    rows = conn.execute(
+        """SELECT ag.*, p.display_name, p.handle as profile_handle
+           FROM access_grants ag
+           JOIN profiles p ON ag.profile_id = p.id
+           WHERE ag.status = 'granted'
+             AND ag.quarter_status IN ('pending_review', 'punted')
+             AND ag.expires_at IS NOT NULL
+             AND ag.expires_at <= ?
+           ORDER BY p.display_name, ag.created_at""",
+        (_now_iso(),),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_grey_contacts_by_owner(conn: sqlite3.Connection) -> dict:
+    """Return grey contacts grouped by owner profile.
+
+    Returns a dict mapping profile_id -> list of grey contact dicts.
+    Each contact dict carries grant info plus profile_handle and display_name.
+    """
+    grey = get_grey_contacts(conn)
+    by_owner: dict[int, list[dict]] = {}
+    for g in grey:
+        pid = g["profile_id"]
+        if pid not in by_owner:
+            by_owner[pid] = []
+        by_owner[pid].append(g)
+    return by_owner
+
+
+def get_grey_contact_count(conn: sqlite3.Connection, profile_id: int) -> int:
+    """Count grey contacts for a specific profile."""
+    row = conn.execute(
+        """SELECT COUNT(*) FROM access_grants
+           WHERE profile_id = ?
+             AND status = 'granted'
+             AND quarter_status IN ('pending_review', 'punted')
+             AND expires_at IS NOT NULL
+             AND expires_at <= ?""",
+        (profile_id, _now_iso()),
+    ).fetchone()
+    return row[0]
+
+
+def make_grant_permanent(conn: sqlite3.Connection, grant_id: str) -> Optional[dict]:
+    """Make a grey grant permanent (lifetime access).
+
+    - Sets expires_at = NULL
+    - Sets quarter_status = NULL (no more quarterly reviews)
+    - Stamps last_reviewed_at
+    - Appends audit row
+    - Returns the updated grant dict, or None if not found.
+    """
+    grant = get_grant(conn, grant_id)
+    if grant is None:
+        return None
+    if grant["status"] != "granted":
+        raise ValueError(f"cannot make permanent a {grant['status']!r} grant")
+    if grant.get("expires_at") is None:
+        return grant  # already permanent
+
+    conn.execute(
+        """UPDATE access_grants
+           SET expires_at = NULL,
+               quarter_status = NULL,
+               last_reviewed_at = datetime('now'),
+               updated_at = datetime('now')
+           WHERE id = ?""",
+        (grant_id,),
+    )
+    _log_action(conn, grant_id, grant["profile_id"], "permanent")
+    conn.commit()
+    return get_grant(conn, grant_id)
+
+
+def punt_grant(conn: sqlite3.Connection, grant_id: str) -> Optional[dict]:
+    """Punt a grey grant for another quarter.
+
+    - Extends expires_at to the next quarter end
+    - Sets quarter_status = 'punted'
+    - Stamps last_reviewed_at
+    - Appends audit row
+    - Returns the updated grant dict, or None if not found.
+    """
+    grant = get_grant(conn, grant_id)
+    if grant is None:
+        return None
+    if grant["status"] != "granted":
+        raise ValueError(f"cannot punt a {grant['status']!r} grant")
+    if grant.get("expires_at") is None:
+        return grant  # lifetime grants can't be punted
+
+    next_quarter_end = quarter_end_iso()
+    conn.execute(
+        """UPDATE access_grants
+           SET expires_at = ?,
+               quarter_status = 'punted',
+               last_reviewed_at = datetime('now'),
+               updated_at = datetime('now')
+           WHERE id = ?""",
+        (next_quarter_end, grant_id),
+    )
+    _log_action(conn, grant_id, grant["profile_id"], "punted")
     conn.commit()
     return get_grant(conn, grant_id)
 
@@ -1428,6 +1665,7 @@ def ensure_whitelist_schema(conn: sqlite3.Connection) -> None:
     ensure_cards_schema(conn)             # P5 cards tables (depends on profiles/fields)
     ensure_profile_bio_column(conn)       # Phase A1: profiles.bio
     ensure_card_photo_column(conn)        # Phase A1: cards.photo_path
+    ensure_access_grants_v3(conn)         # quarterly rhythm: quarter_status columns
     seed_default_cards(conn)              # P5: seed Work/Personal cards
 
 

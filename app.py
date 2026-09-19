@@ -1040,6 +1040,88 @@ def create_app(db_path: Path = None) -> FastAPI:
         return HTMLResponse(jinja.get_template("admin_decision.html").render(
             request=request, grant=grant, profile=profile, decision="revoke"))
 
+    # ------------------------------------------------------------------ Quarterly actions
+    @application.post("/owner/{token}/quarter/make_permanent", response_class=HTMLResponse)
+    async def quarter_make_permanent(request: Request, token: str):
+        """Make a grey grant permanent (lifetime access)."""
+        payload = wl_tokens.consume_token(_get_secret(), "owner_dashboard", token)
+        if payload is None:
+            return HTMLResponse("Invalid or expired link", status_code=403)
+
+        form = await request.form()
+        grant_id = form.get("grant_id", "")
+        conn = whitelist_db.wl_connect(path)
+        try:
+            grant = whitelist_db.get_grant(conn, grant_id)
+            if not grant:
+                return HTMLResponse("Grant not found", status_code=404)
+            profile = whitelist_db.get_profile_by_id(conn, grant["profile_id"])
+            updated = whitelist_db.make_grant_permanent(conn, grant_id)
+            if updated is None:
+                return HTMLResponse("Grant not found", status_code=404)
+            if updated.get("status") != "granted":
+                return HTMLResponse("Cannot make permanent a non-granted grant", status_code=409)
+        except ValueError as exc:
+            return HTMLResponse(str(exc), status_code=409)
+        finally:
+            conn.close()
+
+        return HTMLResponse(jinja.get_template("admin_decision.html").render(
+            request=request, grant=updated, profile=profile, decision="make_permanent"))
+
+    @application.post("/owner/{token}/quarter/revoke", response_class=HTMLResponse)
+    async def quarter_revoke(request: Request, token: str):
+        """Revoke a grey grant (lands in blocked state)."""
+        payload = wl_tokens.consume_token(_get_secret(), "owner_dashboard", token)
+        if payload is None:
+            return HTMLResponse("Invalid or expired link", status_code=403)
+
+        form = await request.form()
+        grant_id = form.get("grant_id", "")
+        conn = whitelist_db.wl_connect(path)
+        try:
+            grant = whitelist_db.get_grant(conn, grant_id)
+            if not grant:
+                return HTMLResponse("Grant not found", status_code=404)
+            profile = whitelist_db.get_profile_by_id(conn, grant["profile_id"])
+            whitelist_db.revoke_grant(conn, grant_id)
+            grant = whitelist_db.get_grant(conn, grant_id)
+        except ValueError as exc:
+            return HTMLResponse(str(exc), status_code=409)
+        finally:
+            conn.close()
+
+        return HTMLResponse(jinja.get_template("admin_decision.html").render(
+            request=request, grant=grant, profile=profile, decision="revoke"))
+
+    @application.post("/owner/{token}/quarter/punt", response_class=HTMLResponse)
+    async def quarter_punt(request: Request, token: str):
+        """Punt a grey grant for another quarter."""
+        payload = wl_tokens.consume_token(_get_secret(), "owner_dashboard", token)
+        if payload is None:
+            return HTMLResponse("Invalid or expired link", status_code=403)
+
+        form = await request.form()
+        grant_id = form.get("grant_id", "")
+        conn = whitelist_db.wl_connect(path)
+        try:
+            grant = whitelist_db.get_grant(conn, grant_id)
+            if not grant:
+                return HTMLResponse("Grant not found", status_code=404)
+            profile = whitelist_db.get_profile_by_id(conn, grant["profile_id"])
+            updated = whitelist_db.punt_grant(conn, grant_id)
+            if updated is None:
+                return HTMLResponse("Grant not found", status_code=404)
+            if updated.get("status") != "granted":
+                return HTMLResponse("Cannot punt a non-granted grant", status_code=409)
+        except ValueError as exc:
+            return HTMLResponse(str(exc), status_code=409)
+        finally:
+            conn.close()
+
+        return HTMLResponse(jinja.get_template("admin_decision.html").render(
+            request=request, grant=updated, profile=profile, decision="punt"))
+
     app = application
     return application
 
