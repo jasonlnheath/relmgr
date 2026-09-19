@@ -1,7 +1,10 @@
 """Whitelist database layer — profiles, fields, access grants."""
 
+import hashlib
+import hmac
 import json
 import re
+import secrets
 import sqlite3
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -9,6 +12,33 @@ from pathlib import Path
 from typing import Optional
 
 _ISO_Z = "%Y-%m-%dT%H:%M:%SZ"
+
+# Password hashing — pbkdf2-hmac-sha256 (no external deps).
+# Format: pbkdf2_sha256$<rounds>$<salt_hex>$<hash_hex>
+_PWHASH_ROUNDS = 260_000  # OWASP 2023 recommendation for SHA-256
+
+
+def hash_password(plain: str) -> str:
+    """Hash a plaintext password. Returns a pbkdf2-hmac-sha256 string."""
+    salt = secrets.token_bytes(16)
+    dk = hashlib.pbkdf2_hmac("sha256", plain.encode("utf-8"), salt, _PWHASH_ROUNDS)
+    salt_hex = salt.hex()
+    hash_hex = dk.hex()
+    return f"pbkdf2_sha256${_PWHASH_ROUNDS}${salt_hex}${hash_hex}"
+
+
+def verify_password(plain: str, stored_hash: str) -> bool:
+    """Verify a plaintext password against a stored hash. Timing-safe."""
+    try:
+        prefix, rounds_s, salt_hex, hash_hex = stored_hash.split("$")
+        if prefix != "pbkdf2_sha256":
+            return False
+        rounds = int(rounds_s)
+        salt = bytes.fromhex(salt_hex)
+        dk = hashlib.pbkdf2_hmac("sha256", plain.encode("utf-8"), salt, rounds)
+        return hmac.compare_digest(dk.hex(), hash_hex)
+    except (ValueError, AttributeError):
+        return False
 
 
 def _now_iso() -> str:
@@ -158,6 +188,89 @@ def wl_init(conn: sqlite3.Connection) -> None:
     conn.executescript(_grant_logs_ddl())
     _seed_builtin_contexts(conn)
     conn.commit()
+
+
+def create_owner_profile(
+    conn: sqlite3.Connection,
+    handle: str,
+    display_name: str,
+    email: str,
+    password: str,
+    company: str = None,
+    title: str = None,
+) -> dict:
+    """Create a new owner profile with authentication credentials.
+
+    Returns the profile dict (with fields attached).
+    Raises ValueError on duplicate handle or email.
+    """
+    # Check for duplicate handle
+    existing = conn.execute(
+        "SELECT id FROM profiles WHERE handle = ?", (handle,)
+    ).fetchone()
+    if existing:
+        raise ValueError("Handle already taken.")
+
+    # Check for duplicate email
+    existing_email = conn.execute(
+        "SELECT profile_id FROM profile_fields WHERE field_type = 'email' AND LOWER(field_value) = LOWER(?)",
+        (email,),
+    ).fetchone()
+    if existing_email:
+        raise ValueError("Email already registered.")
+
+    now = _now_iso()
+    pw_hash = hash_password(password)
+
+    conn.execute(
+        """INSERT INTO profiles (handle, display_name, company, title, verified_at,
+                                created_at, updated_at, password_hash, owner_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (handle, display_name, company, title, None, now, now, pw_hash, None),
+    )
+    profile_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+    # Add email field (visibility: anonymous — only for auth)
+    conn.execute(
+        """INSERT INTO profile_fields (profile_id, field_type, field_value, visibility)
+           VALUES (?, 'email', ?, 'anonymous')""",
+        (profile_id, email),
+    )
+
+    # Set owner_id = self (per-owner isolation)
+    conn.execute(
+        "UPDATE profiles SET owner_id = ? WHERE id = ?", (profile_id, profile_id)
+    )
+
+    conn.commit()
+    return get_profile_by_id(conn, profile_id)
+
+
+def resolve_owner_by_credentials(
+    conn: sqlite3.Connection,
+    email: str,
+    password: str,
+) -> Optional[dict]:
+    """Look up a profile by email + password.
+
+    Returns the profile dict (with fields) on success, None on failure.
+    Uses a constant-time comparison to prevent timing attacks.
+    """
+    row = conn.execute(
+        """SELECT p.* FROM profiles p
+           JOIN profile_fields f ON f.profile_id = p.id
+           WHERE f.field_type = 'email'
+             AND LOWER(f.field_value) = LOWER(?)
+             AND p.password_hash IS NOT NULL
+           LIMIT 1""",
+        (email,),
+    ).fetchone()
+    if row is None:
+        return None
+    profile = _fetch_profile(conn, row)
+    if not verify_password(password, profile["password_hash"]):
+        return None
+    return profile
 
 
 def seed_profile(conn: sqlite3.Connection, data: dict) -> None:
@@ -1402,6 +1515,27 @@ def ensure_card_photo_column(conn: sqlite3.Connection) -> None:
 # Boot orchestrator — R4(a)
 # ============================================================
 
+def ensure_owner_auth_schema(conn: sqlite3.Connection) -> None:
+    """Add per-owner auth columns to profiles (idempotent).
+
+    Adds:
+      - password_hash TEXT   — pbkdf2-hmac-sha256 hash (nullable; legacy owners are None)
+      - owner_id INTEGER     — self-referencing FK for per-owner isolation
+                               (nullable; defaults to own id for legacy)
+
+    Legacy migration: every existing profile with no owner_id gets
+    owner_id = its own id, so the isolation layer is transparent.
+    """
+    cols = [r["name"] for r in conn.execute("PRAGMA table_info(profiles)").fetchall()]
+    if "password_hash" not in cols:
+        conn.execute("ALTER TABLE profiles ADD COLUMN password_hash TEXT")
+    if "owner_id" not in cols:
+        conn.execute("ALTER TABLE profiles ADD COLUMN owner_id INTEGER REFERENCES profiles(id)")
+        # Legacy migration: every existing profile owns itself
+        conn.execute("UPDATE profiles SET owner_id = id WHERE owner_id IS NULL")
+    conn.commit()
+
+
 def ensure_whitelist_schema(conn: sqlite3.Connection) -> None:
     """Run every legacy-schema self-heal in THE REQUIRED ORDER. One place to
     touch for future migrations; app boot is a single call. Idempotent.
@@ -1428,6 +1562,7 @@ def ensure_whitelist_schema(conn: sqlite3.Connection) -> None:
     ensure_cards_schema(conn)             # P5 cards tables (depends on profiles/fields)
     ensure_profile_bio_column(conn)       # Phase A1: profiles.bio
     ensure_card_photo_column(conn)        # Phase A1: cards.photo_path
+    ensure_owner_auth_schema(conn)        # Phase B: per-owner sign-in auth
     seed_default_cards(conn)              # P5: seed Work/Personal cards
 
 
