@@ -86,7 +86,7 @@ def test_anon_shows_bio_and_photo_block(tmp_path):
     client = TestClient(create_app(db))
     html = client.get("/p/jasonheath").text
     assert "I sell wheel bushings." in html, "bio must render on the public page"
-    assert f"/exports/qr_jasonheath.png" in html, "QR code must render"
+    assert "/qr/jasonheath" in html, "QR code must render (dynamic route)"
     # round-2: per-card photos removed from public profile (only QR + bio)
 
 
@@ -125,7 +125,7 @@ def test_owner_self_view_shows_all_cards_photos_bio(tmp_path):
     assert "jheath@waltheremc.com" in me
     assert "555-1234" in me
     assert "I sell wheel bushings." in me, "bio missing from self-view"
-    assert "/exports/qr_jasonheath.png" in me, "QR must render on self-view"
+    assert "/qr/jasonheath" in me, "QR must render on self-view (dynamic route)"
     assert "Request access" not in me
     assert "Connect" not in me  # self-view (granted tier) doesn't see Connect button
 

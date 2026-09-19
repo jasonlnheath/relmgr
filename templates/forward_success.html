@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Card Forwarded — {{ profile.display_name }}{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto py-8 px-4">
+    <div class="wl-card p-6">
+        <h1 class="wl-heading wl-heading-md mb-2" style="color: var(--wl-success);">✓ Card Forwarded</h1>
+        <p class="wl-text-sub mb-4">
+            Your card info has been shared with <strong class="wl-text">{{ recipient_email }}</strong>.
+        </p>
+        <div class="mb-4 p-3 rounded-lg" style="background: rgba(255,255,255,0.03); border: 1px solid var(--wl-glass-border);">
+            <p class="text-sm wl-text-sub font-medium mb-1">What happens next:</p>
+            <ul class="text-xs wl-text-sub space-y-1">
+                <li>• {{ profile.display_name }} has been notified that your contact was shared.</li>
+                <li>• They can see your name and public bio before deciding.</li>
+                <li>• They will review and decide whether to grant you access.</li>
+                <li>• Only public information was shared — no private data was exposed.</li>
+            </ul>
+        </div>
+        <a href="/p/{{ profile.handle }}" class="wl-link text-sm">
+            ← Back to profile
+        </a>
+    </div>
+</div>
+{% endblock %}

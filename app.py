@@ -11,7 +11,9 @@ import os
 from datetime import datetime, timedelta, timezone
 
 from fastapi import FastAPI, Request, Query
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
+from PIL import Image
+from io import BytesIO
 from starlette.templating import Jinja2Templates
 from jinja2 import pass_context
 
@@ -136,14 +138,13 @@ def create_app(db_path: Path = None) -> FastAPI:
     # Self-heal legacy schema in ONE ordered call (v1 CHECK lacks 'revoked',
     # additive P3 tables, v2-without-context prod case — see
     # whitelist_db.ensure_whitelist_schema for why the order matters).
-    # Idempotent; guarded by file existence so importing on an empty CWD
-    # doesn't conjure a stray contacts.db.
-    if path.exists():
-        _mconn = whitelist_db.wl_connect(path)
-        try:
-            whitelist_db.ensure_whitelist_schema(_mconn)
-        finally:
-            _mconn.close()
+    # Idempotent; runs unconditionally so a fresh DB file boots to the full
+    # current schema (wl_init is a no-op on existing tables).
+    _mconn = whitelist_db.wl_connect(path)
+    try:
+        whitelist_db.ensure_whitelist_schema(_mconn)
+    finally:
+        _mconn.close()
 
     @application.get("/p/{handle}", response_class=HTMLResponse)
     async def profile_page(
@@ -173,9 +174,11 @@ def create_app(db_path: Path = None) -> FastAPI:
             cards = whitelist_db.cards_for_public_view(
                 conn, profile["id"], tier)
 
+            bio_visibility = whitelist_db.get_bio_visibility(conn, profile["id"])
+
             return HTMLResponse(jinja.get_template("profile.html").render(
                 request=request, profile=profile, tier=tier, stale=stale,
-                cards=cards, days_since=days_since))
+                cards=cards, bio_visibility=bio_visibility, days_since=days_since))
         finally:
             conn.close()
 
@@ -208,6 +211,48 @@ def create_app(db_path: Path = None) -> FastAPI:
 
         return HTMLResponse(jinja.get_template("request_success.html").render(
             request=request, profile=profile, grant_id=grant_id))
+
+    @application.post("/p/{handle}/forward")
+    async def forward_card(request: Request, handle: str):
+        """Forward the profile's shareable card to a new person.
+
+        The forwarder must be a granted contact (verified tier). The
+        recipient only sees public-bio-level info. The owner is
+        notified via a pending access request.
+        """
+        form = await request.form()
+        forwarder_email = (form.get("forwarder_email") or "").strip()
+        forwarder_name = (form.get("forwarder_name") or "").strip()
+        recipient_email = (form.get("recipient_email") or "").strip()
+        recipient_name = (form.get("recipient_name") or "").strip()
+
+        if not forwarder_email or not recipient_email:
+            return HTMLResponse("Both forwarder and recipient info required", status_code=400)
+
+        conn = whitelist_db.wl_connect(path)
+        try:
+            profile = whitelist_db.resolve_handle(conn, handle)
+            if not profile:
+                return HTMLResponse("Profile not found", status_code=404)
+
+            # Verify forwarder is a granted contact
+            tier = whitelist_db.effective_tier(
+                conn, profile["id"], forwarder_email)
+            if tier != "granted":
+                return HTMLResponse(
+                    "Only approved contacts can forward cards",
+                    status_code=403)
+
+            grant_id = whitelist_db.forward_card(
+                conn, profile["id"],
+                forwarder_email, forwarder_name,
+                recipient_email, recipient_name)
+        finally:
+            conn.close()
+
+        return HTMLResponse(jinja.get_template("forward_success.html").render(
+            request=request, profile=profile, grant_id=grant_id,
+            recipient_email=recipient_email))
 
     @application.get("/a/{token}", response_class=HTMLResponse)
     async def admin_link(request: Request, token: str):
@@ -560,6 +605,9 @@ def create_app(db_path: Path = None) -> FastAPI:
             # template reads profile.bio for BOTH textarea and header.
             profile = {**profile, "bio": bio_override}
             bio = bio_override
+        # Resolve BASE_URL for the share-link template (defaults to the
+        # prod placeholder — never fails even when no env is set).
+        base_url = wl_env.get_secret("BASE_URL") or "https://whitelist.app"
         return HTMLResponse(jinja.get_template("my_profile.html").render(
             request=request,
             profile=profile,
@@ -575,6 +623,7 @@ def create_app(db_path: Path = None) -> FastAPI:
             visit_count=visit_count,
             days_since=days_since,
             days_until=days_until,
+            BASE_URL=base_url,
         ), status_code=status_code)
 
     @application.get("/owner/{token}/profile", response_class=HTMLResponse)
@@ -654,6 +703,38 @@ def create_app(db_path: Path = None) -> FastAPI:
 
             return _my_profile_html(conn, request, token, profile,
                                     bio_error=bio_error)
+        finally:
+            conn.close()
+
+    @application.post("/owner/{token}/bio-visibility")
+    async def owner_bio_visibility(request: Request, token: str):
+        """Toggle bio visibility between public and private."""
+        payload = wl_tokens.consume_token(_get_secret(), "owner_dashboard", token)
+        if payload is None:
+            return HTMLResponse("Invalid or expired link", status_code=403)
+
+        form = await request.form()
+        visibility = (form.get("bio_visibility") or "").strip()
+        if visibility not in ("public", "private"):
+            return HTMLResponse("Invalid visibility value", status_code=400)
+
+        conn = whitelist_db.wl_connect(path)
+        try:
+            try:
+                profile_id = int(payload)
+            except (ValueError, TypeError):
+                row = conn.execute("SELECT * FROM profiles ORDER BY id LIMIT 1").fetchone()
+                if row:
+                    profile_id = row["id"]
+                else:
+                    return HTMLResponse("Profile not found", status_code=404)
+
+            whitelist_db.update_bio_visibility(conn, profile_id, visibility)
+            profile = whitelist_db.get_profile_by_id(conn, profile_id)
+            if not profile:
+                return HTMLResponse("Profile not found", status_code=404)
+
+            return _my_profile_html(conn, request, token, profile)
         finally:
             conn.close()
 
@@ -911,15 +992,33 @@ def create_app(db_path: Path = None) -> FastAPI:
         from fastapi.responses import FileResponse
         return FileResponse(full_path, media_type="image/jpeg")
 
-    @application.get("/exports/qr_{handle}.png")
+    @application.get("/qr/{handle}")
     async def serve_qr(handle: str):
-        """Serve QR code PNG for the given profile handle."""
-        qr_dir = Path(__file__).parent / "exports"
-        qr_path = qr_dir / f"qr_{handle}.png"
-        if not qr_path.exists():
-            return HTMLResponse("QR not found", status_code=404)
-        from fastapi.responses import FileResponse
-        return FileResponse(qr_path, media_type="image/png")
+        """Serve a QR code PNG for the given profile handle."""
+        conn = whitelist_db.wl_connect(path)
+        try:
+            profile = whitelist_db.resolve_handle(conn, handle)
+            if not profile:
+                return HTMLResponse("Profile not found", status_code=404)
+        finally:
+            conn.close()
+
+        import qrcode
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_M,
+            box_size=8,
+            border=4,
+        )
+        base_url = wl_env.get_secret("BASE_URL") or "https://whitelist.app"
+        qr.add_data(f"{base_url}/p/{handle}")
+        qr.make(fit=True)
+        img = qr.make_image(fill_color="black", back_color="white")
+
+        buf = BytesIO()
+        img.save(buf, format="PNG")
+        buf.seek(0)
+        return Response(content=buf.read(), media_type="image/png")
 
     @application.post("/owner/{token}/decision")
     async def owner_decision(request: Request, token: str):

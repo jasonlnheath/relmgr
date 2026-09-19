@@ -151,7 +151,7 @@ class TestFindContactByEmail:
         # Read current row digest
         h = hashlib.sha256()
         for row in conn_minimal.execute("SELECT * FROM contacts ORDER BY rowid"):
-            h.update(repr(row).encode())
+            h.update(repr(dict(row)).encode())
         before = h.hexdigest()
 
         # Call function
@@ -160,7 +160,7 @@ class TestFindContactByEmail:
         # Read again
         h2 = hashlib.sha256()
         for row in conn_minimal.execute("SELECT * FROM contacts ORDER BY rowid"):
-            h2.update(repr(row).encode())
+            h2.update(repr(dict(row)).encode())
         after = h2.hexdigest()
 
         assert before == after, "find_contact_by_email must not write"
@@ -244,7 +244,7 @@ class TestMergeRequesterIntoContacts:
         import hashlib
         h = hashlib.sha256()
         for row in conn_minimal.execute("SELECT * FROM contacts ORDER BY rowid"):
-            h.update(repr(row).encode())
+            h.update(repr(dict(row)).encode())
         before = h.hexdigest()
 
         grant = {"requester_email": "", "requester_name": "No Email"}
@@ -252,7 +252,7 @@ class TestMergeRequesterIntoContacts:
 
         h2 = hashlib.sha256()
         for row in conn_minimal.execute("SELECT * FROM contacts ORDER BY rowid"):
-            h2.update(repr(row).encode())
+            h2.update(repr(dict(row)).encode())
         after = h2.hexdigest()
 
         assert before == after

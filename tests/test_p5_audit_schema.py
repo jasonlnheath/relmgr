@@ -78,7 +78,7 @@ def _seed_profile_and_grant(conn, handle="probe_owner"):
 def _row_digest(conn):
     h = hashlib.sha256()
     for row in conn.execute("SELECT * FROM grant_logs ORDER BY id"):
-        h.update(repr(row).encode())
+        h.update(repr(dict(row)).encode())
     return h.hexdigest()
 
 
