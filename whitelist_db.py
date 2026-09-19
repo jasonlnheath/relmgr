@@ -187,7 +187,9 @@ def wl_init(conn: sqlite3.Connection) -> None:
     # so the action vocabulary can never drift between wl_init / ensure / heal.
     conn.executescript(_grant_logs_ddl())
     _seed_builtin_contexts(conn)
-    conn.commit()
+    # Phase B: per-owner isolation (profiles + access_grants)
+    ensure_owner_auth_schema(conn)
+    ensure_access_grants_owner(conn)
 
 
 def create_owner_profile(
@@ -415,6 +417,7 @@ def create_grant(
     profile_id: int,
     requester_email: str,
     requester_name: str,
+    owner_id: Optional[int] = None,
 ) -> str:
     """Create a pending access grant. Returns grant UUID.
 
@@ -422,6 +425,9 @@ def create_grant(
     or granted-and-not-yet-expired). A denied or expired grant is history, not
     a life ban: re-requesting after one inserts a fresh pending row instead of
     silently returning the dead grant id.
+
+    owner_id: the profile that owns this grant (for per-owner isolation).
+    If None, defaults to profile_id.
     """
     row = conn.execute(
         f"""SELECT id FROM access_grants
@@ -437,10 +443,12 @@ def create_grant(
         return row[0]
 
     grant_id = str(uuid.uuid4())
+    if owner_id is None:
+        owner_id = profile_id
     conn.execute(
-        """INSERT INTO access_grants (id, profile_id, requester_email, requester_name, status)
-           VALUES (?, ?, ?, ?, 'pending')""",
-        (grant_id, profile_id, requester_email, requester_name),
+        """INSERT INTO access_grants (id, profile_id, requester_email, requester_name, status, owner_id)
+           VALUES (?, ?, ?, ?, 'pending', ?)""",
+        (grant_id, profile_id, requester_email, requester_name, owner_id),
     )
     # Audit row in the SAME transaction as the insert — commit both together.
     _log_action(conn, grant_id, profile_id, "created")
@@ -1536,6 +1544,24 @@ def ensure_owner_auth_schema(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def ensure_access_grants_owner(conn: sqlite3.Connection) -> None:
+    """Add owner_id column to access_grants for per-owner isolation.
+
+    Legacy migration: every existing grant gets owner_id from its profile.
+    """
+    cols = [r["name"] for r in conn.execute("PRAGMA table_info(access_grants)").fetchall()]
+    if "owner_id" not in cols:
+        conn.execute("ALTER TABLE access_grants ADD COLUMN owner_id INTEGER REFERENCES profiles(id)")
+        # Legacy migration: every existing grant gets owner_id from its profile
+        conn.execute("""
+            UPDATE access_grants SET owner_id = (
+                SELECT owner_id FROM profiles WHERE profiles.id = access_grants.profile_id
+            )
+            WHERE owner_id IS NULL
+        """)
+    conn.commit()
+
+
 def ensure_whitelist_schema(conn: sqlite3.Connection) -> None:
     """Run every legacy-schema self-heal in THE REQUIRED ORDER. One place to
     touch for future migrations; app boot is a single call. Idempotent.
@@ -1563,6 +1589,7 @@ def ensure_whitelist_schema(conn: sqlite3.Connection) -> None:
     ensure_profile_bio_column(conn)       # Phase A1: profiles.bio
     ensure_card_photo_column(conn)        # Phase A1: cards.photo_path
     ensure_owner_auth_schema(conn)        # Phase B: per-owner sign-in auth
+    ensure_access_grants_owner(conn)      # Phase B: access_grants.owner_id
     seed_default_cards(conn)              # P5: seed Work/Personal cards
 
 

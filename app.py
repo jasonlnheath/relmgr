@@ -442,7 +442,7 @@ def create_app(db_path: Path = None) -> FastAPI:
             profile = whitelist_db.resolve_handle(conn, handle)
             if not profile:
                 return HTMLResponse("Profile not found", status_code=404)
-            grant_id = whitelist_db.create_grant(conn, profile["id"], email, name)
+            grant_id = whitelist_db.create_grant(conn, profile["id"], email, name, profile.get("owner_id"))
         finally:
             conn.close()
 
@@ -514,6 +514,7 @@ def create_app(db_path: Path = None) -> FastAPI:
             if result[2]:
                 return RedirectResponse(url=f"/owner/{result[2]}")
             profile_id = result[0]
+            is_explicit = result[3]  # True if session-authenticated, False if legacy fallback
 
             # Get query params — junk input must degrade to page 0, not 500.
             q = request.query_params.get("q")
@@ -523,8 +524,12 @@ def create_app(db_path: Path = None) -> FastAPI:
                 page = 0
             per_page = 50
 
-            # Owner dashboard aggregates ALL profiles' grants
-            all_profiles = conn.execute("SELECT * FROM profiles ORDER BY id").fetchall()
+            # Owner dashboard: explicit auth = only this owner's profiles;
+            # legacy fallback (non-integer token payload or no token) = all profiles.
+            if is_explicit:
+                all_profiles = conn.execute("SELECT * FROM profiles WHERE owner_id = ? ORDER BY id", (profile_id,)).fetchall()
+            else:
+                all_profiles = conn.execute("SELECT * FROM profiles ORDER BY id").fetchall()
             all_profile_ids = [dict(p)["id"] for p in all_profiles]
             if not all_profile_ids:
                 all_profile_ids = [profile_id]
@@ -549,11 +554,17 @@ def create_app(db_path: Path = None) -> FastAPI:
                 start = page * per_page
                 rows = all_rows[start:start + per_page]
             else:
-                # Pure whitelist mode — list all grants across all profiles
-                all_grants = conn.execute(
-                    "SELECT * FROM access_grants WHERE profile_id IN ({}) ORDER BY status, created_at".format(",".join("?" for _ in all_profile_ids)),
-                    all_profile_ids,
-                ).fetchall()
+                # Pure whitelist mode — list grants (legacy = all, explicit = owner's)
+                if is_explicit:
+                    all_grants = conn.execute(
+                        "SELECT * FROM access_grants WHERE owner_id = ? AND profile_id IN ({}) ORDER BY status, created_at".format(",".join("?" for _ in all_profile_ids)),
+                        [profile_id] + all_profile_ids,
+                    ).fetchall()
+                else:
+                    all_grants = conn.execute(
+                        "SELECT * FROM access_grants WHERE profile_id IN ({}) ORDER BY status, created_at".format(",".join("?" for _ in all_profile_ids)),
+                        all_profile_ids,
+                    ).fetchall()
                 rows = []
                 profile_map = {p["id"]: dict(p) for p in all_profiles}
                 for g in all_grants:
@@ -577,14 +588,11 @@ def create_app(db_path: Path = None) -> FastAPI:
                     })
                 total_rows = len(rows)
 
-            # Count denied grants across all profiles
-            if all_profile_ids:
-                denied_count = conn.execute(
-                    f"SELECT COUNT(*) FROM access_grants WHERE profile_id IN ({','.join('?' for _ in all_profile_ids)}) AND status = 'denied'",
-                    all_profile_ids,
-                ).fetchone()[0]
-            else:
-                denied_count = 0
+            # Count denied grants for this owner
+            denied_count = conn.execute(
+                "SELECT COUNT(*) FROM access_grants WHERE owner_id = ? AND status = 'denied'",
+                (profile_id,),
+            ).fetchone()[0]
 
             # Unified row list for single-surface contact list (round-2)
             all_rows = rows
@@ -677,7 +685,7 @@ def create_app(db_path: Path = None) -> FastAPI:
                 return RedirectResponse(url=f"/owner/{result[2]}")
             profile_id = result[0]
             denied = conn.execute(
-                "SELECT * FROM access_grants WHERE profile_id = ? AND status = 'denied' ORDER BY created_at DESC",
+                "SELECT * FROM access_grants WHERE owner_id = ? AND status = 'denied' ORDER BY created_at DESC",
                 (profile_id,),
             ).fetchall()
             denied_list = [dict(d) for d in denied]
