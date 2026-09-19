@@ -2,35 +2,37 @@
 {% block title %}{{ card.name }} — Whitelist{% endblock %}
 
 {% block content %}
-<div class="bg-white rounded-lg shadow p-6">
-    <div class="flex items-center justify-between mb-4">
-        <h1 class="text-xl font-bold text-gray-900">{{ card.name }}</h1>
-        <a href="/owner/{{ token }}/profile" class="text-sm text-blue-600 hover:underline">← Back to My Profile</a>
-    </div>
-
-    {# Photo #}
-    {% if card.photo_path %}
-    <div class="mb-4">
-        <img src="/photos/{{ owner_id }}/{{ card.id }}" alt="{{ card.name }} photo" class="w-24 h-24 rounded-full object-cover">
-    </div>
-    {% endif %}
-
-    {# Fields #}
-    {% if card.fields %}
-    <div class="border-t pt-4 mt-4">
-        <h2 class="text-lg font-semibold text-gray-900 mb-3">Fields</h2>
-        <div class="space-y-2">
-            {% for f in card.fields %}
-            <div class="flex items-center text-gray-700">
-                <span class="w-20 text-sm text-gray-500">{{ f.field_type }}</span>
-                <span>{{ f.field_value }}</span>
-                <span class="ml-2 text-xs text-gray-400">({{ f.visibility }})</span>
-            </div>
-            {% endfor %}
+<div class="max-w-2xl mx-auto py-8 px-4">
+    <div class="wl-card p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h1 class="wl-heading wl-heading-sm wl-text">{{ card.name }}</h1>
+            <a href="/owner/{{ token }}/profile" class="wl-link text-sm">← Back to My Profile</a>
         </div>
+
+        {# Photo #}
+        {% if card.photo_path %}
+        <div class="mb-4">
+            <img src="/photos/{{ owner_id }}/{{ card.id }}" alt="{{ card.name }} photo" class="w-24 h-24 rounded-full object-cover">
+        </div>
+        {% endif %}
+
+        {# Fields #}
+        {% if card.fields %}
+        <div class="border-t pt-4 mt-4" style="border-color: var(--wl-glass-border);">
+            <h2 class="wl-heading wl-heading-sm wl-text mb-3">Fields</h2>
+            <div class="space-y-2">
+                {% for f in card.fields %}
+                <div class="flex items-center wl-text-sub">
+                    <span class="w-20 text-xs wl-text-faint uppercase tracking-wide">{{ f.field_type }}</span>
+                    <span>{{ f.field_value }}</span>
+                    <span class="ml-2 text-xs wl-text-faint">({{ f.visibility }})</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% else %}
+        <p class="wl-text-faint text-sm mt-4">No fields assigned to this card yet.</p>
+        {% endif %}
     </div>
-    {% else %}
-    <p class="text-gray-500 text-sm mt-4">No fields assigned to this card yet.</p>
-    {% endif %}
 </div>
 {% endblock %}

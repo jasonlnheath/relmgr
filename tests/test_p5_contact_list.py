@@ -114,9 +114,12 @@ def _token(client_fixture, owner_id):
 # ============================================================
 
 class TestContactsTemplateExists:
-    def test_template_file_exists(self):
+    """contacts.html was removed round-2; contact_list.html is the active template."""
+
+    def test_old_contacts_html_removed(self):
         tmpl_dir = Path(__file__).resolve().parent.parent / "templates"
-        assert (tmpl_dir / "contacts.html").exists(), "templates/contacts.html must exist"
+        assert not (tmpl_dir / "contacts.html").exists(), "contacts.html removed round-2"
+        assert (tmpl_dir / "contact_list.html").exists(), "contact_list.html must exist"
 
     def test_template_renders_empty(self, client):
         client_obj, db, conn, owner_id, _, _ = client
@@ -178,7 +181,8 @@ class TestPermTempBadge:
         conn.commit()
         resp = client_obj.get(f"/owner/{_token(client, owner_id)}")
         assert resp.status_code == 200
-        assert "Permanent" in resp.text or "permanent" in resp.text.lower()
+        # round-2: Whitelist badge for lifetime (replaces "Permanent")
+        assert "Whitelist" in resp.text or "Permanent" in resp.text or "permanent" in resp.text.lower()
 
     def test_quarter_shows_temp(self, client):
         client_obj, db, conn, owner_id, _, _ = client

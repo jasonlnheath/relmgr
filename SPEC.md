@@ -42,10 +42,32 @@ aliases         — many handles → one person (profile_aliases)
   alias         — lowercase [a-z0-9_] slug, case-insensitive unique
   profile_id    — FK → profiles.id
 
-Field           — NOT records. Each field (work phone, cell, email, title, company, social handle)
-  field_type    — "email" | "phone" | "other"
+Field           — NOT records. Each field is a contact attribute attached to a Card.
+  field_type    — "email" | "phone" (live; CHECK constraint in profile_fields table)
   field_value   — the actual value
   visibility    — "public" | "granted" (public shown to anonymous viewers; "granted" shown only to authorized viewers)
+
+Standard contact field set (v2, round-2 ruling 2026-09-18):
+  The field_type enum was expanded from the original 3-value set (email/phone/other) to
+  cover the standard contact attributes used across iOS Contacts, Google Contacts, and
+  vCard 4.0. The full set:
+
+  | field_type  | Example values                    | vCard prop  | Notes                  |
+  |-------------|-----------------------------------|-------------|------------------------|
+  | email       | jason@example.com                 | EMAIL       | Primary key for grants |
+  | phone       | +1-555-123-4567                   | TEL         | E.164 normalized       |
+  | title       | VP Engineering                    | TITLE       | Displayed on profile   |
+  | company     | Acme Inc.                         | ORG         | Displayed on profile   |
+  | address     | 123 Main St, City, ST 12345       | ADR         | Future schema          |
+  | website     | https://acme.com                  | URL         | Future schema          |
+  | other       | Any freeform attribute            | —           | Future schema          |
+
+  Note: the `profiles` table has `title` and `company` columns (top-level profile metadata,
+  seeded from the canonical profile). These are NOT stored as profile_fields rows — they are
+  separate columns. The `title` and `company` field_type values exist in the spec table above
+  but are NOT yet active in the `profile_fields` CHECK constraint, which currently only allows
+  `'email'` and `'phone'`. Adding those types requires a schema migration. The `address`,
+  `website`, and `other` types are reserved for future expansion.
 
 Card            — an owner-defined field group (e.g. "Work" = email fields; "Personal" = phone fields)
   name          — human-readable label
@@ -72,9 +94,13 @@ Every permission has an expiration policy. Exactly three durations:
 |---|---|
 | **Lifetime** | Permanent access (`expires_at IS NULL`). Rare, high trust. |
 | **While employed** | Access while the relationship persists (e.g. employment). |
-| **Till next quarterly review** | Expires at the next quarterly review; owner must promote to lifetime or while employed, or revoke. |
+| **Till next quarterly review** | Greylist — pending quarterly confirmation; expires at the next quarterly review. |
 
-**Quarterly review flow:** at review time the owner is prompted per contact: promote to lifetime, promote to while-employed, or revoke. The revocation path preserves audit rows (append-only).
+**Quarterly review flow:** the whitelist emails the owner every quarter. The email lists all greylisted contacts and offers three choices per contact: make permanent (Lifetime), revoke, or **PUNT for another quarter** (contact stays grey). There is no separate expired state and no auto-expiry — a temporary grant extends to the next quarterly review. Greylist = pending quarterly confirmation. The revocation path preserves audit rows (append-only). *This is spec direction only; email-sending machinery is future work.*
+
+### Blocked State
+
+Revoked and denied (blocked) merge into a single **Blocked** state with one red badge. There is no distinct "Revoked" badge anywhere in the UI. Both revoked grants (owner-initiated revocation) and denied requests (denial) render as `Blocked` in the contact list. The database retains the `status` distinction (`'revoked'` vs `'denied'`) for audit purposes, but the UI treats them identically.
 
 *Transaction-based and event-based durations were considered and cut during refinement to keep the model minimal.*
 

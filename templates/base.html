@@ -5,8 +5,95 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Whitelist{% endblock %}</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Arapey:ital@0;1&display=swap" rel="stylesheet">
+    <style>
+        /* === RelMgr theme tokens (captain rulings 2026-09-18; pairing-review fixes §6; round-2 black liquid-glass) === */
+        :root {
+            /* Black liquid-glass background */
+            --wl-bg: #0A0A0A;
+            --wl-ink: #E8E8E8;
+            --wl-paper: rgba(255,255,255,0.06);
+            --wl-charcoal: #999999;
+            --wl-charcoal-deep: #8A8A8A;
+
+            /* Slate-grey liquid-glass buttons */
+            --wl-btn-slate: rgba(120,120,125,0.35);
+            --wl-btn-slate-hover: rgba(140,140,145,0.50);
+
+            /* Access badges (text-only, no icons) */
+            --wl-badge-whitelist: #4ADE80;
+            --wl-badge-greylist: #FBBF24;
+            --wl-badge-blocked: #F87171;
+
+            /* Amber / danger / success (kept for forms) */
+            --wl-amber: #F59E0B;
+            --wl-amber-field: rgba(245,158,11,0.12);
+            --wl-danger: #EF4444;
+            --wl-success: #22C55E;
+
+            /* Glass */
+            --wl-glass-fill: rgba(255,255,255,0.06);
+            --wl-glass-blur: 12px;
+            --wl-glass-border: rgba(255,255,255,0.08);
+        }
+
+        /* Semantic utility classes */
+        .wl-page-bg { background: var(--wl-bg); }
+        .wl-card {
+            background: var(--wl-glass-fill);
+            backdrop-filter: blur(var(--wl-glass-blur));
+            -webkit-backdrop-filter: blur(var(--wl-glass-blur));
+            border: 1px solid var(--wl-glass-border);
+            border-radius: 12px;
+        }
+        .wl-text { color: var(--wl-ink); }
+        .wl-text-sub { color: var(--wl-charcoal); }
+        .wl-text-muted { color: var(--wl-charcoal-deep); }
+        .wl-text-faint { color: var(--wl-charcoal-deep); }
+        .wl-border { border-color: var(--wl-glass-border); }
+        .wl-link { color: var(--wl-ink); text-decoration: underline; }
+        .wl-link:hover { opacity: 0.75; }
+
+        /* Buttons — slate-grey liquid-glass */
+        .wl-btn-approve { background: var(--wl-success); color: #000; }
+        .wl-btn-approve:hover { opacity: 0.85; }
+        .wl-btn-deny { background: var(--wl-danger); color: #000; }
+        .wl-btn-deny:hover { opacity: 0.85; }
+        .wl-btn-revoke { background: var(--wl-amber); color: #000; }
+        .wl-btn-revoke:hover { opacity: 0.85; }
+        .wl-btn-submit { background: var(--wl-btn-slate); color: var(--wl-ink); border: 1px solid var(--wl-glass-border); }
+        .wl-btn-submit:hover { background: var(--wl-btn-slate-hover); }
+        .wl-btn-ink { background: var(--wl-btn-slate); color: var(--wl-ink); border: 1px solid var(--wl-glass-border); }
+        .wl-btn-ink:hover { background: var(--wl-btn-slate-hover); }
+        .wl-btn-gray { background: var(--wl-btn-slate); color: var(--wl-ink); border: 1px solid var(--wl-glass-border); }
+        .wl-btn-gray:hover { background: var(--wl-btn-slate-hover); }
+
+        /* Badges — text-only (captain round-2) */
+        .wl-badge-amber { background: var(--wl-amber-field); color: var(--wl-amber); }
+        .wl-badge-approved { background: rgba(74,222,128,0.15); color: var(--wl-badge-whitelist); }
+        .wl-badge-charcoal { background: rgba(153,153,153,0.15); color: var(--wl-charcoal); }
+        .wl-badge-danger { background: rgba(239,68,68,0.15); color: var(--wl-badge-blocked); }
+        .wl-badge-whitelist { background: rgba(74,222,128,0.15); color: var(--wl-badge-whitelist); }
+        .wl-badge-greylist { background: rgba(251,191,36,0.15); color: var(--wl-badge-greylist); }
+        .wl-badge-blocked { background: rgba(248,113,113,0.15); color: var(--wl-badge-blocked); }
+
+        /* Glass effect (generic, no tabs rail) */
+        .wl-glass-rail {
+            background: var(--wl-glass-fill);
+            backdrop-filter: blur(var(--wl-glass-blur));
+            -webkit-backdrop-filter: blur(var(--wl-glass-blur));
+            border-bottom: 1px solid var(--wl-glass-border);
+        }
+
+        /* Heading scale — all Arapey 400 weight */
+        .wl-heading { font-family: "Arapey", Georgia, serif; font-weight: 400; color: var(--wl-ink); }
+        .wl-heading-sm { font-size: 22px; line-height: 28px; }
+        .wl-heading-md { font-size: 30px; line-height: 36px; }
+    </style>
 </head>
-<body class="bg-gray-50 min-h-screen">
+<body class="wl-page-bg min-h-screen wl-text">
     <div class="max-w-2xl mx-auto py-8 px-4">
         {% block tabs %}{% endblock %}
         {% block content %}{% endblock %}

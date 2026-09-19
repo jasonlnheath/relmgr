@@ -50,9 +50,8 @@ def test_owner_self_email_gets_granted_tier(tmp_path):
 def test_owner_self_view_shows_all_fields(tmp_path):
     db = _make_db(tmp_path)
     client = TestClient(create_app(db))
-    # anonymous: hidden
+    # anonymous: bio only, no granted fields (round-2: no "some info hidden" text)
     anon = client.get("/p/jasonheath").text
-    assert "Some information is hidden" in anon
     assert "jheath@waltheremc.com" not in anon
     # self-view via ?e=: full contact info, no request-access taunt
     me = client.get("/p/jasonheath?e=jheath%40waltheremc.com").text

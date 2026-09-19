@@ -258,8 +258,8 @@ def test_empty_state_shows_no_pending(tmp_path):
     resp = client.get(f"/owner/{_owner_token()}")
     assert resp.status_code == 200
     html = resp.text
-    # contacts.html uses "No requests yet"
-    assert "No requests" in html or "no requests" in html.lower() or "✓" in html, \
+    # round-2: single-surface contact list uses "No contacts yet"
+    assert "No contacts" in html or "no contacts" in html.lower() or "✓" in html, \
         f"Empty state message not found. HTML: {html[:500]}"
 
 

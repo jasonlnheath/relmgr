@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}{{ profile.display_name }} — Whitelist{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto py-8 px-4">
+    {# Back to contacts #}
+    <div class="mb-4">
+        <a href="/owner/{{ token }}" class="wl-link text-sm">← Back to Contacts</a>
+    </div>
+
+    <div class="wl-card p-6">
+        {# Header: picture + name + title/company #}
+        <div class="flex items-start gap-4 mb-6">
+            {% if cards %}
+            {% set main_card = cards[0] %}
+            {% if main_card.photo_path %}
+            <img src="/photos/{{ profile.id }}/{{ main_card.id }}"
+                 alt="{{ profile.display_name }} photo"
+                 class="w-16 h-16 rounded-full object-cover flex-shrink-0">
+            {% else %}
+            <div class="w-16 h-16 rounded-full flex items-center justify-center flex-shrink-0"
+                 style="background: var(--wl-btn-slate);">
+                <span class="wl-text text-xl">{{ profile.display_name[:2].upper() }}</span>
+            </div>
+            {% endif %}
+            {% else %}
+            <div class="w-16 h-16 rounded-full flex items-center justify-center flex-shrink-0"
+                 style="background: var(--wl-btn-slate);">
+                <span class="wl-text text-xl">{{ profile.display_name[:2].upper() }}</span>
+            </div>
+            {% endif %}
+            <div class="flex-1">
+                <h1 class="wl-heading wl-heading-md">{{ profile.display_name }}</h1>
+                {% if profile.title or profile.company %}
+                <p class="wl-text-sub text-sm mt-0.5">
+                    {% if profile.title %}{{ profile.title }}{% endif %}
+                    {% if profile.title and profile.company %} at {% endif %}
+                    {% if profile.company %}{{ profile.company }}{% endif %}
+                </p>
+                {% endif %}
+                {% if profile.verified_at %}
+                <div class="mt-1">
+                    {% set days = days_since(profile.verified_at) %}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs
+                        {% if stale %}wl-badge-greylist{% else %}wl-badge-approved{% endif %}">
+                        {% if stale %}⚠ Stale ({{ days }}d){% else %}✓ Verified ({{ days }}d){% endif %}
+                    </span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {# Bio #}
+        {% if profile.bio %}
+        <div class="mb-6 pb-4" style="border-bottom: 1px solid var(--wl-glass-border);">
+            <p class="wl-text-sub text-sm whitespace-pre-line">{{ profile.bio }}</p>
+        </div>
+        {% endif %}
+
+        {# Contact details #}
+        <div class="mb-6 pb-4" style="border-bottom: 1px solid var(--wl-glass-border);">
+            <h2 class="wl-heading wl-heading-sm wl-text mb-3">Contact Info</h2>
+            <div class="space-y-2">
+                {% if profile.emails %}
+                {% for email in profile.emails %}
+                <div class="flex items-center wl-text-sub">
+                    <span class="w-20 text-xs wl-text-faint uppercase tracking-wide">email</span>
+                    <span class="wl-text">{{ email }}</span>
+                </div>
+                {% endfor %}
+                {% endif %}
+                {% if profile.phones %}
+                {% for phone in profile.phones %}
+                <div class="flex items-center wl-text-sub">
+                    <span class="w-20 text-xs wl-text-faint uppercase tracking-wide">phone</span>
+                    <span class="wl-text">{{ phone }}</span>
+                </div>
+                {% endfor %}
+                {% endif %}
+            </div>
+        </div>
+
+        {# Access details #}
+        <div class="mb-6 pb-4" style="border-bottom: 1px solid var(--wl-glass-border);">
+            <h2 class="wl-heading wl-heading-sm wl-text mb-3">Access</h2>
+            <div class="space-y-2">
+                {% if grant %}
+                <div class="flex items-center wl-text-sub">
+                    <span class="w-20 text-xs wl-text-faint uppercase tracking-wide">status</span>
+                    <span class="wl-text">{{ grant.status|capitalize }}</span>
+                </div>
+                {% if grant.granted_at %}
+                <div class="flex items-center wl-text-sub">
+                    <span class="w-20 text-xs wl-text-faint uppercase tracking-wide">granted</span>
+                    <span class="wl-text">{{ grant.granted_at[:10] }}</span>
+                </div>
+                {% endif %}
+                {% if grant.expires_at %}
+                <div class="flex items-center wl-text-sub">
+                    <span class="w-20 text-xs wl-text-faint uppercase tracking-wide">expires</span>
+                    <span class="wl-text">{{ grant.expires_at[:10] }}</span>
+                </div>
+                {% endif %}
+                {% if grant.requester_email %}
+                <div class="flex items-center wl-text-sub">
+                    <span class="w-20 text-xs wl-text-faint uppercase tracking-wide">requester</span>
+                    <span class="wl-text">{{ grant.requester_email }}</span>
+                </div>
+                {% endif %}
+                {% if grant.requester_name %}
+                <div class="flex items-center wl-text-sub">
+                    <span class="w-20 text-xs wl-text-faint uppercase tracking-wide">name</span>
+                    <span class="wl-text">{{ grant.requester_name }}</span>
+                </div>
+                {% endif %}
+                {% endif %}
+            </div>
+        </div>
+
+        {# Cards — granted fields #}
+        {% if cards and tier == 'granted' %}
+        {% for card in cards %}
+        <div class="mb-6 {% if not loop.last %}pb-4 border-b{% endif %}" style="border-color: var(--wl-glass-border);">
+            <h2 class="wl-heading wl-heading-sm wl-text mb-3">{{ card.name }}</h2>
+            <div class="space-y-2">
+                {% for f in card.visible_fields %}
+                <div class="flex items-center wl-text-sub">
+                    <span class="w-20 text-xs wl-text-faint uppercase tracking-wide">{{ f.field_type }}</span>
+                    <span class="wl-text">{{ f.field_value }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+        {% endif %}
+
+        {# Revoke button — only for granted tier #}
+        {% if tier == 'granted' and grant %}
+        <div class="mt-6 pt-4" style="border-top: 1px solid var(--wl-glass-border);">
+            <form method="POST" action="/owner/{{ token }}/revoke" class="inline">
+                <input type="hidden" name="grant_id" value="{{ grant.id }}">
+                <button type="submit"
+                        class="wl-btn-revoke px-6 py-2 rounded-lg text-sm">
+                    Revoke Access
+                </button>
+            </form>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

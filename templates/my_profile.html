@@ -1,197 +1,185 @@
 {% extends "base.html" %}
 {% block title %}Whitelist — My Profile{% endblock %}
 
-{% block tabs %}
-<div class="mb-4">
-    <nav class="flex border-b border-gray-200">
-        <a href="/owner/{{ token }}"
-           class="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700">
-            Contact List
-        </a>
-        <a href="/owner/{{ token }}/profile"
-           class="px-4 py-2 text-sm font-medium text-blue-600 border-b-2 border-blue-600">
-            My Profile
-        </a>
-    </nav>
-</div>
-{% endblock %}
-
 {% block content %}
-<div class="bg-white rounded-lg shadow p-4">
-    <h1 class="text-xl font-bold text-gray-900 mb-4">My Profile</h1>
+<div class="max-w-2xl mx-auto py-8 px-4">
+    <div class="wl-card p-6">
+        <h1 class="wl-heading wl-heading-md mb-6">My Profile</h1>
 
-    {# Header card: name/title/company, bio, scan stats #}
-    <div class="border-b pb-4 mb-4">
-        <div class="flex items-center justify-between mb-2">
-            <div>
-                <h2 class="text-lg font-semibold text-gray-900">{{ profile.display_name }}</h2>
-                {% if profile.title or profile.company %}
-                <p class="text-sm text-gray-600">
-                    {% if profile.title %}{{ profile.title }}{% endif %}
-                    {% if profile.title and profile.company %} at {% endif %}
-                    {% if profile.company %}{{ profile.company }}{% endif %}
-                </p>
-                {% endif %}
-                <p class="text-xs text-gray-500 mt-1">{{ visit_count }} visits (last 14 days)</p>
-            </div>
-            <a href="/p/{{ profile.handle }}?e={{ owner_email | urlencode }}"
-               class="text-sm text-blue-600 hover:underline">
-                View profile →
-            </a>
-        </div>
-
-        {# Bio section #}
-        <div class="mt-3">
-            <label class="text-sm font-medium text-gray-700">Bio</label>
-            <form method="POST" action="/owner/{{ token }}/bio" class="mt-1">
-                <textarea name="bio" rows="3"
-                          class="w-full border rounded-md px-3 py-2 text-sm"
-                          placeholder="Tell us about yourself...">{{ profile.bio or '' }}</textarea>
-                <div class="flex items-center justify-between mt-1">
-                    <span class="text-xs text-gray-400">{{ bio_len }}/2000 characters</span>
-                    <button type="submit"
-                            class="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700">
-                        Save
-                    </button>
+        {# Header card: name/title/company, bio, scan stats #}
+        <div class="mb-6 pb-4" style="border-bottom: 1px solid var(--wl-glass-border);">
+            <div class="flex items-center justify-between mb-2">
+                <div>
+                    <h2 class="wl-heading wl-heading-sm wl-text">{{ profile.display_name }}</h2>
+                    {% if profile.title or profile.company %}
+                    <p class="text-sm wl-text-sub">
+                        {% if profile.title %}{{ profile.title }}{% endif %}
+                        {% if profile.title and profile.company %} at {% endif %}
+                        {% if profile.company %}{{ profile.company }}{% endif %}
+                    </p>
+                    {% endif %}
+                    <p class="text-xs wl-text-faint mt-1">{{ visit_count }} visits (last 14 days)</p>
                 </div>
-            </form>
-            {% if bio_error %}
-            <p class="text-xs text-red-600 mt-1">{{ bio_error }}</p>
-            {% endif %}
-        </div>
-    </div>
+                <a href="/p/{{ profile.handle }}?e={{ owner_email | urlencode }}"
+                   class="wl-link text-sm">
+                    View profile →
+                </a>
+            </div>
 
-    {# Cards section #}
-    <div>
-        <div class="flex items-center justify-between mb-3">
-            <h2 class="text-lg font-semibold text-gray-900">Cards</h2>
-            <button type="button" onclick="document.getElementById('new-card-form').classList.toggle('hidden')"
-                    class="text-sm text-blue-600 hover:underline">
-                + Create card
-            </button>
-        </div>
-
-        {# New card form (hidden by default) #}
-        <div id="new-card-form" class="hidden mb-4 p-3 bg-gray-50 rounded-md">
-            <form method="POST" action="/owner/{{ token }}/cards/new">
-                <label class="text-sm font-medium text-gray-700">Card name</label>
-                <input type="text" name="name" maxlength="60"
-                       class="w-full border rounded-md px-3 py-2 text-sm mt-1"
-                       placeholder="e.g. Sales, Partners">
-                {% if new_card_error %}
-                <p class="text-xs text-red-600 mt-1">{{ new_card_error }}</p>
-                {% endif %}
-                <button type="submit"
-                        class="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700 mt-2">
-                    Create
-                </button>
-            </form>
-        </div>
-
-        {# Card list #}
-        {% if cards %}
-        <div class="space-y-3">
-            {% for card in cards %}
-            <div class="border rounded-md p-3">
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-3">
-                        {# Photo placeholder or actual photo #}
-                        {% if card.photo_path %}
-                        <img src="/photos/{{ owner_id }}/{{ card.id }}"
-                             alt="{{ card.name }} photo"
-                             class="w-10 h-10 rounded-full object-cover">
-                        {% else %}
-                        <div class="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
-                            <span class="text-sm font-medium text-gray-600">
-                                {{ card.name[:2].upper() }}
-                            </span>
-                        </div>
-                        {% endif %}
-                        <div>
-                            <h3 class="text-sm font-medium text-gray-900">{{ card.name }}</h3>
-                            <p class="text-xs text-gray-500">{{ card.fields|length }} fields</p>
-                        </div>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <a href="/owner/{{ token }}/profile/card/{{ card.id }}"
-                           class="text-xs text-blue-600 hover:underline">
-                            Preview
-                        </a>
-                        <form method="POST" action="/owner/{{ token }}/cards/{{ card.id }}/fields">
-                            <select name="field_ids" multiple class="text-xs border rounded px-1 py-0.5" size="3">
-                                {% for pf in all_fields %}
-                                <option value="{{ pf.id }}"
-                                        {% if pf.id in card.field_ids %}selected{% endif %}>
-                                    {{ pf.field_value }} ({{ pf.field_type }})
-                                </option>
-                                {% endfor %}
-                            </select>
-                            <button type="submit"
-                                    class="bg-green-600 text-white px-2 py-0.5 rounded text-xs hover:bg-green-700 mt-1">
-                                Save
-                            </button>
-                        </form>
-                        {# Add field button #}
-                        <button type="button" onclick="document.getElementById('add-field-{{ card.id }}').classList.toggle('hidden')"
-                                class="text-xs text-blue-600 hover:underline">
-                            + Field
+            {# Bio section #}
+            <div class="mt-3">
+                <label class="text-sm font-medium wl-text-sub">Bio</label>
+                <form method="POST" action="/owner/{{ token }}/bio" class="mt-1">
+                    <textarea name="bio" rows="3"
+                              class="w-full border border-gray-600 rounded-lg px-3 py-2 text-sm bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]"
+                              placeholder="Tell us about yourself...">{{ profile.bio or '' }}</textarea>
+                    <div class="flex items-center justify-between mt-1">
+                        <span class="text-xs wl-text-faint">{{ bio_len }}/2000 characters</span>
+                        <button type="submit"
+                                class="wl-btn-ink px-3 py-1 rounded text-xs">
+                            Save
                         </button>
-                        {# Add field form #}
-                        <div id="add-field-{{ card.id }}" class="hidden mt-1">
-                            <form method="POST" action="/owner/{{ token }}/fields/new">
-                                <input type="hidden" name="card_id" value="{{ card.id }}">
-                                <select name="field_type" class="text-xs border rounded px-1 py-0.5">
-                                    <option value="email">Email</option>
-                                    <option value="phone">Phone</option>
-                                </select>
-                                <input type="text" name="field_value" placeholder="value"
-                                       class="text-xs border rounded px-2 py-0.5">
-                                <select name="visibility" class="text-xs border rounded px-1 py-0.5">
-                                    <option value="public">Public</option>
-                                    <option value="granted">Granted</option>
+                    </div>
+                </form>
+                {% if bio_error %}
+                <p class="text-xs" style="color: var(--wl-danger);">{{ bio_error }}</p>
+                {% endif %}
+            </div>
+        </div>
+
+        {# Cards section #}
+        <div>
+            <div class="flex items-center justify-between mb-3">
+                <h2 class="wl-heading wl-heading-sm wl-text">Cards</h2>
+                <button type="button" onclick="document.getElementById('new-card-form').classList.toggle('hidden')"
+                        class="wl-link text-sm">
+                    + Create card
+                </button>
+            </div>
+
+            {# New card form (hidden by default) #}
+            <div id="new-card-form" class="hidden mb-4 p-3 rounded-lg" style="background: rgba(255,255,255,0.03); border: 1px solid var(--wl-glass-border);">
+                <form method="POST" action="/owner/{{ token }}/cards/new">
+                    <label class="text-sm font-medium wl-text-sub">Card name</label>
+                    <input type="text" name="name" maxlength="60"
+                           class="w-full border border-gray-600 rounded-lg px-3 py-2 text-sm mt-1 bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]"
+                           placeholder="e.g. Sales, Partners">
+                    {% if new_card_error %}
+                    <p class="text-xs" style="color: var(--wl-danger);">{{ new_card_error }}</p>
+                    {% endif %}
+                    <button type="submit"
+                            class="wl-btn-ink px-3 py-1 rounded text-xs mt-2">
+                        Create
+                    </button>
+                </form>
+            </div>
+
+            {# Card list #}
+            {% if cards %}
+            <div class="space-y-3">
+                {% for card in cards %}
+                <div class="wl-card p-3">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            {# Photo placeholder or actual photo #}
+                            {% if card.photo_path %}
+                            <img src="/photos/{{ owner_id }}/{{ card.id }}"
+                                 alt="{{ card.name }} photo"
+                                 class="w-10 h-10 rounded-full object-cover">
+                            {% else %}
+                            <div class="w-10 h-10 rounded-full flex items-center justify-center"
+                                 style="background: var(--wl-btn-slate);">
+                                <span class="text-sm wl-text-muted">
+                                    {{ card.name[:2].upper() }}
+                                </span>
+                            </div>
+                            {% endif %}
+                            <div>
+                                <h3 class="wl-heading wl-heading-sm wl-text">{{ card.name }}</h3>
+                                <p class="text-xs wl-text-faint">{{ card.fields|length }} fields</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <a href="/owner/{{ token }}/profile/card/{{ card.id }}"
+                               class="wl-link text-xs">
+                                Preview
+                            </a>
+                            <form method="POST" action="/owner/{{ token }}/cards/{{ card.id }}/fields">
+                                <select name="field_ids" multiple class="text-xs border border-gray-600 rounded px-1 py-0.5 bg-transparent" size="3">
+                                    {% for pf in all_fields %}
+                                    <option value="{{ pf.id }}"
+                                            {% if pf.id in card.field_ids %}selected{% endif %}>
+                                        {{ pf.field_value }} ({{ pf.field_type }})
+                                    </option>
+                                    {% endfor %}
                                 </select>
                                 <button type="submit"
-                                        class="bg-blue-600 text-white px-2 py-0.5 rounded text-xs hover:bg-blue-700">
-                                    Add
+                                        class="wl-btn-approve px-2 py-0.5 rounded text-xs">
+                                    Save
                                 </button>
                             </form>
+                            {# Add field button #}
+                            <button type="button" onclick="document.getElementById('add-field-{{ card.id }}').classList.toggle('hidden')"
+                                    class="wl-link text-xs">
+                                + Field
+                            </button>
+                            {# Add field form #}
+                            <div id="add-field-{{ card.id }}" class="hidden mt-1">
+                                <form method="POST" action="/owner/{{ token }}/fields/new">
+                                    <input type="hidden" name="card_id" value="{{ card.id }}">
+                                    <select name="field_type" class="text-xs border border-gray-600 rounded px-1 py-0.5 focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8] bg-transparent">
+                                        <option value="email">Email</option>
+                                        <option value="phone">Phone</option>
+                                    </select>
+                                    <input type="text" name="field_value" placeholder="value"
+                                           class="text-xs border border-gray-600 rounded px-2 py-0.5 bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
+                                    <select name="visibility" class="text-xs border border-gray-600 rounded px-1 py-0.5 focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8] bg-transparent">
+                                        <option value="public">Public</option>
+                                        <option value="granted">Granted</option>
+                                    </select>
+                                    <button type="submit"
+                                            class="wl-btn-ink px-2 py-0.5 rounded text-xs">
+                                        Add
+                                    </button>
+                                </form>
+                            </div>
+                            {# Photo upload #}
+                            <form method="POST" action="/owner/{{ token }}/cards/{{ card.id }}/photo"
+                                  enctype="multipart/form-data" class="flex items-center gap-1">
+                                <input type="file" name="photo" accept="image/*"
+                                       class="text-xs">
+                                <button type="submit"
+                                        class="wl-btn-gray px-2 py-0.5 rounded text-xs">
+                                    Upload
+                                </button>
+                                {% if card.photo_path %}
+                                <button type="submit" name="remove_photo" value="1"
+                                        class="wl-btn-deny px-2 py-0.5 rounded text-xs">
+                                    Remove
+                                </button>
+                                {% endif %}
+                            </form>
                         </div>
-                        {# Photo upload #}
-                        <form method="POST" action="/owner/{{ token }}/cards/{{ card.id }}/photo"
-                              enctype="multipart/form-data" class="flex items-center gap-1">
-                            <input type="file" name="photo" accept="image/*"
-                                   class="text-xs">
-                            <button type="submit"
-                                    class="bg-gray-600 text-white px-2 py-0.5 rounded text-xs hover:bg-gray-700">
-                                Upload
-                            </button>
-                            {% if card.photo_path %}
-                            <button type="submit" name="remove_photo" value="1"
-                                    class="bg-red-600 text-white px-2 py-0.5 rounded text-xs hover:bg-red-700">
-                                Remove
-                            </button>
-                            {% endif %}
-                        </form>
                     </div>
-                </div>
-                {# Fields list #}
-                {% if card.fields %}
-                <div class="mt-2 pt-2 border-t">
-                    {% for f in card.fields %}
-                    <div class="flex items-center text-xs text-gray-700">
-                        <span class="w-16 text-gray-500">{{ f.field_type }}</span>
-                        <span>{{ f.field_value }}</span>
-                        <span class="ml-1 text-gray-400">({{ f.visibility }})</span>
+                    {# Fields list #}
+                    {% if card.fields %}
+                    <div class="mt-2 pt-2" style="border-top: 1px solid var(--wl-glass-border);">
+                        {% for f in card.fields %}
+                        <div class="flex items-center text-xs wl-text-sub">
+                            <span class="w-16 wl-text-faint">{{ f.field_type }}</span>
+                            <span>{{ f.field_value }}</span>
+                            <span class="ml-1 wl-text-faint">({{ f.visibility }})</span>
+                        </div>
+                        {% endfor %}
                     </div>
-                    {% endfor %}
+                    {% endif %}
                 </div>
-                {% endif %}
+                {% endfor %}
             </div>
-            {% endfor %}
+            {% else %}
+            <p class="text-sm wl-text-faint">No cards yet. Create one above.</p>
+            {% endif %}
         </div>
-        {% else %}
-        <p class="text-sm text-gray-500">No cards yet. Create one above.</p>
-        {% endif %}
     </div>
 </div>
 {% endblock %}

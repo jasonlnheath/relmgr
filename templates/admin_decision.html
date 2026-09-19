@@ -2,30 +2,32 @@
 {% block title %}Access {{ 'Approved' if decision == 'approve' else 'Denied' }} — {{ profile.display_name }}{% endblock %}
 
 {% block content %}
-<div class="bg-white rounded-lg shadow p-6">
-    <h1 class="text-2xl font-bold mb-4">
-        {% if decision == 'approve' %}
-        <span class="text-green-600">✓ Access Approved</span>
-        {% elif decision == 'revoke' %}
-        <span class="text-gray-700">↩ Access Revoked</span>
-        {% else %}
-        <span class="text-red-600">✗ Access Denied</span>
-        {% endif %}
-    </h1>
+<div class="max-w-2xl mx-auto py-8 px-4">
+    <div class="wl-card p-6">
+        <h1 class="wl-heading wl-heading-md mb-4">
+            {% if decision == 'approve' %}
+            <span style="color: var(--wl-success);">✓ Access Approved</span>
+            {% elif decision == 'revoke' %}
+            <span class="wl-text-sub">↩ Access Revoked</span>
+            {% else %}
+            <span style="color: var(--wl-danger);">✗ Access Denied</span>
+            {% endif %}
+        </h1>
 
-    <p class="text-gray-600 mb-4">
-        {% if decision == 'approve' %}
-        The request from <strong>{{ grant.requester_name }}</strong> ({{ grant.requester_email }}) has been approved.
-        {% elif decision == 'revoke' %}
-        Access for <strong>{{ grant.requester_name }}</strong> ({{ grant.requester_email }}) has been revoked.
-        They no longer see connection fields and may re-request access if needed.
-        {% else %}
-        The request from <strong>{{ grant.requester_name }}</strong> ({{ grant.requester_email }}) has been denied.
-        {% endif %}
-    </p>
+        <p class="wl-text-sub mb-4">
+            {% if decision == 'approve' %}
+            The request from <strong class="wl-text">{{ grant.requester_name }}</strong> ({{ grant.requester_email }}) has been approved.
+            {% elif decision == 'revoke' %}
+            Access for <strong class="wl-text">{{ grant.requester_name }}</strong> ({{ grant.requester_email }}) has been revoked.
+            They no longer see connection fields and may re-request access if needed.
+            {% else %}
+            The request from <strong class="wl-text">{{ grant.requester_name }}</strong> ({{ grant.requester_email }}) has been denied.
+            {% endif %}
+        </p>
 
-    <a href="/p/{{ profile.handle }}" class="text-blue-600 hover:underline text-sm">
-        ← Back to profile
-    </a>
+        <a href="/p/{{ profile.handle }}" class="wl-link text-sm">
+            ← Back to profile
+        </a>
+    </div>
 </div>
 {% endblock %}
