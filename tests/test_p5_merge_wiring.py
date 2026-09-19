@@ -12,9 +12,10 @@ explicit-button option alive without another schema change):
 - Audit: existing 'approved' row + merge's own 'merged' row (already logged
   inside merge_requester_into_contacts).
 
-These tests run against a COPY of the prod backup — never the live file.
+These tests are fully hermetic — no ambient fixture files.
 """
 
+import json
 import os
 import sqlite3
 import sys
@@ -30,20 +31,58 @@ import wl_tokens
 import whitelist_db
 from app import create_app
 
-BACKUP = Path(__file__).resolve().parent.parent / "backups" / "contacts-20260911-200516-hot.db"
 
+def _make_fixture(tmp_path: Path) -> Path:
+    """Create a hermetic fixture DB with the same schema + seed data
+    that the old gitignored backup provided. No ambient files needed."""
+    db = tmp_path / "fixture.db"
+    import store
+    store.init_db(db)  # creates contacts + contact_sources + dedup_log
+    conn = whitelist_db.wl_connect(db)
+    whitelist_db.ensure_whitelist_schema(conn)
 
-def _copy_backup(tmp_path: Path) -> Path:
-    """Byte-copy the known-good hot backup; every test below operates ONLY on this."""
-    db = tmp_path / "testprod.db"
-    db.write_bytes(BACKUP.read_bytes())
+    # Seed the owner profile
+    whitelist_db.seed_profile(conn, {
+        "handle": "jasonheath",
+        "name": {"display": "Jason Heath"},
+        "org": {"company": "Walther EMC", "title": "VP Sales"},
+        "emails": [
+            {"address": "jheath@waltheremc.com", "visibility": "public"},
+            {"address": "jason@waltheremc.com", "visibility": "granted"},
+        ],
+        "phones": [{"number": "+15551234567", "visibility": "public"}],
+        "verified_at": "2026-03-15T10:00:00Z",
+        "bio": "I sell wheel bushings.",
+    })
+
+    # Seed some contacts that simulate what the backup had
+    conn.execute(
+        "INSERT INTO contacts (id, normalized_name, emails, sources, created_at, updated_at, is_duplicate)"
+        " VALUES ('g1','Alice Smith',?,?,datetime('now'),datetime('now'),0)",
+        (json.dumps([{"address": "alice@example.com", "type": "primary"}]),
+         json.dumps([{"source": "gmail", "source_id": "g1"}])),
+    )
+    conn.execute(
+        "INSERT INTO contacts (id, normalized_name, emails, sources, created_at, updated_at, is_duplicate)"
+        " VALUES ('g2','Bob Jones',?,?,datetime('now'),datetime('now'),0)",
+        (json.dumps([{"address": "bob@example.com", "type": "primary"}]),
+         json.dumps([{"source": "gmail", "source_id": "g2"}])),
+    )
+    conn.execute(
+        "INSERT INTO contacts (id, normalized_name, emails, sources, created_at, updated_at, is_duplicate)"
+        " VALUES ('v1','Carol Davis',?,?,datetime('now'),datetime('now'),0)",
+        (json.dumps([{"address": "carol@example.com", "type": "primary"}]),
+         json.dumps([{"source": "vcf", "source_id": "v1"}])),
+    )
+    conn.commit()
+    conn.close()
     return db
 
 
 def _seed_owner_and_grant(db: Path, email="newperson@example.com", name="New Person"):
     conn = whitelist_db.wl_connect(db)
     profile = whitelist_db.get_profile(conn, "jasonheath")
-    if profile is None:  # backup has no whitelist tables? seed minimal owner
+    if profile is None:
         whitelist_db.ensure_whitelist_schema(conn)
         whitelist_db.seed_profile(conn, {
             "handle": "jasonheath", "name": {"display": "Jason Heath"}, "org": {},
@@ -61,7 +100,7 @@ def _seed_owner_and_grant(db: Path, email="newperson@example.com", name="New Per
 # ============================================================
 
 def test_approve_merges_requester_into_contacts(tmp_path):
-    db = _copy_backup(tmp_path)
+    db = _make_fixture(tmp_path)
     before_live = None
     conn = whitelist_db.wl_connect(db)
     before_live = conn.execute("SELECT COUNT(*) FROM contacts WHERE is_duplicate=0").fetchone()[0]
@@ -95,7 +134,7 @@ def _seed_owner_and_grant_on_conn(conn, email, name):
 
 
 def test_deny_never_merges(tmp_path):
-    db = _copy_backup(tmp_path)
+    db = _make_fixture(tmp_path)
     conn = whitelist_db.wl_connect(db)
     gid = _seed_owner_and_grant_on_conn(conn, "noshow@example.com", "No Show")
     whitelist_db.apply_decision(conn, gid, "deny", "90")
@@ -108,7 +147,7 @@ def test_deny_never_merges(tmp_path):
 
 
 def test_merge_contacts_opt_out(tmp_path):
-    db = _copy_backup(tmp_path)
+    db = _make_fixture(tmp_path)
     conn = whitelist_db.wl_connect(db)
     gid = _seed_owner_and_grant_on_conn(conn, "skipme@example.com", "Skip Me")
     whitelist_db.apply_decision(conn, gid, "approve", "90", merge_contacts=False)
@@ -118,8 +157,7 @@ def test_merge_contacts_opt_out(tmp_path):
 
 def test_approve_matching_existing_contact_updates_name_not_duplicates(tmp_path):
     """Existing gmail contact approved via Whitelist: name wins, row count stable."""
-    import json
-    db = _copy_backup(tmp_path)
+    db = _make_fixture(tmp_path)
     conn = whitelist_db.wl_connect(db)
     conn.execute(
         "INSERT INTO contacts (id, normalized_name, emails, sources, created_at, updated_at, is_duplicate)"
@@ -146,7 +184,7 @@ def test_approve_matching_existing_contact_updates_name_not_duplicates(tmp_path)
 # ============================================================
 
 def test_admin_route_approve_merges(tmp_path):
-    db = _copy_backup(tmp_path)
+    db = _make_fixture(tmp_path)
     gid = _seed_owner_and_grant(db, "routemerge@example.com", "Route Merge")
     token = wl_tokens.make_token(b"test-secret", "grant_review", gid, expires_days=7)
     client = TestClient(create_app(db))
@@ -163,7 +201,7 @@ def test_admin_route_approve_merges(tmp_path):
 
 def test_double_approve_attempt_is_audited_and_not_double_merged(tmp_path):
     """Guard first (replay raises), so merge runs at most once per grant."""
-    db = _copy_backup(tmp_path)
+    db = _make_fixture(tmp_path)
     conn = whitelist_db.wl_connect(db)
     gid = _seed_owner_and_grant_on_conn(conn, "once@example.com", "Once Only")
     whitelist_db.apply_decision(conn, gid, "approve", "90")
