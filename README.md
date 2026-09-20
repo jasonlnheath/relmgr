@@ -34,6 +34,24 @@ python cli.py dedup
 python cli.py export -o exports/contacts.vcf
 ```
 
+## Password reset
+
+`/signin` links to `/forgot-password`: enter your email and a single-use reset
+link (valid 30 minutes, one active link per account) is emailed through the
+same SMTP path as the other notifications (`SMTP_HOST`/`SMTP_PORT`/
+`SMTP_USER`/`SMTP_PASS`).
+
+If email cannot actually deliver from a deployment, the CLI fallback prints
+the reset URL directly so first sign-in is never blocked:
+
+```bash
+# Prints the single-use /reset-password/<token> URL (no email sent)
+python3 scripts/notify.py --what reset --email you@example.com
+
+# Or send it by email once SMTP works
+python3 scripts/notify.py --what reset --email you@example.com --apply
+```
+
 ## Docker
 
 Run the whitelist service in a container — same contract as the native service

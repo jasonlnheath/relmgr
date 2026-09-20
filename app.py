@@ -10,6 +10,7 @@ from pathlib import Path
 import hmac
 import os
 import re
+import sys
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -287,9 +288,9 @@ def create_app(db_path: Path = None) -> FastAPI:
     # ============================================================
 
     @application.get("/signin", response_class=HTMLResponse)
-    async def signin_page(request: Request):
+    async def signin_page(request: Request, reset: str = Query(None)):
         return HTMLResponse(jinja.get_template("signin.html").render(
-            request=request, error=None, email=""))
+            request=request, error=None, email="", reset_ok=(reset == "1")))
 
     @application.post("/signin")
     async def signin_submit(request: Request):
@@ -388,6 +389,125 @@ def create_app(db_path: Path = None) -> FastAPI:
         response = RedirectResponse(url="/signin", status_code=303)
         response.delete_cookie(key="wl_session", path="/")
         return response
+
+    # ============================================================
+    # Forgot / reset password (2026-09-20)
+    # ============================================================
+
+    def _send_password_reset_email(to_addr: str, reset_url: str) -> bool:
+        """Deliver the reset email through the app's existing notify path
+        (scripts/notify.py send_email — same SMTP env contract as the
+        quarterly/owner-link mail: SMTP_HOST/PORT/USER/PASS + BASE_URL).
+
+        Returns False on ANY delivery failure (unconfigured SMTP, refused
+        connection, or notify's sys.exit(1) on missing credentials — hence
+        catching SystemExit too). The caller still shows the standard
+        confirmation either way, and logs the URL so a deployment without
+        working SMTP is never locked out of first sign-in.
+        """
+        body = (
+            "Hi,\n\n"
+            "A password reset was requested for your RelMgr account.\n\n"
+            f"Set a new password here:\n\n{reset_url}\n\n"
+            "This link expires in 30 minutes and can be used once.\n"
+            "If you didn't request this, you can ignore this email.\n"
+        )
+        try:
+            from scripts.notify import send_email
+            send_email(to_addr, "RelMgr: reset your password", body)
+            return True
+        except (Exception, SystemExit):
+            return False
+
+    @application.get("/forgot-password", response_class=HTMLResponse)
+    async def forgot_password_page(request: Request):
+        return HTMLResponse(jinja.get_template("forgot_password.html").render(
+            request=request, error=None, email="", sent=False))
+
+    @application.post("/forgot-password")
+    async def forgot_password_submit(request: Request):
+        form = await request.form()
+        email = (form.get("email") or "").strip()
+
+        if not email or "@" not in email:
+            return HTMLResponse(jinja.get_template("forgot_password.html").render(
+                request=request, error="Valid email is required.",
+                email=email, sent=False))
+
+        conn = whitelist_db.wl_connect(path)
+        try:
+            profile = whitelist_db.get_profile_by_email(conn, email)
+            if profile:
+                # Burn one pbkdf2 on the hit path too (F8 symmetry): with the
+                # miss path below, both branches cost the same so request
+                # timing cannot reveal whether the email exists.
+                whitelist_db.verify_password(
+                    "timing-pad", whitelist_db._dummy_password_hash())
+                raw = whitelist_db.create_password_reset_token(conn, profile["id"])
+                base_url = (wl_env.get_secret("BASE_URL")
+                            or str(request.base_url).rstrip("/"))
+                reset_url = f"{base_url}/reset-password/{raw}"
+                if not _send_password_reset_email(email, reset_url):
+                    # Documented local fallback keeps first sign-in unblocked
+                    # when SMTP can't deliver: scripts/notify.py --what reset
+                    # --email <addr> prints the reset URL. Logged as well so
+                    # the captain can lift it straight from service logs.
+                    print(
+                        f"[WARN] Reset email delivery failed; reset URL for "
+                        f"{email}: {reset_url}", file=sys.stderr)
+        finally:
+            conn.close()
+
+        # Same response whether or not the email exists — no enumeration.
+        return HTMLResponse(jinja.get_template("forgot_password.html").render(
+            request=request, error=None, email="", sent=True))
+
+    @application.get("/reset-password/{token}", response_class=HTMLResponse)
+    async def reset_password_page(request: Request, token: str):
+        conn = whitelist_db.wl_connect(path)
+        try:
+            valid = whitelist_db.peek_password_reset_token(conn, token) is not None
+        finally:
+            conn.close()
+        if not valid:
+            return HTMLResponse(jinja.get_template("reset_password.html").render(
+                request=request, invalid=True, error=None), status_code=403)
+        return HTMLResponse(jinja.get_template("reset_password.html").render(
+            request=request, invalid=False, error=None))
+
+    @application.post("/reset-password/{token}")
+    async def reset_password_submit(request: Request, token: str):
+        form = await request.form()
+        password = form.get("password") or ""
+
+        # Validate BEFORE consuming: a too-short submission must not burn
+        # the user's one working link.
+        if len(password) < 8:
+            conn = whitelist_db.wl_connect(path)
+            try:
+                valid = (whitelist_db.peek_password_reset_token(conn, token)
+                         is not None)
+            finally:
+                conn.close()
+            if not valid:
+                return HTMLResponse(jinja.get_template("reset_password.html").render(
+                    request=request, invalid=True, error=None), status_code=403)
+            return HTMLResponse(jinja.get_template("reset_password.html").render(
+                request=request, invalid=False,
+                error="Password must be at least 8 characters."))
+
+        conn = whitelist_db.wl_connect(path)
+        try:
+            profile_id = whitelist_db.consume_password_reset_token(conn, token)
+            if profile_id is None:
+                return HTMLResponse(jinja.get_template("reset_password.html").render(
+                    request=request, invalid=True, error=None), status_code=403)
+            whitelist_db.set_profile_password(conn, profile_id, password)
+        finally:
+            conn.close()
+
+        # 303 See Other: the browser must follow with GET.
+        return RedirectResponse(url="/signin?reset=1", status_code=303)
 
     # ============================================================
     # Public routes

@@ -5,10 +5,12 @@ Usage:
     python3 scripts/notify.py --what verify [--dry-run | --apply]
     python3 scripts/notify.py --what requests [--dry-run | --apply]
     python3 scripts/notify.py --what owner-link [--dry-run | --apply]
+    python3 scripts/notify.py --what reset --email YOU@EXAMPLE.COM
 
 --what verify: Profiles with verified_at > 90 days old
 --what requests: Pending access grants
 --what owner-link: Dashboard magic link (prints URL; --apply emails it)
+--what reset: Password-reset link for ONE account (prints URL; --apply emails it)
 --dry-run: Print what would be sent (default)
 --apply: Actually send emails via SMTP
 """
@@ -227,13 +229,65 @@ def notify_owner_link(dry_run: bool = True, db_path=None):
         conn.close()
 
 
+def notify_reset(dry_run: bool = True, email: str = None, db_path=None):
+    """Password-reset fallback (2026-09-20): issue a reset link for ONE account.
+
+    This is the documented local fallback for when the deployment's SMTP
+    path cannot deliver (e.g. no SMTP_* configured): the dry-run default
+    prints the single-use reset URL so first sign-in is never blocked on
+    email deliverability. Each invocation mints a fresh token and
+    invalidates the account's previous one (one active token per account,
+    30-minute expiry, consumed on use).
+
+    ``email`` is the account's sign-in email. ``db_path`` defaults to the
+    prod DB (whitelist_db default); tests pass an explicit tmp DB.
+    """
+    if not email:
+        print("[ERROR] --what reset requires --email <address>")
+        sys.exit(1)
+    base_url = wl_env.get_secret("BASE_URL") or "https://whitelist.app"
+
+    conn = whitelist_db.wl_connect(db_path)
+    try:
+        # Idempotent: a fresh/empty DB file must not crash the fallback with
+        # 'no such table' — boot to the current schema first.
+        whitelist_db.wl_init(conn)
+        profile = whitelist_db.get_profile_by_email(conn, email)
+        if not profile:
+            print(f"[ERROR] No account with email '{email}' — no reset link issued.")
+            sys.exit(1)
+        raw = whitelist_db.create_password_reset_token(conn, profile["id"])
+        link = f"{base_url}/reset-password/{raw}"
+
+        if dry_run:
+            print("[DRY-RUN] Password reset link (single-use, expires in 30 minutes):")
+            print(f"  {link}")
+            return
+
+        body = (
+            "Hi,\n\n"
+            "A password reset was requested for your RelMgr account.\n\n"
+            f"Set a new password here:\n\n{link}\n\n"
+            "This link expires in 30 minutes and can be used once.\n"
+        )
+        send_email(email, "RelMgr: reset your password", body)
+        print(f"[OK] Sent reset link to {email}")
+    finally:
+        conn.close()
+
+
 def main():
     parser = argparse.ArgumentParser(description="Whitelist notify script")
     parser.add_argument(
         "--what",
-        choices=["verify", "requests", "owner-link"],
+        choices=["verify", "requests", "owner-link", "reset"],
         required=True,
         help="What to notify about",
+    )
+    parser.add_argument(
+        "--email",
+        default=None,
+        help="Account email (required for --what reset)",
     )
     parser.add_argument(
         "--apply",
@@ -248,6 +302,8 @@ def main():
         notify_requests(dry_run=not args.apply)
     elif args.what == "owner-link":
         notify_owner_link(dry_run=not args.apply)
+    elif args.what == "reset":
+        notify_reset(dry_run=not args.apply, email=args.email)
 
 
 if __name__ == "__main__":
