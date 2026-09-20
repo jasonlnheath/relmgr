@@ -1,0 +1,14 @@
+services:
+  relmgr:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8099:8099"
+    volumes:
+      # Mount the live contacts.db from the host — never bake data into the image.
+      - ./contacts.db:/app/contacts.db
+    environment:
+      - RELMGR_DB_PATH=/app/contacts.db
+      # Add WHITELIST_SECRET and other secrets via env_file or docker secrets.
+    restart: unless-stopped
