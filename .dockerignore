@@ -1,0 +1,10 @@
+.git
+__pycache__
+*.db
+.pytest_cache
+.venv
+*.db-shm
+*.db-wal
+uploads/
+lab/
+scratch_*

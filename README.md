@@ -34,6 +34,50 @@ python cli.py dedup
 python cli.py export -o exports/contacts.vcf
 ```
 
+## Docker
+
+Run the whitelist service in a container — same contract as the native service
+(`uvicorn app:app --host 0.0.0.0 --port 8099`), but fully self-contained.
+
+```bash
+# Build
+ docker build -t relmgr .
+
+# Run (contacts.db mounted from host)
+ docker compose up
+```
+
+The database file lives on the host and is bind-mounted into the container;
+rebuilding the image never touches the data.
+
+### Systemd unit (switching from native to container)
+
+To run the container via systemd instead of the native venv service, create
+`/etc/systemd/system/relmgr.service`:
+
+```ini
+[Unit]
+Description=RelMgr Whitelist Service
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/path/to/relmgr
+ExecStart=/usr/bin/docker compose up
+Restart=unless-stopped
+Environment=RELMGR_DB_PATH=/app/contacts.db
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Then:
+
+```bash
+systemctl daemon-reload
+systemctl enable --now relmgr.service
+```
+
 ## Configuration
 
 Edit `config.py` to enable/disable data sources:
