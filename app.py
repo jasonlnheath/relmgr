@@ -25,6 +25,7 @@ from jinja2 import pass_context
 import whitelist_db
 import wl_tokens
 import wl_env
+import mailer
 
 _NOW_FMT = "%Y-%m-%dT%H:%M:%SZ"
 
@@ -277,6 +278,56 @@ def _decision_outcome(conn, jinja, request, grant_id, decision,
         decision=result["decision"]))
 
 
+def _owner_email_for(conn, owner_profile_id: int) -> str:
+    """First email field on a profile ('' when it has none)."""
+    row = conn.execute(
+        """SELECT field_value FROM profile_fields
+           WHERE profile_id = ? AND field_type = 'email'
+           ORDER BY id LIMIT 1""",
+        (owner_profile_id,),
+    ).fetchone()
+    return row["field_value"] if row else ""
+
+
+def _send_connection_request_email(db_path: Path, grant_id: str) -> None:
+    """Email push half of the connection-request two-layer model
+    (2026-09-20): the in-app notification row is the source of truth and
+    is already committed; this adds the owner's email with a 7-day
+    decision link (the same /a/{token} grant_review view the digest
+    mails use). Runs as a BackgroundTask so a slow/down SMTP server
+    never blocks the public request endpoint; failures are logged,
+    never raised.
+    """
+    conn = whitelist_db.wl_connect(db_path)
+    try:
+        grant = whitelist_db.get_grant(conn, grant_id)
+        if not grant:
+            return
+        owner_id = grant.get("owner_id") or grant["profile_id"]
+        owner_email = _owner_email_for(conn, owner_id)
+    finally:
+        conn.close()
+    if not owner_email:
+        print(f"[WARN] No email field on owner profile {owner_id}; "
+              f"connection-request email skipped for grant {grant_id}",
+              file=sys.stderr)
+        return
+
+    who = grant.get("requester_name") or grant["requester_email"]
+    token = wl_tokens.make_token(
+        _get_secret(), "grant_review", grant_id, expires_days=7)
+    link = f"{mailer.app_base_url()}/a/{token}"
+    body = (
+        "Hi,\n\n"
+        f"New connection request on RelMgr from {who} "
+        f"({grant['requester_email']}).\n\n"
+        f"Review and decide here:\n\n{link}\n\n"
+        "This link expires in 7 days. You can also decide from your "
+        "dashboard notifications.\n"
+    )
+    mailer.send_email(owner_email, "RelMgr: new connection request", body)
+
+
 def create_app(db_path: Path = None) -> FastAPI:
     """Create and configure the FastAPI application.
 
@@ -429,9 +480,10 @@ def create_app(db_path: Path = None) -> FastAPI:
     # ============================================================
 
     def _send_password_reset_email(to_addr: str, reset_url: str) -> bool:
-        """Deliver the reset email through the app's existing notify path
-        (scripts/notify.py send_email — same SMTP env contract as the
-        quarterly/owner-link mail: SMTP_HOST/PORT/USER/PASS + BASE_URL).
+        """Deliver the reset email through the app's mail layer:
+        scripts/notify.send_email -> mailer.send_email (SMTP_HOST/PORT
+        defaults smtp.gmail.com:587 STARTTLS / 465 SSL; SMTP_USER/SMTP_PASS
+        from env or .env; SMTP_FROM/SMTP_REPLY_TO; see .env.example).
 
         Returns False on ANY delivery failure (unconfigured SMTP, refused
         connection, or notify's sys.exit(1) on missing credentials — hence
@@ -485,9 +537,7 @@ def create_app(db_path: Path = None) -> FastAPI:
         background = None
         if profile:
             background = BackgroundTask(
-                _issue_and_send_reset, path, email,
-                wl_env.get_secret("BASE_URL")
-                or str(request.base_url).rstrip("/"))
+                _issue_and_send_reset, path, email, mailer.app_base_url())
 
         # Same response whether or not the email exists — no enumeration.
         return HTMLResponse(jinja.get_template("forgot_password.html").render(
@@ -657,11 +707,24 @@ def create_app(db_path: Path = None) -> FastAPI:
             if not profile:
                 return HTMLResponse("Profile not found", status_code=404)
             grant_id = whitelist_db.create_grant(conn, profile["id"], email, name, profile.get("owner_id"))
+            # Two-layer notification (2026-09-20): the in-app row is the
+            # source of truth and commits here; the email is only the push
+            # (BackgroundTask below). dedupe_key collapses re-POSTs of a
+            # still-pending grant to the same single row.
+            grant = whitelist_db.get_grant(conn, grant_id)
+            owner_id = grant["owner_id"] or profile["id"]
+            whitelist_db.create_notification(
+                conn, owner_id, "connection_request",
+                title=f"Connection request from {name or email}",
+                grant_id=grant_id,
+                dedupe_key=f"grant:{grant_id}")
         finally:
             conn.close()
 
         return HTMLResponse(jinja.get_template("request_success.html").render(
-            request=request, profile=profile, grant_id=grant_id))
+            request=request, profile=profile, grant_id=grant_id),
+            background=BackgroundTask(
+                _send_connection_request_email, path, grant_id))
 
     @application.post("/p/{handle}/forward")
     async def forward_card(request: Request, handle: str):
@@ -698,12 +761,25 @@ def create_app(db_path: Path = None) -> FastAPI:
                 conn, profile["id"],
                 forwarder_email, forwarder_name,
                 recipient_email, recipient_name)
+
+            # Two-layer notification for the forward, same as a direct
+            # request: in-app row now, email push after the response.
+            grant = whitelist_db.get_grant(conn, grant_id)
+            owner_id = grant["owner_id"] or profile["id"]
+            whitelist_db.create_notification(
+                conn, owner_id, "forward",
+                title=(f"Card forwarded by {forwarder_name or forwarder_email} "
+                       f"to {recipient_name or recipient_email}"),
+                grant_id=grant_id,
+                dedupe_key=f"grant:{grant_id}")
         finally:
             conn.close()
 
         return HTMLResponse(jinja.get_template("forward_success.html").render(
             request=request, profile=profile, grant_id=grant_id,
-            recipient_email=recipient_email))
+            recipient_email=recipient_email),
+            background=BackgroundTask(
+                _send_connection_request_email, path, grant_id))
 
     @application.get("/a/{token}", response_class=HTMLResponse)
     async def admin_link(request: Request, token: str):
@@ -841,6 +917,13 @@ def create_app(db_path: Path = None) -> FastAPI:
                 (profile_id,),
             ).fetchone()[0]
 
+            # Notification center (2026-09-20): raise the quarterly prompt
+            # (idempotent per owner+quarter via dedupe key) and read the
+            # unread badge count for the dashboard header.
+            whitelist_db.sync_quarterly_notifications(conn, profile_id)
+            unread_notifications = whitelist_db.unread_notification_count(
+                conn, profile_id)
+
             # Unified row list for single-surface contact list (round-2)
             all_rows = rows
             total_contacts = total_rows
@@ -882,6 +965,7 @@ def create_app(db_path: Path = None) -> FastAPI:
                 total_rows=total_rows,
                 total_contacts=total_contacts,
                 denied_count=denied_count,
+                unread_notifications=unread_notifications,
                 days_since=days_since,
                 days_until=days_until,
             ))
@@ -959,6 +1043,64 @@ def create_app(db_path: Path = None) -> FastAPI:
             ))
         finally:
             conn.close()
+
+    # ------------------------------------------------------------------ Notification center (2026-09-20)
+    # The in-app center is the source of truth; email is only the push.
+    @application.get("/owner/{token}/notifications", response_class=HTMLResponse)
+    async def owner_notifications(request: Request, token: str):
+        conn = whitelist_db.wl_connect(path)
+        try:
+            result = _resolve_owner(conn, request, token, _get_secret())
+            if result[0] is None and result[2] is None:
+                return HTMLResponse("Invalid or expired link", status_code=403)
+            if result[2]:
+                return RedirectResponse(url=f"/owner/{result[2]}")
+            profile_id = result[0]
+            notifications = whitelist_db.list_notifications(conn, profile_id)
+            unread_notifications = whitelist_db.unread_notification_count(
+                conn, profile_id)
+        finally:
+            conn.close()
+        return HTMLResponse(jinja.get_template("notifications.html").render(
+            request=request,
+            notifications=notifications,
+            unread_notifications=unread_notifications,
+            token=token,
+            days_since=days_since,
+        ))
+
+    @application.post("/owner/{token}/notifications/read-all")
+    async def owner_notifications_read_all(request: Request, token: str):
+        conn = whitelist_db.wl_connect(path)
+        try:
+            result = _resolve_owner(conn, request, token, _get_secret())
+            if result[0] is None and result[2] is None:
+                return HTMLResponse("Invalid or expired link", status_code=403)
+            if result[2]:
+                return RedirectResponse(url=f"/owner/{result[2]}")
+            profile_id = result[0]
+            whitelist_db.mark_all_notifications_read(conn, profile_id)
+        finally:
+            conn.close()
+        # 303 See Other: the browser must follow with GET.
+        return RedirectResponse(url=f"/owner/{token}/notifications", status_code=303)
+
+    @application.post("/owner/{token}/notifications/{notification_id}/read")
+    async def owner_notification_read(request: Request, token: str, notification_id: int):
+        conn = whitelist_db.wl_connect(path)
+        try:
+            result = _resolve_owner(conn, request, token, _get_secret())
+            if result[0] is None and result[2] is None:
+                return HTMLResponse("Invalid or expired link", status_code=403)
+            if result[2]:
+                return RedirectResponse(url=f"/owner/{result[2]}")
+            profile_id = result[0]
+            # Owner-scoped: a foreign/unknown id is a silent no-op.
+            whitelist_db.mark_notification_read(
+                conn, profile_id, notification_id)
+        finally:
+            conn.close()
+        return RedirectResponse(url=f"/owner/{token}/notifications", status_code=303)
 
     # ------------------------------------------------------------------ Manage access (P5-T3)
     @application.post("/owner/{token}/access", response_class=HTMLResponse)
@@ -1062,9 +1204,9 @@ def create_app(db_path: Path = None) -> FastAPI:
             # template reads profile.bio for BOTH textarea and header.
             profile = {**profile, "bio": bio_override}
             bio = bio_override
-        # Resolve BASE_URL for the share-link template (defaults to the
-        # prod placeholder — never fails even when no env is set).
-        base_url = wl_env.get_secret("BASE_URL") or "https://whitelist.app"
+        # Resolve BASE_URL for the share-link template (config-driven:
+        # APP_BASE_URL > legacy BASE_URL > LAN default, never fails).
+        base_url = mailer.app_base_url()
         return HTMLResponse(jinja.get_template("my_profile.html").render(
             request=request,
             profile=profile,
@@ -1540,7 +1682,7 @@ def create_app(db_path: Path = None) -> FastAPI:
             box_size=8,
             border=4,
         )
-        base_url = wl_env.get_secret("BASE_URL") or "https://whitelist.app"
+        base_url = mailer.app_base_url()
         qr.add_data(f"{base_url}/p/{handle}")
         qr.make(fit=True)
         img = qr.make_image(fill_color="black", back_color="white")

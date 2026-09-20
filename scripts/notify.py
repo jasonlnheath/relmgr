@@ -18,9 +18,7 @@ Usage:
 import argparse
 import datetime
 import os
-import smtplib
 import sys
-from email.mime.text import MIMEText
 from pathlib import Path
 from typing import Optional
 
@@ -28,33 +26,28 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import whitelist_db
 import wl_tokens
 import wl_env
+import mailer
 
 SMTP_ENV_KEYS = ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS"]
 
 
 def send_email(to_addr: str, subject: str, body: str) -> None:
-    """Send a plain-text email via SMTP."""
-    host = wl_env.get_secret("SMTP_HOST")
-    port_str = wl_env.get_secret("SMTP_PORT")
-    user = wl_env.get_secret("SMTP_USER")
-    password = wl_env.get_secret("SMTP_PASS")
-    base_url = wl_env.get_secret("BASE_URL") or "https://whitelist.app"
+    """Send a plain-text email through the mailer layer (mailer.py).
 
-    if not all([host, port_str, user, password]):
-        print("[ERROR] SMTP credentials not configured (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS)")
+    ALL outbound mail — reset, quarterly, verify, owner-link, connection
+    requests — resolves its SMTP settings there: SMTP_HOST/PORT (defaults
+    smtp.gmail.com:587 STARTTLS; 465 = SSL), SMTP_USER/SMTP_PASS (required,
+    from env or .env — never committed), SMTP_FROM/SMTP_REPLY_TO. See
+    .env.example for the documented placeholder block.
+
+    Keeps the CLI contract: unconfigured or failed delivery exits 1 (the
+    app's reset path catches SystemExit and degrades gracefully).
+    """
+    if not mailer.send_email(to_addr, subject, body):
+        print("[ERROR] SMTP not configured or delivery failed "
+              "(SMTP_USER, SMTP_PASS; see .env.example)")
         print("        Set them in .env or environment variables.")
         sys.exit(1)
-
-    port = int(port_str)
-    msg = MIMEText(body)
-    msg["Subject"] = subject
-    msg["From"] = user
-    msg["To"] = to_addr
-
-    with smtplib.SMTP(host, port) as server:
-        server.starttls()
-        server.login(user, password)
-        server.sendmail(user, [to_addr], msg.as_string())
 
 
 def _owner_email(profile) -> Optional[str]:
@@ -86,7 +79,7 @@ def notify_verify(dry_run: bool = True, db_path=None):
                 str(profile["id"]),
                 expires_days=7,
             )
-            link = f"{wl_env.get_secret('BASE_URL') or 'https://whitelist.app'}/verify/{token}"
+            link = f"{mailer.app_base_url()}/verify/{token}"
 
             if dry_run:
                 print(f"[DRY-RUN] Would send verify reminder to {profile['handle']}: {link}")
@@ -133,7 +126,7 @@ def notify_requests(dry_run: bool = True, db_path=None):
                 grant["id"],
                 expires_days=7,
             )
-            link = f"{wl_env.get_secret('BASE_URL') or 'https://whitelist.app'}/a/{token}"
+            link = f"{mailer.app_base_url()}/a/{token}"
 
             owner_email = _owner_email(profile)
 
@@ -188,7 +181,7 @@ def notify_owner_link(dry_run: bool = True, db_path=None):
     ``db_path`` defaults to the prod DB (whitelist_db default); tests must
     pass an explicit copy — never point this at live data with --apply.
     """
-    base_url = wl_env.get_secret("BASE_URL") or "https://whitelist.app"
+    base_url = mailer.app_base_url()
 
     conn = whitelist_db.wl_connect(db_path)
     try:
@@ -245,7 +238,7 @@ def notify_reset(dry_run: bool = True, email: str = None, db_path=None):
     if not email:
         print("[ERROR] --what reset requires --email <address>")
         sys.exit(1)
-    base_url = wl_env.get_secret("BASE_URL") or "https://whitelist.app"
+    base_url = mailer.app_base_url()
 
     conn = whitelist_db.wl_connect(db_path)
     try:

@@ -3,15 +3,23 @@
 
 {% block content %}
 <div class="max-w-2xl mx-auto py-8 px-4">
-    {# Centered header with count + sign out #}
+    {# Centered header with count + notification center + sign out #}
     <div class="flex items-center justify-between mb-6">
         <div>
             <h1 class="wl-heading wl-heading-md">Contacts</h1>
             <p class="wl-text-sub text-sm mt-1">{{ total_contacts }} contacts</p>
         </div>
-        <form method="POST" action="/signout">
-            <button type="submit" class="wl-btn-ink text-xs py-1 px-3 rounded-lg">Sign out</button>
-        </form>
+        <div class="flex items-center gap-2">
+            {# Notification center (2026-09-20): unread badge on the dashboard #}
+            <a href="/owner/{{ token }}/notifications"
+               class="wl-btn-ink text-xs py-1 px-3 rounded-lg relative">
+                Notifications{% if unread_notifications %}
+                <span class="inline-flex items-center justify-center ml-1 px-1.5 py-0.5 rounded-full text-[10px] wl-badge-amber">{{ unread_notifications }}</span>{% endif %}
+            </a>
+            <form method="POST" action="/signout">
+                <button type="submit" class="wl-btn-ink text-xs py-1 px-3 rounded-lg">Sign out</button>
+            </form>
+        </div>
     </div>
 
     {# Search bar #}

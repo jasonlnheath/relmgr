@@ -11,4 +11,7 @@ services:
     environment:
       - RELMGR_DB_PATH=/app/contacts.db
       # Add WHITELIST_SECRET and other secrets via env_file or docker secrets.
+      # Mail + link config (SMTP_*, APP_BASE_URL) can be loaded by uncommenting:
+      # env_file:
+      #   - .env
     restart: unless-stopped

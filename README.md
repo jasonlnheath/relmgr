@@ -38,8 +38,23 @@ python cli.py export -o exports/contacts.vcf
 
 `/signin` links to `/forgot-password`: enter your email and a single-use reset
 link (valid 30 minutes, one active link per account) is emailed through the
-same SMTP path as the other notifications (`SMTP_HOST`/`SMTP_PORT`/
-`SMTP_USER`/`SMTP_PASS`).
+outbound mail layer (`mailer.py`).
+
+## Outbound mail + links (mailer.py)
+
+All email (password resets, connection requests, quarterly digest,
+verify/owner-link) resolves its SMTP settings from env vars or `.env`
+(never hardcoded, credentials never committed — see `.env.example`):
+
+| Setting | Default | Notes |
+| --- | --- | --- |
+| `SMTP_HOST` | `smtp.gmail.com` | |
+| `SMTP_PORT` | `587` | STARTTLS; `465` switches to implicit SSL |
+| `SMTP_USER` | — | required |
+| `SMTP_PASS` | — | required; Gmail App Password, never committed |
+| `SMTP_FROM` | `jasonlnheath@gmail.com` | 2026-09-20 ruling; switch domains by editing config only |
+| `SMTP_REPLY_TO` | — | optional |
+| `APP_BASE_URL` | `http://192.168.1.200:8099` | base for reset links, decision views, QR codes; legacy `BASE_URL` still honored |
 
 If email cannot actually deliver from a deployment, the CLI fallback prints
 the reset URL directly so first sign-in is never blocked:
@@ -51,6 +66,14 @@ python3 scripts/notify.py --what reset --email you@example.com
 # Or send it by email once SMTP works
 python3 scripts/notify.py --what reset --email you@example.com --apply
 ```
+
+## Notification center
+
+The signed-in dashboard carries an unread badge; the notification list lives
+at `/owner/{token}/notifications`. Connection requests and card forwards each
+raise an in-app row (the source of truth) and — when SMTP is configured — an
+email push with a 7-day decision link. Quarterly prompts appear once per
+quarter when grey contacts are awaiting a decision.
 
 ## Docker
 
