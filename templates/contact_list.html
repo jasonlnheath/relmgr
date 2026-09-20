@@ -3,10 +3,15 @@
 
 {% block content %}
 <div class="max-w-2xl mx-auto py-8 px-4">
-    {# Centered header with count #}
-    <div class="text-center mb-6">
-        <h1 class="wl-heading wl-heading-md">Contacts</h1>
-        <p class="wl-text-sub text-sm mt-1">{{ total_contacts }} contacts</p>
+    {# Centered header with count + sign out #}
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="wl-heading wl-heading-md">Contacts</h1>
+            <p class="wl-text-sub text-sm mt-1">{{ total_contacts }} contacts</p>
+        </div>
+        <form method="POST" action="/signout">
+            <button type="submit" class="wl-btn-ink text-xs py-1 px-3 rounded-lg">Sign out</button>
+        </form>
     </div>
 
     {# Search bar #}

@@ -1,7 +1,10 @@
 """Whitelist database layer — profiles, fields, access grants."""
 
+import hashlib
+import hmac
 import json
 import re
+import secrets
 import sqlite3
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -9,6 +12,49 @@ from pathlib import Path
 from typing import Optional
 
 _ISO_Z = "%Y-%m-%dT%H:%M:%SZ"
+
+# Password hashing — pbkdf2-hmac-sha256 (no external deps).
+# Format: pbkdf2_sha256$<rounds>$<salt_hex>$<hash_hex>
+_PWHASH_ROUNDS = 260_000  # OWASP 2023 recommendation for SHA-256
+
+
+def hash_password(plain: str) -> str:
+    """Hash a plaintext password. Returns a pbkdf2-hmac-sha256 string."""
+    salt = secrets.token_bytes(16)
+    dk = hashlib.pbkdf2_hmac("sha256", plain.encode("utf-8"), salt, _PWHASH_ROUNDS)
+    salt_hex = salt.hex()
+    hash_hex = dk.hex()
+    return f"pbkdf2_sha256${_PWHASH_ROUNDS}${salt_hex}${hash_hex}"
+
+
+def verify_password(plain: str, stored_hash: str) -> bool:
+    """Verify a plaintext password against a stored hash. Timing-safe."""
+    try:
+        prefix, rounds_s, salt_hex, hash_hex = stored_hash.split("$")
+        if prefix != "pbkdf2_sha256":
+            return False
+        rounds = int(rounds_s)
+        salt = bytes.fromhex(salt_hex)
+        dk = hashlib.pbkdf2_hmac("sha256", plain.encode("utf-8"), salt, rounds)
+        return hmac.compare_digest(dk.hex(), hash_hex)
+    except (ValueError, AttributeError):
+        return False
+
+
+_DUMMY_HASH_CACHE: Optional[str] = None
+
+
+def _dummy_password_hash() -> str:
+    """A valid-format hash of random bytes, cached (F8 timing hardening).
+
+    Burned on unknown-email sign-in so the miss path costs the same pbkdf2
+    work as a real verify — remote email enumeration via response timing
+    must not be possible.
+    """
+    global _DUMMY_HASH_CACHE
+    if _DUMMY_HASH_CACHE is None:
+        _DUMMY_HASH_CACHE = hash_password(secrets.token_hex(16))
+    return _DUMMY_HASH_CACHE
 
 
 def _now_iso() -> str:
@@ -169,7 +215,9 @@ def wl_init(conn: sqlite3.Connection) -> None:
     # so the action vocabulary can never drift between wl_init / ensure / heal.
     conn.executescript(_grant_logs_ddl())
     _seed_builtin_contexts(conn)
-    conn.commit()
+    # Phase B: per-owner isolation (profiles + access_grants)
+    ensure_owner_auth_schema(conn)
+    ensure_access_grants_owner(conn)
 
 
 # ============================================================
@@ -282,8 +330,101 @@ def _seed_title_company_fields(conn: sqlite3.Connection) -> None:
 
 
 # ============================================================
+# Owner auth (sign-in / per-user isolation)
+# ============================================================
+
+
+def create_owner_profile(
+    conn: sqlite3.Connection,
+    handle: str,
+    display_name: str,
+    email: str,
+    password: str,
+    company: str = None,
+    title: str = None,
+) -> dict:
+    """Create a new owner profile with authentication credentials.
+
+    Returns the profile dict (with fields attached).
+    Raises ValueError on duplicate handle or email.
+    """
+    # Check for duplicate handle
+    existing = conn.execute(
+        "SELECT id FROM profiles WHERE handle = ?", (handle,)
+    ).fetchone()
+    if existing:
+        raise ValueError("Handle already taken.")
+
+    # Check for duplicate email
+    existing_email = conn.execute(
+        "SELECT profile_id FROM profile_fields WHERE field_type = 'email' AND LOWER(field_value) = LOWER(?)",
+        (email,),
+    ).fetchone()
+    if existing_email:
+        raise ValueError("Email already registered.")
+
+    now = _now_iso()
+    pw_hash = hash_password(password)
+
+    conn.execute(
+        """INSERT INTO profiles (handle, display_name, company, title, verified_at,
+                                created_at, updated_at, password_hash, owner_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (handle, display_name, company, title, None, now, now, pw_hash, None),
+    )
+    profile_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+    # Add email field (visibility: private — only used for auth lookup,
+    # never rendered publicly; CHECK allows public/granted/private).
+    conn.execute(
+        """INSERT INTO profile_fields (profile_id, field_type, field_value, visibility)
+           VALUES (?, 'email', ?, 'private')""",
+        (profile_id, email),
+    )
+
+    # Set owner_id = self (per-owner isolation)
+    conn.execute(
+        "UPDATE profiles SET owner_id = ? WHERE id = ?", (profile_id, profile_id)
+    )
+
+    conn.commit()
+    return get_profile_by_id(conn, profile_id)
+
+
+def resolve_owner_by_credentials(
+    conn: sqlite3.Connection,
+    email: str,
+    password: str,
+) -> Optional[dict]:
+    """Look up a profile by email + password.
+
+    Returns the profile dict (with fields) on success, None on failure.
+    Uses a constant-time comparison to prevent timing attacks.
+    """
+    row = conn.execute(
+        """SELECT p.* FROM profiles p
+           JOIN profile_fields f ON f.profile_id = p.id
+           WHERE f.field_type = 'email'
+             AND LOWER(f.field_value) = LOWER(?)
+             AND p.password_hash IS NOT NULL
+           LIMIT 1""",
+        (email,),
+    ).fetchone()
+    if row is None:
+        # Unknown email: burn the same pbkdf2 work as a real verify so the
+        # miss path is not a ~30x-faster email-enumeration oracle (review F8).
+        verify_password(password, _dummy_password_hash())
+        return None
+    profile = _fetch_profile(conn, row)
+    if not verify_password(password, profile["password_hash"]):
+        return None
+    return profile
+
+
+# ============================================================
 # Profile seeding
 # ============================================================
+
 
 def seed_profile(conn: sqlite3.Connection, data: dict) -> None:
     """Upsert a whitelist profile and its fields from a canonical-JSON-like dict.
@@ -492,6 +633,7 @@ def create_grant(
     profile_id: int,
     requester_email: str,
     requester_name: str,
+    owner_id: Optional[int] = None,
 ) -> str:
     """Create a pending access grant. Returns grant UUID.
 
@@ -499,6 +641,9 @@ def create_grant(
     or granted-and-not-yet-expired). A denied or expired grant is history, not
     a life ban: re-requesting after one inserts a fresh pending row instead of
     silently returning the dead grant id.
+
+    owner_id: the profile that owns this grant (for per-owner isolation).
+    If None, defaults to profile_id.
     """
     row = conn.execute(
         f"""SELECT id FROM access_grants
@@ -514,10 +659,12 @@ def create_grant(
         return row[0]
 
     grant_id = str(uuid.uuid4())
+    if owner_id is None:
+        owner_id = profile_id
     conn.execute(
-        """INSERT INTO access_grants (id, profile_id, requester_email, requester_name, status)
-           VALUES (?, ?, ?, ?, 'pending')""",
-        (grant_id, profile_id, requester_email, requester_name),
+        """INSERT INTO access_grants (id, profile_id, requester_email, requester_name, status, owner_id)
+           VALUES (?, ?, ?, ?, 'pending', ?)""",
+        (grant_id, profile_id, requester_email, requester_name, owner_id),
     )
     # Audit row in the SAME transaction as the insert — commit both together.
     _log_action(conn, grant_id, profile_id, "created")
@@ -1432,8 +1579,21 @@ def bulk_apply(conn: sqlite3.Connection, grant_ids, decision: str,
 # ============================================================
 
 
+def _contacts_has_owner_col(conn: sqlite3.Connection) -> bool:
+    """True when the contacts table has the owner_profile_id column.
 
-def find_contact_by_email(conn: sqlite3.Connection, email: str) -> Optional[dict]:
+    Production DBs get it from ensure_contacts_owner at boot; minimal test
+    fixtures that build only the base schema keep working unscoped.
+    """
+    cols = [r["name"] for r in conn.execute("PRAGMA table_info(contacts)").fetchall()]
+    return "owner_profile_id" in cols
+
+
+def find_contact_by_email(
+    conn: sqlite3.Connection,
+    email: str,
+    owner_profile_id: int | None = None,
+) -> Optional[dict]:
     """Find a contacts row by exact email match (case-insensitive).
 
     contacts.emails stores JSON arrays like:
@@ -1448,15 +1608,29 @@ def find_contact_by_email(conn: sqlite3.Connection, email: str) -> Optional[dict
     - No false positives: alice@example.com does NOT match
       alice@example.com.evil (exact substring only, no LIKE)
     - Read-only: never writes to the database
+    - owner_profile_id: when set, only contacts owned by this profile are
+      candidates (per-owner isolation, ruling 2A — merge writes must never
+      touch another owner's address book). None = unscoped (pre-migration
+      fixtures / read-only test digests only; production callers pass it).
     """
     if not email or not email.strip():
         return None
     email = email.strip().lower()
 
-    # Scan live contacts rows, parse JSON, do exact case-insensitive match
-    rows = conn.execute(
-        "SELECT * FROM contacts WHERE is_duplicate = 0 OR is_duplicate IS NULL"
-    ).fetchall()
+    # Scan live contacts rows, parse JSON, do exact case-insensitive match.
+    # Owner-scoped when an owner is given and the schema carries the owner
+    # column (boot migration adds it to every real DB that has contacts;
+    # minimal fixtures that predate it keep legacy unscoped behaviour).
+    if owner_profile_id is not None and _contacts_has_owner_col(conn):
+        rows = conn.execute(
+            "SELECT * FROM contacts "
+            "WHERE (is_duplicate = 0 OR is_duplicate IS NULL) AND owner_profile_id = ?",
+            (owner_profile_id,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM contacts WHERE is_duplicate = 0 OR is_duplicate IS NULL"
+        ).fetchall()
     for row in rows:
         d = dict(row)  # sqlite3.Row doesn't have .get()
         emails_raw = d.get("emails", "[]")
@@ -1513,8 +1687,9 @@ def merge_requester_into_contacts(conn: sqlite3.Connection, grant: dict) -> Opti
     now = _now_iso()
     wl_source = {"source": "whitelist-merge", "source_id": "grant"}
 
-    # Try to find existing contact by email
-    existing = find_contact_by_email(conn, email)
+    # Try to find existing contact by email — owner-scoped: the merge must
+    # only ever touch the granting owner's own address book (ruling 2A).
+    existing = find_contact_by_email(conn, email, owner_profile_id=grant.get("owner_id"))
 
     if existing:
         # Overwrite the name (Whitelist wins); merge everything else.
@@ -1556,24 +1731,44 @@ def merge_requester_into_contacts(conn: sqlite3.Connection, grant: dict) -> Opti
             "SELECT * FROM contacts WHERE id = ?", (existing["id"],)
         ).fetchone())
     else:
-        # Create new contact
+        # Create new contact — owned by the granting owner (ruling 2A).
         cid = str(uuid.uuid4())
-        conn.execute(
-            """INSERT INTO contacts
-               (id, normalized_name, emails, phones, organizations, sources,
-                created_at, updated_at, is_duplicate, merged_into)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, NULL)""",
-            (
-                cid,
-                name or email.split("@")[0],
-                json.dumps([{"address": email, "type": "primary"}]),
-                "[]",
-                "[]",
-                json.dumps([{"source": "whitelist-merge", "source_id": "grant"}]),
-                now,
-                now,
-            ),
-        )
+        owner_id = grant.get("owner_id")
+        if _contacts_has_owner_col(conn) and owner_id is not None:
+            conn.execute(
+                """INSERT INTO contacts
+                   (id, normalized_name, emails, phones, organizations, sources,
+                    created_at, updated_at, is_duplicate, merged_into, owner_profile_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, ?)""",
+                (
+                    cid,
+                    name or email.split("@")[0],
+                    json.dumps([{"address": email, "type": "primary"}]),
+                    "[]",
+                    "[]",
+                    json.dumps([{"source": "whitelist-merge", "source_id": "grant"}]),
+                    now,
+                    now,
+                    owner_id,
+                ),
+            )
+        else:
+            conn.execute(
+                """INSERT INTO contacts
+                   (id, normalized_name, emails, phones, organizations, sources,
+                    created_at, updated_at, is_duplicate, merged_into)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, NULL)""",
+                (
+                    cid,
+                    name or email.split("@")[0],
+                    json.dumps([{"address": email, "type": "primary"}]),
+                    "[]",
+                    "[]",
+                    json.dumps([{"source": "whitelist-merge", "source_id": "grant"}]),
+                    now,
+                    now,
+                ),
+            )
         # Audit row: same commit as state change (profile_id = granting profile)
         _log_action(conn, grant.get("id", ""), grant.get("profile_id", 0), "merged")
         conn.commit()
@@ -1761,11 +1956,21 @@ def set_grant_cards(conn: sqlite3.Connection, grant_id: str,
     if grant is None:
         return None
 
-    # Validate all card_ids exist
+    # Validate all card_ids exist AND belong to the grant's owner (ruling 2A:
+    # cross-owner card attach by ID manipulation must fail, not silently
+    # attach another owner's cards). Validated BEFORE the delete so a
+    # rejection leaves the grant's card set untouched. .get() tolerates
+    # pre-migration fixture schemas whose grants lack the owner_id column.
+    effective_owner = grant.get("owner_id")
+    if effective_owner is None:
+        effective_owner = grant.get("profile_id")
     for cid in card_ids:
-        row = conn.execute("SELECT 1 FROM cards WHERE id = ?", (cid,)).fetchone()
+        row = conn.execute(
+            "SELECT 1 FROM cards WHERE id = ? AND owner_profile_id = ?",
+            (cid, effective_owner),
+        ).fetchone()
         if row is None:
-            raise ValueError(f"card_id {cid} not found")
+            raise ValueError(f"card_id {cid} not found or not owned by this owner")
 
     # Clear existing
     conn.execute("DELETE FROM grant_cards WHERE grant_id = ?", (grant_id,))
@@ -1922,6 +2127,73 @@ def get_forwardings_for_profile(
 # Boot orchestrator — R4(a)
 # ============================================================
 
+def ensure_owner_auth_schema(conn: sqlite3.Connection) -> None:
+    """Add per-owner auth columns to profiles (idempotent).
+
+    Adds:
+      - password_hash TEXT   — pbkdf2-hmac-sha256 hash (nullable; legacy owners are None)
+      - owner_id INTEGER     — self-referencing FK for per-owner isolation
+                               (nullable; defaults to own id for legacy)
+
+    Legacy migration: every existing profile with no owner_id gets
+    owner_id = its own id, so the isolation layer is transparent.
+    """
+    cols = [r["name"] for r in conn.execute("PRAGMA table_info(profiles)").fetchall()]
+    if "password_hash" not in cols:
+        conn.execute("ALTER TABLE profiles ADD COLUMN password_hash TEXT")
+    if "owner_id" not in cols:
+        conn.execute("ALTER TABLE profiles ADD COLUMN owner_id INTEGER REFERENCES profiles(id)")
+        # Legacy migration: every existing profile owns itself
+        conn.execute("UPDATE profiles SET owner_id = id WHERE owner_id IS NULL")
+    conn.commit()
+
+
+def ensure_access_grants_owner(conn: sqlite3.Connection) -> None:
+    """Add owner_id column to access_grants for per-owner isolation.
+
+    Legacy migration: every existing grant gets owner_id from its profile.
+    """
+    cols = [r["name"] for r in conn.execute("PRAGMA table_info(access_grants)").fetchall()]
+    if "owner_id" not in cols:
+        conn.execute("ALTER TABLE access_grants ADD COLUMN owner_id INTEGER REFERENCES profiles(id)")
+        # Legacy migration: every existing grant gets owner_id from its profile
+        conn.execute("""
+            UPDATE access_grants SET owner_id = (
+                SELECT owner_id FROM profiles WHERE profiles.id = access_grants.profile_id
+            )
+            WHERE owner_id IS NULL
+        """)
+    conn.commit()
+
+
+def ensure_contacts_owner(conn: sqlite3.Connection) -> None:
+    """Add owner_profile_id to contacts for per-owner isolation (ruling 2A).
+
+    The contacts table was one global address book; review F1 proved every
+    signed-in owner saw all of it. Legacy migration: existing rows are
+    claimed by the first (legacy owner) profile, so the pre-migration owner
+    keeps their world and no other owner ever sees it. Rows inserted later
+    without an owner (legacy store path) are claimed by the same backfill on
+    the next boot.
+    """
+    if not _table_exists(conn, "contacts"):
+        return  # fresh DB: wl_init does not build contacts (store.init_db does)
+    cols = [r["name"] for r in conn.execute("PRAGMA table_info(contacts)").fetchall()]
+    if "owner_profile_id" not in cols:
+        conn.execute(
+            "ALTER TABLE contacts ADD COLUMN owner_profile_id INTEGER REFERENCES profiles(id)"
+        )
+    conn.execute(
+        """
+        UPDATE contacts SET owner_profile_id = (
+            SELECT MIN(id) FROM profiles
+        )
+        WHERE owner_profile_id IS NULL
+    """
+    )
+    conn.commit()
+
+
 def ensure_whitelist_schema(conn: sqlite3.Connection) -> None:
     """Run every legacy-schema self-heal in THE REQUIRED ORDER. One place to
     touch for future migrations; app boot is a single call. Idempotent.
@@ -1948,11 +2220,14 @@ def ensure_whitelist_schema(conn: sqlite3.Connection) -> None:
     ensure_cards_schema(conn)             # P5 cards tables (depends on profiles/fields)
     ensure_vcard_fields_schema(conn)      # VCard field expansion (field_type + visibility)
     ensure_profile_bio_column(conn)       # Phase A1: profiles.bio
-    ensure_card_photo_column(conn)            # Phase A1: cards.photo_path
+    ensure_card_photo_column(conn)              # Phase A1: cards.photo_path
     ensure_profile_bio_visibility_column(conn)  # Whitelist: bio visibility toggle
-    ensure_card_forwardings(conn)             # Whitelist: trusted forwarding
-    ensure_access_grants_v3(conn)         # quarterly rhythm: quarter_status columns
-    seed_default_cards(conn)              # P5: seed Work/Personal cards
+    ensure_card_forwardings(conn)               # Whitelist: trusted forwarding
+    ensure_access_grants_v3(conn)               # quarterly rhythm: quarter_status columns
+    ensure_owner_auth_schema(conn)              # Phase B: per-owner sign-in auth
+    ensure_access_grants_owner(conn)            # Phase B: access_grants owner_id
+    ensure_contacts_owner(conn)                 # Phase B: contacts owner_profile_id
+    seed_default_cards(conn)                    # P5: seed Work/Personal cards
 
 
 def seed_default_cards(conn: sqlite3.Connection) -> None:
@@ -2206,10 +2481,20 @@ def list_contact_list_rows(
         if email:
             grant_by_email[email] = gd
 
-    # ── 4. Get all contacts (non-duplicate) ──
-    contacts = conn.execute(
-        "SELECT * FROM contacts WHERE is_duplicate = 0 ORDER BY normalized_name"
-    ).fetchall()
+    # ── 4. Get all contacts (non-duplicate) for THIS owner (ruling 2A) ──
+    # Per-owner isolation: each owner sees exactly their own address book.
+    # The owner_profile_id column arrives with ensure_contacts_owner at boot;
+    # minimal pre-migration fixtures without it keep legacy behaviour.
+    if _contacts_has_owner_col(conn):
+        contacts = conn.execute(
+            "SELECT * FROM contacts WHERE is_duplicate = 0 AND owner_profile_id = ? "
+            "ORDER BY normalized_name",
+            (profile_id,),
+        ).fetchall()
+    else:
+        contacts = conn.execute(
+            "SELECT * FROM contacts WHERE is_duplicate = 0 ORDER BY normalized_name"
+        ).fetchall()
 
     # ── 5. Build contact lookup by email ──
     contact_by_email: dict[str, dict] = {}

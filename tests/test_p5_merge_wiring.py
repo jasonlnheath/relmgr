@@ -168,6 +168,9 @@ def test_approve_matching_existing_contact_updates_name_not_duplicates(tmp_path)
     conn.commit()
     before = conn.execute("SELECT COUNT(*) FROM contacts WHERE is_duplicate=0").fetchone()[0]
     gid = _seed_owner_and_grant_on_conn(conn, "matchy@example.com", "Matchy Whitelist")
+    # Boot migration (runs on every real app boot): claims ownerless legacy
+    # contacts for the legacy owner so the owner-scoped merge can find them.
+    whitelist_db.ensure_whitelist_schema(conn)
     whitelist_db.apply_decision(conn, gid, "approve", "90")
     after = conn.execute("SELECT COUNT(*) FROM contacts WHERE is_duplicate=0").fetchone()[0]
 

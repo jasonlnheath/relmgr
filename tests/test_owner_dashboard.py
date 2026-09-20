@@ -47,13 +47,17 @@ def _make_db(tmp_path: Path):
         "verified_at": "2026-08-15",
     })
 
-    # Create a pending grant for dana
+    # Create pending grants for dana (the owner a legacy dashboard link
+    # opens). Ruling 2A: the dashboard shows THIS owner's world only, so all
+    # asserted requesters must be dana's; marcus's requester is asserted
+    # ABSENT below (cross-owner isolation).
     dana = whitelist_db.get_profile(conn, "dana_reyes")
     whitelist_db.create_grant(conn, dana["id"], "requester1@example.com", "Requester One")
+    whitelist_db.create_grant(conn, dana["id"], "requester2@example.com", "Requester Two")
 
-    # Create a pending grant for marcus
+    # marcus's pending request lives in HIS world — never dana's dashboard.
     marcus = whitelist_db.get_profile(conn, "marcus_chen")
-    whitelist_db.create_grant(conn, marcus["id"], "requester2@example.com", "Requester Two")
+    whitelist_db.create_grant(conn, marcus["id"], "foreign@example.com", "Foreign Requester")
 
     conn.close()
     return db
@@ -62,13 +66,13 @@ def _make_db(tmp_path: Path):
 def _owner_token():
     """Generate a valid owner_dashboard token (365-day expiry)."""
     secret = b"test-secret"
-    return wl_tokens.make_token(secret, "owner_dashboard", "owner", expires_days=365)
+    return wl_tokens.make_token(secret, "owner_dashboard", "1", expires_days=365)
 
 
 def _expired_owner_token():
     """Generate an expired owner_dashboard token."""
     secret = b"test-secret"
-    return wl_tokens.make_token(secret, "owner_dashboard", "owner", expires_days=-1)
+    return wl_tokens.make_token(secret, "owner_dashboard", "1", expires_days=-1)
 
 
 def _tampered_token():
@@ -93,6 +97,10 @@ def test_valid_owner_token_shows_pending_requesters(tmp_path):
     assert "requester1@example.com" in html, "Dashboard must show pending requester email"
     assert "Requester Two" in html, "Dashboard must show all pending requesters"
     assert "requester2@example.com" in html
+
+    # Ruling 2A: another profile's pending requesters must NOT leak in.
+    assert "Foreign Requester" not in html, "cross-owner pending grant leaked"
+    assert "foreign@example.com" not in html, "cross-owner pending grant leaked"
 
 
 # ============================================================

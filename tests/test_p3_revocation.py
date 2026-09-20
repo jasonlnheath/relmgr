@@ -191,7 +191,7 @@ def test_owner_revoke_route_revokes_and_confirms(tmp_path):
     gid = _grant_for(db, "mvp@example.com")
     _approve(db, gid, "90")
 
-    owner_token = wl_tokens.make_token(b"test-secret", "owner_dashboard", "owner")
+    owner_token = wl_tokens.make_token(b"test-secret", "owner_dashboard", "1")
     client = TestClient(create_app(db))
     resp = client.post(f"/owner/{owner_token}/revoke",
                        data={"grant_id": gid, "name": "MVP"})
@@ -217,7 +217,7 @@ def test_dashboard_renders_revoke_button_for_active_grant(tmp_path):
     gid = _grant_for(db, "active@example.com")
     _approve(db, gid, "90")
 
-    owner_token = wl_tokens.make_token(b"test-secret", "owner_dashboard", "owner")
+    owner_token = wl_tokens.make_token(b"test-secret", "owner_dashboard", "1")
     client = TestClient(create_app(db))
     resp = client.get(f"/owner/{owner_token}")
     assert resp.status_code == 200

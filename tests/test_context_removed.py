@@ -37,7 +37,7 @@ def _make_db(tmp_path: Path):
 
 
 def _token(db):
-    return wl_tokens.make_token(b"test-secret", "owner_dashboard", "owner")
+    return wl_tokens.make_token(b"test-secret", "owner_dashboard", "1")
 
 
 def test_dashboard_has_no_context_ui(tmp_path):
