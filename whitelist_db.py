@@ -2547,6 +2547,169 @@ def update_card_photo(conn: sqlite3.Connection, card_id: int,
     conn.commit()
 
 
+# The full vCard field set the card editor covers (SPEC.md §Standard contact
+# field set). Shared with the route so the editor form and the save path can
+# never drift apart on which types are conventional.
+CARD_EDITOR_FIELD_TYPES = _VCARD_FIELD_TYPES
+
+
+def save_card_editor(
+    conn: sqlite3.Connection,
+    card_id: int,
+    *,
+    display_name: str | None = None,
+    card_name: str | None = None,
+    field_updates: list[tuple[int, str, str]] | None = None,
+    field_removals: list[int] | None = None,
+    new_fields: list[tuple[str, str, str]] | None = None,
+) -> dict:
+    """Apply the card-editor form: ONE commit for the whole save.
+
+    Mirrors the _log_action convention (state + dependents on a single
+    commit) so a failed save never leaves a half-edited card.
+
+    Args:
+        card_id: the card being edited.
+        display_name: new profiles.display_name (None/empty → unchanged).
+        card_name: new cards.name (None/empty → unchanged).
+        field_updates: (field_id, value, visibility) — value/visibility are
+            applied only when they differ from the stored row.
+        field_removals: field_ids to UNLINK from this card (card_fields row
+            deleted; the profile_fields row survives — cards are lenses on
+            the same field data, unlinking never destroys it).
+        new_fields: (field_type, value, visibility) — created (or reused when
+            the profile already has an identical type+value row) and linked
+            to the card.
+
+    Returns the refreshed card dict.
+
+    Raises ValueError (→ friendly 400 at the route layer):
+        - unknown card
+        - a field_update/removal names a field that doesn't exist or belongs
+          to another profile (IDOR — fail closed)
+        - a value collides with UNIQUE(profile_id, field_type, field_value)
+        - a card_name collides with the owner's other cards
+        - unknown field_type or visibility on a new field
+    """
+    card = get_card_by_id(conn, card_id)
+    if card is None:
+        raise ValueError(f"card_id {card_id} not found")
+    owner_id = card["owner_profile_id"]
+    field_updates = field_updates or []
+    field_removals = field_removals or []
+    new_fields = new_fields or []
+
+    try:
+        # 1. Identity: display_name lives on profiles (name components are
+        #    profile-level, not per-card).
+        if display_name:
+            conn.execute(
+                "UPDATE profiles SET display_name = ?, updated_at = datetime('now') WHERE id = ?",
+                (display_name.strip(), owner_id),
+            )
+
+        # 2. Card rename.
+        if card_name and card_name.strip() and card_name.strip() != card["name"]:
+            name = card_name.strip()
+            clash = conn.execute(
+                "SELECT id FROM cards WHERE owner_profile_id = ? AND name = ? AND id != ?",
+                (owner_id, name, card_id),
+            ).fetchone()
+            if clash is not None:
+                raise ValueError(f"a card named '{name}' already exists")
+            conn.execute(
+                "UPDATE cards SET name = ?, updated_at = datetime('now') WHERE id = ?",
+                (name, card_id),
+            )
+
+        # 3. Removals first so a removal + re-add of the same value in one
+        #    save never trips the UNIQUE constraint mid-flight.
+        for fid in field_removals:
+            row = conn.execute(
+                "SELECT profile_id FROM profile_fields WHERE id = ?", (fid,)
+            ).fetchone()
+            if row is None or row["profile_id"] != owner_id:
+                raise ValueError(f"field_id {fid} not found or not owned by this profile")
+            conn.execute(
+                "DELETE FROM card_fields WHERE card_id = ? AND field_id = ?",
+                (card_id, fid),
+            )
+
+        # 4. Updates to fields already on the card.
+        for fid, value, visibility in field_updates:
+            row = conn.execute(
+                "SELECT profile_id, field_type, field_value, visibility FROM profile_fields WHERE id = ?",
+                (fid,),
+            ).fetchone()
+            if row is None or row["profile_id"] != owner_id:
+                raise ValueError(f"field_id {fid} not found or not owned by this profile")
+            if visibility not in _VCARD_VISIBILITY:
+                raise ValueError(f"invalid visibility '{visibility}'")
+            value = (value or "").strip()
+            if not value:
+                # An emptied value means "no content" — unlink it from the
+                # card rather than storing an empty string.
+                conn.execute(
+                    "DELETE FROM card_fields WHERE card_id = ? AND field_id = ?",
+                    (card_id, fid),
+                )
+                continue
+            if value != row["field_value"]:
+                try:
+                    conn.execute(
+                        "UPDATE profile_fields SET field_value = ?, updated_at = datetime('now') WHERE id = ?",
+                        (value, fid),
+                    )
+                except sqlite3.IntegrityError:
+                    raise ValueError(
+                        f"{row['field_type']} '{value}' is already on this profile"
+                    )
+            if visibility != row["visibility"]:
+                conn.execute(
+                    "UPDATE profile_fields SET visibility = ?, updated_at = datetime('now') WHERE id = ?",
+                    (visibility, fid),
+                )
+
+        # 5. New fields: create (or reuse an identical type+value row) and
+        #    link to the card.
+        for field_type, value, visibility in new_fields:
+            if field_type not in CARD_EDITOR_FIELD_TYPES:
+                raise ValueError(f"invalid field type '{field_type}'")
+            if visibility not in _VCARD_VISIBILITY:
+                raise ValueError(f"invalid visibility '{visibility}'")
+            value = (value or "").strip()
+            if not value:
+                continue  # empty add-row slot — not content
+            existing = conn.execute(
+                "SELECT id FROM profile_fields WHERE profile_id = ? AND field_type = ? AND field_value = ?",
+                (owner_id, field_type, value),
+            ).fetchone()
+            if existing is not None:
+                fid = existing["id"]
+                conn.execute(
+                    "UPDATE profile_fields SET visibility = ?, updated_at = datetime('now') WHERE id = ?",
+                    (visibility, fid),
+                )
+            else:
+                cur = conn.execute(
+                    "INSERT INTO profile_fields (profile_id, field_type, field_value, visibility, created_at, updated_at)"
+                    " VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))",
+                    (owner_id, field_type, value, visibility),
+                )
+                fid = cur.lastrowid
+            conn.execute(
+                "INSERT OR IGNORE INTO card_fields (card_id, field_id) VALUES (?, ?)",
+                (card_id, fid),
+            )
+
+        conn.execute("UPDATE cards SET updated_at = datetime('now') WHERE id = ?", (card_id,))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    return get_card_by_id(conn, card_id)
+
+
 # ============================================================
 # Phase A2: Contact List data layer
 # ============================================================

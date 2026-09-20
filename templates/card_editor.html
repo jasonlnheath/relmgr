@@ -1,0 +1,292 @@
+{% extends "base.html" %}
+{% block title %}Whitelist — Edit {{ card.name }}{% endblock %}
+
+{% block content %}
+{% set placeholders = {
+    'title': 'VP Engineering',
+    'company': 'Acme Inc.',
+    'address': '123 Main St, City, ST 12345',
+    'website': 'https://acme.com',
+    'phone': '+1-555-123-4567',
+    'email': 'jason@example.com',
+    'birthday': '',
+    'note': 'Freeform note'
+} %}
+{% set labels = {
+    'email': 'Emails',
+    'phone': 'Phones',
+    'title': 'Title',
+    'company': 'Company',
+    'address': 'Address',
+    'website': 'Website',
+    'birthday': 'Birthday',
+    'note': 'Note'
+} %}
+
+{# ---- macros ---- #}
+{% macro vis_select(name, current='') %}
+<select name="{{ name }}"
+        class="text-xs border border-gray-600 rounded px-1 py-1 bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]"
+        title="Who can see this field: Public, granted contacts, or only you">
+    <option value="public" {% if current == 'public' %}selected{% endif %}>Public</option>
+    <option value="granted" {% if current == 'granted' %}selected{% endif %}>Granted</option>
+    <option value="private" {% if current == 'private' %}selected{% endif %}>Private</option>
+</select>
+{% endmacro %}
+
+{% macro field_input(name, t, value='', placeholder='') %}
+{% if t == 'note' %}
+<textarea name="{{ name }}" rows="2" placeholder="{{ placeholder }}"
+          class="w-full border border-gray-600 rounded-lg px-3 py-2 text-sm bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">{{ value }}</textarea>
+{% elif t == 'birthday' %}
+<input type="date" name="{{ name }}" value="{{ value }}"
+       class="w-full border border-gray-600 rounded-lg px-3 py-2 text-sm bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
+{% else %}
+<input type="text" name="{{ name }}" value="{{ value }}" placeholder="{{ placeholder }}"
+       class="w-full border border-gray-600 rounded-lg px-3 py-2 text-sm bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
+{% endif %}
+{% endmacro %}
+
+<div class="max-w-2xl mx-auto py-8 px-4">
+    {# Top bar #}
+    <div class="flex items-center justify-between mb-6">
+        <a href="/owner/{{ token }}/profile" class="wl-link text-sm">← My Profile</a>
+        <a href="/owner/{{ token }}/profile/card/{{ card.id }}" class="wl-link text-sm">Preview card →</a>
+    </div>
+
+    {% if error %}
+    <div class="wl-card p-3 mb-4 text-sm" style="border-color: var(--wl-danger);">
+        <span style="color: var(--wl-danger);">{{ error }}</span>
+    </div>
+    {% endif %}
+
+    <div class="wl-card p-6 mb-4">
+        <h1 class="wl-heading wl-heading-md mb-1">Edit Card</h1>
+        <p class="text-xs wl-text-faint mb-5">{{ profile.display_name }} · {{ card.name }}</p>
+
+        {# ============ Photo: upload → crop / zoom / position ============ #}
+        <div class="flex flex-col sm:flex-row gap-6 mb-6 pb-6" style="border-bottom: 1px solid var(--wl-glass-border);">
+            <div class="flex-shrink-0">
+                <p class="text-sm font-medium wl-text-sub mb-2">Photo</p>
+                {% if card.photo_path %}
+                <img src="/photos/{{ owner_id }}/{{ card.id }}" id="photo-current"
+                     alt="{{ card.name }} photo"
+                     class="w-28 h-28 rounded-full object-cover">
+                {% else %}
+                <div id="photo-current" class="w-28 h-28 rounded-full flex items-center justify-center"
+                     style="background: var(--wl-btn-slate);">
+                    <span class="wl-heading wl-heading-md">{{ card.name[:2]|upper }}</span>
+                </div>
+                {% endif %}
+            </div>
+            <div class="flex-1 min-w-0">
+                <form id="photo-form" method="POST" action="/owner/{{ token }}/cards/{{ card.id }}/photo"
+                      enctype="multipart/form-data">
+                    <input type="hidden" name="photo_data" id="photo_data" value="">
+                    <p class="text-xs wl-text-faint mb-2">Square crop — choose an image, then drag to position and zoom to fit.</p>
+                    <canvas id="crop-canvas" width="512" height="512"
+                            class="w-56 h-56 rounded-xl cursor-move hidden"
+                            style="border: 1px solid var(--wl-glass-border); touch-action: none;"></canvas>
+                    <div id="crop-controls" class="hidden items-center gap-3 mt-3">
+                        <span class="text-xs wl-text-sub whitespace-nowrap">Zoom</span>
+                        <input type="range" id="crop-zoom" min="100" max="400" value="100" class="flex-1">
+                    </div>
+                    <div class="mt-3 flex flex-wrap items-center gap-2">
+                        <label class="wl-btn-ink px-3 py-1.5 rounded text-xs cursor-pointer">
+                            Choose image
+                            <input type="file" id="photo-file" name="photo" accept="image/*" class="hidden">
+                        </label>
+                        <button type="submit" id="photo-save" disabled
+                                class="wl-btn-approve px-3 py-1.5 rounded text-xs disabled:opacity-40">
+                            Save photo
+                        </button>
+                        {% if card.photo_path %}
+                        <button type="submit" name="remove_photo" value="1"
+                                class="wl-btn-deny px-3 py-1.5 rounded text-xs">
+                            Remove
+                        </button>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        {# ============ vCard fields ============ #}
+        <form method="POST" action="/owner/{{ token }}/cards/{{ card.id }}/edit">
+            {# Card name #}
+            <div class="mb-4" data-type="__cardname">
+                <label class="block text-sm font-medium wl-text-sub mb-1">Card name</label>
+                <input type="text" name="card_name" value="{{ card.name }}" maxlength="60"
+                       class="w-full border border-gray-600 rounded-lg px-3 py-2 text-sm bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
+            </div>
+
+            {# Full name — profile-level (name components live on the profile) #}
+            <div class="mb-4" data-type="__displayname">
+                <label class="block text-sm font-medium wl-text-sub mb-1">Full name</label>
+                <input type="text" name="display_name" value="{{ profile.display_name }}" maxlength="120"
+                       class="w-full border border-gray-600 rounded-lg px-3 py-2 text-sm bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
+                <p class="text-xs wl-text-faint mt-1">Your identity across all cards.</p>
+            </div>
+
+            {% for t in field_types %}
+            <div class="mb-4 pb-4" data-type="{{ t }}" style="border-bottom: 1px solid var(--wl-glass-border);">
+                <label class="block text-sm font-medium wl-text-sub mb-2">{{ labels[t] }}</label>
+                <div class="rows">
+                    {% for f in by_type[t] %}
+                    <div class="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
+                        <div class="flex-1 min-w-0">
+                            {{ field_input('field_' ~ f.id ~ '_value', t, f.field_value, placeholders[t]) }}
+                        </div>
+                        <div class="flex items-center gap-2 flex-shrink-0">
+                            {{ vis_select('field_' ~ f.id ~ '_visibility', f.visibility) }}
+                            <label class="flex items-center gap-1 text-xs wl-text-faint cursor-pointer"
+                                   title="Remove this {{ t }} from the card">
+                                <input type="checkbox" name="field_{{ f.id }}_remove" value="1"
+                                       class="accent-red-400"> ✕
+                            </label>
+                        </div>
+                    </div>
+                    {% endfor %}
+
+                    {# Empty slot: the section always shows at least one
+                       input row — a fresh slot when the card has no field
+                       of this type yet (no-JS fallback for + Add too) #}
+                    {% if not by_type[t] %}
+                    <div class="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
+                        <div class="flex-1 min-w-0">
+                            {{ field_input('new_' ~ t ~ '_value', t, '', placeholders[t]) }}
+                        </div>
+                        <div class="flex items-center gap-2 flex-shrink-0">
+                            {{ vis_select('new_' ~ t ~ '_visibility', 'private') }}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                {% if t in multi_types %}
+                <button type="button" class="wl-link text-xs mt-1"
+                        onclick="addFieldRow('{{ t }}')">+ Add {{ t }}</button>
+                <template data-newrow="{{ t }}">
+                    <div class="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
+                        <div class="flex-1 min-w-0">
+                            {{ field_input('new_' ~ t ~ '_value', t, '', placeholders[t]) }}
+                        </div>
+                        <div class="flex items-center gap-2 flex-shrink-0">
+                            {{ vis_select('new_' ~ t ~ '_visibility', 'private') }}
+                        </div>
+                    </div>
+                </template>
+                {% endif %}
+            </div>
+            {% endfor %}
+
+            <div class="flex items-center justify-between">
+                <p class="text-xs wl-text-faint">Public: anyone · Granted: approved contacts · Private: only you</p>
+                <button type="submit"
+                        class="wl-btn-approve px-4 py-1.5 rounded text-sm">
+                    Save card
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+// ---- Card fields: + Add rows (clone the per-type <template>) ----
+function addFieldRow(type) {
+    const tpl = document.querySelector('template[data-newrow="' + type + '"]');
+    if (!tpl) return;
+    const section = tpl.closest('[data-type]');
+    const rows = section.querySelector('.rows');
+    rows.appendChild(tpl.content.cloneNode(true));
+}
+
+// ---- Photo cropper: hand-rolled square canvas (crop / zoom / position) ----
+(function () {
+    const canvas = document.getElementById('crop-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const SIZE = canvas.width; // 512 — stored display size
+    const fileInput = document.getElementById('photo-file');
+    const zoomInput = document.getElementById('crop-zoom');
+    const controls = document.getElementById('crop-controls');
+    const saveBtn = document.getElementById('photo-save');
+    const photoData = document.getElementById('photo_data');
+    let img = null, zoom = 1, minZoom = 1, ox = 0, oy = 0, drag = null;
+
+    function clampOffset() {
+        if (!img) return;
+        const dw = img.width * zoom, dh = img.height * zoom;
+        const mx = Math.max(0, (dw - SIZE) / 2), my = Math.max(0, (dh - SIZE) / 2);
+        ox = Math.min(mx, Math.max(-mx, ox));
+        oy = Math.min(my, Math.max(-my, oy));
+    }
+
+    function draw() {
+        if (!img) return;
+        clampOffset();
+        ctx.fillStyle = '#111111';
+        ctx.fillRect(0, 0, SIZE, SIZE);
+        const dw = img.width * zoom, dh = img.height * zoom;
+        ctx.drawImage(img, (SIZE - dw) / 2 + ox, (SIZE - dh) / 2 + oy, dw, dh);
+        // Square-crop guide: frame + rule-of-thirds
+        ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(1, 1, SIZE - 2, SIZE - 2);
+        ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+        ctx.lineWidth = 1;
+        for (let i = 1; i <= 2; i++) {
+            ctx.beginPath(); ctx.moveTo(SIZE * i / 3, 0); ctx.lineTo(SIZE * i / 3, SIZE); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0, SIZE * i / 3); ctx.lineTo(SIZE, SIZE * i / 3); ctx.stroke();
+        }
+    }
+
+    fileInput.addEventListener('change', () => {
+        const file = fileInput.files && fileInput.files[0];
+        if (!file) return;
+        const url = URL.createObjectURL(file);
+        const image = new Image();
+        image.onload = () => {
+            img = image;
+            URL.revokeObjectURL(url);
+            minZoom = Math.max(SIZE / img.width, SIZE / img.height);
+            zoom = minZoom;
+            ox = 0; oy = 0;
+            zoomInput.value = String(Math.round(zoom * 100));
+            canvas.classList.remove('hidden');
+            controls.classList.remove('hidden');
+            controls.classList.add('flex');
+            saveBtn.disabled = false;
+            draw();
+        };
+        image.src = url;
+    });
+
+    zoomInput.addEventListener('input', () => {
+        if (!img) return;
+        zoom = parseInt(zoomInput.value, 10) / 100;
+        draw();
+    });
+
+    canvas.addEventListener('pointerdown', (e) => {
+        drag = { x: e.clientX, y: e.clientY, ox: ox, oy: oy };
+        canvas.setPointerCapture(e.pointerId);
+    });
+    canvas.addEventListener('pointermove', (e) => {
+        if (!drag || !img) return;
+        const scale = SIZE / canvas.getBoundingClientRect().width;
+        ox = drag.ox + (e.clientX - drag.x) * scale;
+        oy = drag.oy + (e.clientY - drag.y) * scale;
+        draw();
+    });
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach((ev) =>
+        canvas.addEventListener(ev, () => { drag = null; }));
+
+    // Hand the cropped square (JPEG, 512×512) to the server on save.
+    saveBtn.addEventListener('click', () => {
+        if (!img) return;
+        draw();
+        photoData.value = canvas.toDataURL('image/jpeg', 0.92);
+    });
+})();
+</script>
+{% endblock %}
