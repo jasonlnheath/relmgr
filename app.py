@@ -16,6 +16,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import FastAPI, Request, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from starlette.background import BackgroundTask
 from PIL import Image
 from io import BytesIO
 from starlette.templating import Jinja2Templates
@@ -434,33 +435,53 @@ def create_app(db_path: Path = None) -> FastAPI:
                 request=request, error="Valid email is required.",
                 email=email, sent=False))
 
+        # Timing parity (pairing review F1): ONE dummy pbkdf2 burn on BOTH
+        # paths, shared before the existence branch, so the synchronous cost
+        # is identical whether or not the email exists. Mint + mail run as a
+        # BackgroundTask AFTER the response is sent — with real SMTP the hit
+        # path would otherwise pay login/sendmail round-trips the miss path
+        # never sees, re-opening the oracle.
+        whitelist_db.burn_dummy_password_work()
+
         conn = whitelist_db.wl_connect(path)
         try:
             profile = whitelist_db.get_profile_by_email(conn, email)
-            if profile:
-                # Burn one pbkdf2 on the hit path too (F8 symmetry): with the
-                # miss path below, both branches cost the same so request
-                # timing cannot reveal whether the email exists.
-                whitelist_db.verify_password(
-                    "timing-pad", whitelist_db._dummy_password_hash())
-                raw = whitelist_db.create_password_reset_token(conn, profile["id"])
-                base_url = (wl_env.get_secret("BASE_URL")
-                            or str(request.base_url).rstrip("/"))
-                reset_url = f"{base_url}/reset-password/{raw}"
-                if not _send_password_reset_email(email, reset_url):
-                    # Documented local fallback keeps first sign-in unblocked
-                    # when SMTP can't deliver: scripts/notify.py --what reset
-                    # --email <addr> prints the reset URL. Logged as well so
-                    # the captain can lift it straight from service logs.
-                    print(
-                        f"[WARN] Reset email delivery failed; reset URL for "
-                        f"{email}: {reset_url}", file=sys.stderr)
         finally:
             conn.close()
 
+        background = None
+        if profile:
+            background = BackgroundTask(
+                _issue_and_send_reset, path, email,
+                wl_env.get_secret("BASE_URL")
+                or str(request.base_url).rstrip("/"))
+
         # Same response whether or not the email exists — no enumeration.
         return HTMLResponse(jinja.get_template("forgot_password.html").render(
-            request=request, error=None, email="", sent=True))
+            request=request, error=None, email="", sent=True),
+            background=background)
+
+    def _issue_and_send_reset(db_path, email: str, base_url: str) -> None:
+        """Background half of forgot-password (review F1): mint the reset
+        token and attempt delivery AFTER the identical confirmation has been
+        sent, so response timing cannot reveal account existence."""
+        conn = whitelist_db.wl_connect(db_path)
+        try:
+            profile = whitelist_db.get_profile_by_email(conn, email)
+            if not profile:
+                return
+            raw = whitelist_db.create_password_reset_token(conn, profile["id"])
+            reset_url = f"{base_url}/reset-password/{raw}"
+            if not _send_password_reset_email(email, reset_url):
+                # Documented local fallback keeps first sign-in unblocked
+                # when SMTP can't deliver: scripts/notify.py --what reset
+                # --email <addr> prints the reset URL. Logged as well so
+                # the captain can lift it straight from service logs.
+                print(
+                    f"[WARN] Reset email delivery failed; reset URL for "
+                    f"{email}: {reset_url}", file=sys.stderr)
+        finally:
+            conn.close()
 
     @application.get("/reset-password/{token}", response_class=HTMLResponse)
     async def reset_password_page(request: Request, token: str):

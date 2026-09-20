@@ -16,6 +16,13 @@ Covers the first-password / forgot-password lane:
 """
 import hashlib
 import os
+import socket
+import statistics
+import subprocess
+import sys
+import time
+import urllib.request
+from urllib.parse import urlencode
 
 os.environ["WHITELIST_SECRET"] = "test-secret"
 
@@ -341,6 +348,96 @@ class TestForgotPasswordNoEnumeration:
         r = _client(db).post("/forgot-password",
                              data={"email": "fresh@example.com"})
         assert "fresh@example.com" not in r.text
+
+
+# ============================================================
+# Timing parity (regression for pairing-review F1: the original
+# implementation burned pbkdf2 only on the hit path — a live 50x
+# email-enumeration timing oracle)
+# ============================================================
+
+
+class TestForgotPasswordTimingParity:
+    def test_response_time_parity_live_server(self, tmp_path):
+        """Known vs unknown email must cost the same ON THE WIRE.
+
+        TestClient cannot measure this: it executes BackgroundTasks before
+        returning the response. So run a real uvicorn subprocess and take
+        interleaved medians. The synchronous paths now differ by one indexed
+        SELECT only; mint + send are off the response path (review F1 fix).
+        The bug state measured ~50x; the bound below sits far above noise and
+        far below the oracle.
+        """
+        repo_root = Path(__file__).resolve().parent.parent
+        db = _make_world(tmp_path)
+
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            port = s.getsockname()[1]
+        env = os.environ.copy()
+        env["WHITELIST_SECRET"] = "test-secret"
+        env["RELMGR_DB_PATH"] = str(db)
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "uvicorn", "app:app",
+             "--port", str(port), "--log-level", "warning"],
+            cwd=str(repo_root), env=env,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        base = f"http://127.0.0.1:{port}"
+        try:
+            deadline = time.time() + 20
+            while True:
+                try:
+                    urllib.request.urlopen(f"{base}/signin", timeout=1)
+                    break
+                except Exception:
+                    if time.time() > deadline or proc.poll() is not None:
+                        pytest.fail("uvicorn did not come up for timing test")
+                    time.sleep(0.25)
+
+            def timed_post(email: str) -> float:
+                data = urlencode({"email": email}).encode()
+                req = urllib.request.Request(
+                    f"{base}/forgot-password", data=data, method="POST")
+                t0 = time.perf_counter()
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    resp.read()
+                    assert resp.status == 200
+                return (time.perf_counter() - t0) * 1000.0
+
+            # Warm-up pair (imports, conn pooling) — discarded.
+            timed_post("fresh@example.com")
+            timed_post("nobody@nowhere.org")
+
+            known, unknown = [], []
+            for _ in range(9):
+                known.append(timed_post("fresh@example.com"))
+                unknown.append(timed_post("nobody@nowhere.org"))
+
+            med_known = statistics.median(known)
+            med_unknown = statistics.median(unknown)
+            ratio = max(med_known, med_unknown) / min(med_known, med_unknown)
+            delta = abs(med_known - med_unknown)
+            assert ratio <= 2.0, (
+                f"response-time oracle: known={med_known:.1f}ms "
+                f"unknown={med_unknown:.1f}ms ratio={ratio:.1f}x")
+            assert delta <= 40.0, (
+                f"response-time delta: known={med_known:.1f}ms "
+                f"unknown={med_unknown:.1f}ms delta={delta:.1f}ms")
+        finally:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+
+    def test_miss_path_burns_dummy_password_work(self):
+        """Structural guard: the shared burn exists and costs real pbkdf2
+        work — the F1 regression was a burn applied to only one branch."""
+        whitelist_db._DUMMY_HASH_CACHE = None  # force a real burn setup
+        t0 = time.perf_counter()
+        whitelist_db.burn_dummy_password_work()
+        elapsed = time.perf_counter() - t0
+        assert elapsed > 0.005, "burn must cost pbkdf2-level work, not a no-op"
 
 
 # ============================================================

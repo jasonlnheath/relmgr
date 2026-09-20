@@ -57,6 +57,14 @@ def _dummy_password_hash() -> str:
     return _DUMMY_HASH_CACHE
 
 
+def burn_dummy_password_work() -> None:
+    """One dummy pbkdf2 verify, unconditionally, for response-timing
+    symmetry on paths that must not reveal whether an email exists
+    (sign-in F8; forgot-password review F1). Call BEFORE the existence
+    branch so both branches pay the same synchronous cost."""
+    verify_password(secrets.token_hex(16), _dummy_password_hash())
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).strftime(_ISO_Z)
 
