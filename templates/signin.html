@@ -9,6 +9,12 @@
             <p class="wl-text-sub text-sm">Access your RelMgr dashboard</p>
         </div>
 
+        {% if reset_ok %}
+        <div class="mb-4 p-3 rounded-lg text-sm" style="background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.25); color: var(--wl-success);">
+            Password updated — sign in with your new password.
+        </div>
+        {% endif %}
+
         {% if error %}
         <div class="mb-4 p-3 rounded-lg text-sm" style="background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.25); color: var(--wl-danger);">
             {{ error }}
@@ -36,6 +42,12 @@
                 Sign in
             </button>
         </form>
+
+        <div class="mt-6 text-center">
+            <p class="wl-text-sub text-sm">
+                <a href="/forgot-password" class="wl-link">Forgot password?</a>
+            </p>
+        </div>
 
         <div class="mt-6 text-center">
             <p class="wl-text-sub text-sm">

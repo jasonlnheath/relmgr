@@ -57,6 +57,14 @@ def _dummy_password_hash() -> str:
     return _DUMMY_HASH_CACHE
 
 
+def burn_dummy_password_work() -> None:
+    """One dummy pbkdf2 verify, unconditionally, for response-timing
+    symmetry on paths that must not reveal whether an email exists
+    (sign-in F8; forgot-password review F1). Call BEFORE the existence
+    branch so both branches pay the same synchronous cost."""
+    verify_password(secrets.token_hex(16), _dummy_password_hash())
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).strftime(_ISO_Z)
 
@@ -198,6 +206,20 @@ def wl_init(conn: sqlite3.Connection) -> None:
             scanned_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
         CREATE INDEX IF NOT EXISTS idx_scan_events_profile ON scan_events(profile_id);
+
+        -- Password reset (2026-09-20): single-use, 30-minute tokens.
+        -- Only the SHA-256 hash of the raw token is stored (hashed at rest);
+        -- raw tokens exist only inside the emailed reset URL.
+        CREATE TABLE IF NOT EXISTS password_reset_tokens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            profile_id INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+            token_hash TEXT NOT NULL UNIQUE,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            expires_at TEXT NOT NULL,
+            used_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_profile
+            ON password_reset_tokens(profile_id);
 
         -- Whitelist: trusted card forwarding (2026-09-18).
         CREATE TABLE IF NOT EXISTS card_forwardings (
@@ -419,6 +441,115 @@ def resolve_owner_by_credentials(
     if not verify_password(password, profile["password_hash"]):
         return None
     return profile
+
+
+# ============================================================
+# Password reset tokens (2026-09-20)
+# ============================================================
+
+_RESET_TOKEN_TTL_MINUTES = 30  # sane default: enough to finish a reset,
+                               # short enough to be nearly worthless replayed
+
+
+def _hash_reset_token(raw_token: str) -> str:
+    """SHA-256 hex of a raw reset token — what we store, never the raw value."""
+    return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+
+
+def create_password_reset_token(
+    conn: sqlite3.Connection, profile_id: int,
+    ttl_minutes: int = _RESET_TOKEN_TTL_MINUTES,
+) -> str:
+    """Issue a password-reset token for *profile_id*. Returns the RAW token.
+
+    Only the SHA-256 hash goes to storage. Exactly one active token per
+    account: any previous unused token for the profile is invalidated here.
+    Default TTL is 30 minutes (_RESET_TOKEN_TTL_MINUTES); pass
+    ttl_minutes<=0 to mint an already-expired token (tests).
+    """
+    now = datetime.now(timezone.utc)
+    conn.execute(
+        "UPDATE password_reset_tokens SET used_at = ? "
+        "WHERE profile_id = ? AND used_at IS NULL",
+        (now.strftime(_ISO_Z), profile_id),
+    )
+    raw = secrets.token_urlsafe(32)
+    expires_at = (now + timedelta(minutes=ttl_minutes)).strftime(_ISO_Z)
+    conn.execute(
+        "INSERT INTO password_reset_tokens (profile_id, token_hash, expires_at) "
+        "VALUES (?, ?, ?)",
+        (profile_id, _hash_reset_token(raw), expires_at),
+    )
+    conn.commit()
+    return raw
+
+
+def peek_password_reset_token(
+    conn: sqlite3.Connection, raw_token: str,
+) -> Optional[int]:
+    """Validate a reset token WITHOUT consuming it. Returns profile_id or None.
+
+    Used by the GET screen so the form only renders for a live token;
+    consumption itself happens only on a successful POST.
+    """
+    row = conn.execute(
+        "SELECT profile_id FROM password_reset_tokens "
+        "WHERE token_hash = ? AND used_at IS NULL AND expires_at > ?",
+        (_hash_reset_token(raw_token), _now_iso()),
+    ).fetchone()
+    return row["profile_id"] if row else None
+
+
+def consume_password_reset_token(
+    conn: sqlite3.Connection, raw_token: str,
+) -> Optional[int]:
+    """Atomically claim a reset token. Returns profile_id or None.
+
+    The conditional UPDATE is the single-use guarantee: used_at flips inside
+    the same statement that checks used_at IS NULL / not-expired, so two
+    concurrent submissions cannot both win (sqlite serializes writers).
+    Expired, unknown, and replayed tokens all return None.
+    """
+    now = _now_iso()
+    cur = conn.execute(
+        "UPDATE password_reset_tokens SET used_at = ? "
+        "WHERE token_hash = ? AND used_at IS NULL AND expires_at > ?",
+        (now, _hash_reset_token(raw_token), now),
+    )
+    conn.commit()
+    if cur.rowcount != 1:
+        return None
+    row = conn.execute(
+        "SELECT profile_id FROM password_reset_tokens WHERE token_hash = ?",
+        (_hash_reset_token(raw_token),),
+    ).fetchone()
+    return row["profile_id"] if row else None
+
+
+def set_profile_password(
+    conn: sqlite3.Connection, profile_id: int, password: str,
+) -> None:
+    """Set (or replace) a profile's password hash. Works for passwordless
+    legacy owners too — after this they sign in like any signup owner."""
+    conn.execute(
+        "UPDATE profiles SET password_hash = ?, updated_at = ? WHERE id = ?",
+        (hash_password(password), _now_iso(), profile_id),
+    )
+    conn.commit()
+
+
+def get_profile_by_email(
+    conn: sqlite3.Connection, email: str,
+) -> Optional[dict]:
+    """Fetch a profile by its (private) email field, case-insensitive."""
+    row = conn.execute(
+        """SELECT p.* FROM profiles p
+           JOIN profile_fields f ON f.profile_id = p.id
+           WHERE f.field_type = 'email' AND LOWER(f.field_value) = LOWER(?)
+           LIMIT 1""",
+        (email,),
+    ).fetchone()
+    return _fetch_profile(conn, row) if row else None
 
 
 # ============================================================
