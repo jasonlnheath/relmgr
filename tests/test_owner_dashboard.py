@@ -66,13 +66,13 @@ def _make_db(tmp_path: Path):
 def _owner_token():
     """Generate a valid owner_dashboard token (365-day expiry)."""
     secret = b"test-secret"
-    return wl_tokens.make_token(secret, "owner_dashboard", "owner", expires_days=365)
+    return wl_tokens.make_token(secret, "owner_dashboard", "1", expires_days=365)
 
 
 def _expired_owner_token():
     """Generate an expired owner_dashboard token."""
     secret = b"test-secret"
-    return wl_tokens.make_token(secret, "owner_dashboard", "owner", expires_days=-1)
+    return wl_tokens.make_token(secret, "owner_dashboard", "1", expires_days=-1)
 
 
 def _tampered_token():

@@ -42,7 +42,7 @@ def _make_db(tmp_path: Path):
 
 
 def _owner_token():
-    return wl_tokens.make_token(b"test-secret", "owner_dashboard", "owner", expires_days=365)
+    return wl_tokens.make_token(b"test-secret", "owner_dashboard", "1", expires_days=365)
 
 
 # ============================================================

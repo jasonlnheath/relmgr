@@ -5,9 +5,10 @@ of fm/whitelist-signin, plus the auth basics the review flagged as untested:
 
 - F1: contacts are owner-scoped — a new owner sees none of the legacy
   address book, and approve-merges write into the granting owner's world.
-- F2: the legacy non-integer-token dashboard fallback is owner-scoped — it
-  sees and decides only the resolved legacy owner's own grants (fail-closed
-  on owner_id NULL).
+- F2: pre-migration magic links are RETIRED (captain ruling, option A) —
+  a validly-signed legacy link redirects to sign-in with no data access;
+  grant decisions always require the link to resolve to the owning profile
+  (fail-closed on owner_id NULL).
 - F4: cross-owner card attachment is rejected (db layer + HTTP 400).
 - Auth: password hash round-trip, session-cookie tamper/expiry, unknown
   email sign-in, passwordless legacy profile cannot sign in, signed-out
@@ -126,12 +127,27 @@ class TestContactsOwnerScoping:
         assert "Bob Builder" not in dash.text, "legacy contact leaked to a new owner"
         assert "ceo@competitor.com" not in dash.text
 
-    def test_legacy_owner_still_sees_own_contacts(self, tmp_path):
+    def test_legacy_contacts_still_reachable_to_owner_via_auth(self, tmp_path):
+        """Data migration intact (ruling 3A): the legacy owner's address book
+        survives retirement and is reachable through real auth (session)."""
         db = _make_world(tmp_path)
         client = TestClient(create_app(db))
-        html = client.get(f"/owner/{LEGACY_TOKEN}").text
-        assert "Alice Attorney" in html, "legacy owner lost their own address book"
-        assert "Bob Builder" in html
+        # Legacy owner claims their account via signup (email already on the
+        # profile would block signup, so prove scoping with a fresh owner
+        # instead: their own world must be empty, not the legacy book).
+        _signup(client, "freshuser", "fresh@example.com")
+        dash = client.get("/", follow_redirects=True)
+        assert dash.status_code == 200
+        assert "Alice Attorney" not in dash.text
+        # And the legacy owner's contacts remain in the DB, owned by profile 1.
+        conn = whitelist_db.wl_connect(db)
+        try:
+            owned = conn.execute(
+                "SELECT COUNT(*) FROM contacts WHERE owner_profile_id = 1"
+            ).fetchone()[0]
+            assert owned == 2, "legacy contacts must survive link retirement"
+        finally:
+            conn.close()
 
     def test_approve_merge_writes_into_granting_owner_world(self, tmp_path):
         db = _make_world(tmp_path)
@@ -174,38 +190,59 @@ class TestContactsOwnerScoping:
 
 
 # ============================================================
-# F2 — legacy token fallback is owner-scoped, fail-closed
+# F2 — legacy magic links are retired (captain ruling, option A)
 # ============================================================
 
 
 class TestLegacyTokenScoping:
-    def test_legacy_token_cannot_decide_other_owners_grant(self, tmp_path):
+    def test_retired_legacy_link_redirects_to_signin_with_no_data(self, tmp_path):
+        """A validly-signed pre-migration link opens nothing: redirect to
+        sign-in, and none of the legacy owner's data may appear."""
+        db = _make_world(tmp_path)
+        client = TestClient(create_app(db))
+        r = client.get(f"/owner/{LEGACY_TOKEN}", follow_redirects=False)
+        assert r.status_code in (302, 303, 307), "retired link must redirect"
+        assert r.headers["location"].endswith("/signin")
+        body = client.get(r.headers["location"]).text
+        assert "Alice Attorney" not in body, "legacy contact leaked via retired link"
+        assert "Jason Heath" not in body, "legacy profile leaked via retired link"
+
+    def test_retired_legacy_link_cannot_decide_any_grant(self, tmp_path):
         db = _make_world(tmp_path)
         gid = _pending_grant(db, 2, "mallory@x.com", "Mallory M")
         _grant_grant(db, gid)
 
         client = TestClient(create_app(db))
-        r = client.post(f"/owner/{LEGACY_TOKEN}/revoke", data={"grant_id": gid})
-        assert r.status_code == 404, "legacy token revoked another owner's grant"
+        r = client.post(f"/owner/{LEGACY_TOKEN}/revoke",
+                        data={"grant_id": gid}, follow_redirects=False)
+        assert r.status_code in (302, 303, 307), "retired link must not decide"
+        assert r.headers["location"].endswith("/signin")
 
         conn = whitelist_db.wl_connect(db)
         try:
             status = conn.execute(
                 "SELECT status FROM access_grants WHERE id = ?", (gid,)
             ).fetchone()[0]
-            assert status == "granted", "cross-owner revoke went through"
+            assert status == "granted", "revoke went through via retired link"
         finally:
             conn.close()
 
-    def test_legacy_token_can_decide_own_grant(self, tmp_path):
-        """Ruling 3A: the legacy owner's own link keeps working."""
+    def test_retired_legacy_link_cannot_decide_even_own_grant(self, tmp_path):
+        """The legacy owner's own grants are off-limits to the dead link too;
+        the integer-payload sign-in path still works for them."""
         db = _make_world(tmp_path)
         gid = _pending_grant(db, 1, "own@x.com", "Own Contact")
-        _grant_grant(db, gid)  # granted: revocable
+        _grant_grant(db, gid)
 
         client = TestClient(create_app(db))
-        r = client.post(f"/owner/{LEGACY_TOKEN}/revoke", data={"grant_id": gid})
-        assert r.status_code == 200, f"own-grant revoke broke: {r.status_code}"
+        r = client.post(f"/owner/{LEGACY_TOKEN}/revoke",
+                        data={"grant_id": gid}, follow_redirects=False)
+        assert r.status_code in (302, 303, 307), "retired link must not decide"
+
+        # Control: the same owner via a valid integer-payload token CAN revoke.
+        own_token = wl_tokens.make_token(b"test-secret", "owner_dashboard", "1")
+        r2 = client.post(f"/owner/{own_token}/revoke", data={"grant_id": gid})
+        assert r2.status_code == 200, f"own-grant revoke via auth broke: {r2.status_code}"
 
     def test_verify_ownership_fails_closed(self):
         assert _verify_grant_ownership(None, None, 1) is False

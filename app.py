@@ -142,6 +142,15 @@ def _consume_session_cookie(cookie_value: str, secret: bytes):
         return None
 
 
+class LegacyOwnerLinkRetired(Exception):
+    """A validly-signed pre-migration owner dashboard link.
+
+    The old unscoped magic links (non-integer payload, e.g. the 365-day
+    'owner' links) are RETIRED — captain ruling 2026-09-20, option A. The
+    app-wide handler redirects holders to sign-in with no data access.
+    """
+
+
 def _resolve_owner(
     conn, request, token: str, secret: bytes
 ):
@@ -151,34 +160,36 @@ def _resolve_owner(
     If redirect_token is set, the caller should redirect to /owner/{token}.
     If profile_id is None, the caller should return 403.
     is_explicit is True when the user was authenticated via session cookie
-    or a valid URL token (not via the legacy DB fallback).
+    or a valid URL token.
 
-    Legacy fallback: when the token is valid but the payload is non-integer
-    (old system) OR when NO token is provided, falls back to the first
-    profile in the DB — matching the old `except (ValueError, TypeError)`
-    behaviour. When the token is tampered/expired (consume_token returns
-    None), this returns 403.
+    Retired links: a validly-signed token with a non-integer payload (the
+    pre-migration format) raises LegacyOwnerLinkRetired — handled app-wide
+    as a redirect to /signin with no data access. Legacy owners use the
+    same sign-in/sign-up as everyone else (captain ruling, option A).
+    Tokens that are tampered/expired return 403 via (None, None, None, False).
     """
     # Try URL token first
     if token:
         payload = wl_tokens.consume_token(secret, "owner_dashboard", token)
         if payload is not None:
-            # Token is valid — check if payload is an integer profile ID
+            # Token is valid — the payload must be an integer profile ID.
             try:
                 profile_id = int(payload)
             except (ValueError, TypeError):
-                profile_id = None
+                # Validly signed but pre-migration format: the legacy
+                # DB fallback is retired (ruling 2026-09-20, option A).
+                raise LegacyOwnerLinkRetired(payload)
             if profile_id:
                 profile = whitelist_db.get_profile_by_id(conn, profile_id)
                 if profile:
                     return profile_id, profile, None, True
-            # Token valid but non-integer payload (legacy format) —
-            # fall through to legacy fallback below.
+            # Integer payload but no such profile — dead link → 403.
+            return None, None, None, False
         else:
             # Token present but INVALID (tampered/expired) — return 403
             return None, None, None, False
 
-    # Try session cookie (only when no URL token or legacy payload)
+    # Try session cookie (only when no URL token)
     session_cookie = request.cookies.get("wl_session")
     if session_cookie:
         profile_id = _consume_session_cookie(session_cookie, secret)
@@ -190,25 +201,17 @@ def _resolve_owner(
                 )
                 return None, None, fresh_token, True  # signal redirect
 
-    # Legacy fallback: first profile in DB (no token or legacy payload)
-    row = conn.execute("SELECT * FROM profiles ORDER BY id LIMIT 1").fetchone()
-    if row:
-        profile_id = row["id"]
-        profile = whitelist_db.get_profile_by_id(conn, profile_id)
-        if profile:
-            return profile_id, profile, None, False  # legacy fallback
-
+    # No token and no session → not authenticated.
     return None, None, None, False
 
 
 def _verify_grant_ownership(conn, grant, profile_id, is_explicit=True):
     """Verify a grant belongs to the current owner (ruling 2A).
 
-    ALWAYS enforced — the legacy fallback (non-integer token payload) is
-    owner-scoped like every other path: a dashboard link may only decide
-    grants owned by the profile it resolves to. Fail-closed: a grant with
-    no owner_id (unmigrated row) is undecidable → deny. The is_explicit
-    parameter is kept for call-site compatibility and ignored.
+    ALWAYS enforced: a dashboard link may only decide grants owned by the
+    profile it resolves to. Fail-closed: a grant with no owner_id
+    (unmigrated row) is undecidable → deny. The is_explicit parameter is
+    kept for call-site compatibility and ignored.
     """
     if grant is None:
         return False
@@ -258,6 +261,15 @@ def create_app(db_path: Path = None) -> FastAPI:
                 or Path(__file__).parent / "contacts.db")
     jinja = _make_jinja()
     application = FastAPI(title="Whitelist")
+
+    # Retired pre-migration owner magic links (captain ruling, option A):
+    # one app-wide handler so every /owner/… route sends legacy-link holders
+    # to sign-in with no data access, instead of a per-route 403.
+    @application.exception_handler(LegacyOwnerLinkRetired)
+    async def _legacy_link_retired_handler(
+        _request: Request, _exc: LegacyOwnerLinkRetired
+    ):
+        return RedirectResponse(url="/signin", status_code=303)
 
     # Self-heal legacy schema in ONE ordered call (v1 CHECK lacks 'revoked',
     # additive P3 tables, v2-without-context prod case — see
@@ -390,7 +402,7 @@ def create_app(db_path: Path = None) -> FastAPI:
             result = _resolve_owner(conn, request, "", secret)
             if result[2]:  # redirect needed (session valid, no URL token)
                 return RedirectResponse(url=f"/owner/{result[2]}")
-            if result[0] is not None and result[3]:  # explicitly authenticated (not legacy fallback)
+            if result[0] is not None and result[3]:  # authenticated via token
                 return RedirectResponse(url=f"/owner/{wl_tokens.make_token(secret, 'owner_dashboard', str(result[0]))}")
         finally:
             conn.close()

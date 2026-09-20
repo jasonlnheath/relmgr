@@ -47,7 +47,7 @@ def _grant(db, email, decide=None):
 
 
 def _owner_client(db):
-    token = wl_tokens.make_token(b"test-secret", "owner_dashboard", "owner")
+    token = wl_tokens.make_token(b"test-secret", "owner_dashboard", "1")
     return TestClient(create_app(db)), token
 
 

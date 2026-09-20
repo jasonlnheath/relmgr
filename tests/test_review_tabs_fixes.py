@@ -76,7 +76,7 @@ def _seed_contacts(db: Path, n: int) -> None:
         }, db_path=db)
 
 
-def _owner_token(payload: str = "owner") -> str:
+def _owner_token(payload: str = "1") -> str:
     return wl_tokens.make_token(b"test-secret", "owner_dashboard", payload, expires_days=365)
 
 

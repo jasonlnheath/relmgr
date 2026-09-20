@@ -128,7 +128,7 @@ def test_dashboard_renders_scan_chart(tmp_path):
     resp = client.get("/p/dana_reyes")
     assert resp.status_code == 200, resp.text[:200]
 
-    owner_token = wl_tokens.make_token(b"test-secret", "owner_dashboard", "owner")
+    owner_token = wl_tokens.make_token(b"test-secret", "owner_dashboard", "1")
     resp = client.get(f"/owner/{owner_token}")
     assert resp.status_code == 200, resp.text[:300]
     # contacts.html replaced the scan chart — the page still renders fine

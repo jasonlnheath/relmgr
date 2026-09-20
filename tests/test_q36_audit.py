@@ -88,7 +88,7 @@ def test_dashboard_shows_grant_age_not_today(tmp_path):
 
     client = TestClient(create_app(db))
     resp = client.get(
-        f"/owner/{wl_tokens.make_token(b'test-secret', 'owner_dashboard', 'owner', expires_days=365)}"
+        f"/owner/{wl_tokens.make_token(b'test-secret', 'owner_dashboard', '1', expires_days=365)}"
     )
     assert resp.status_code == 200
     # round-2: contact list shows date string from created_at[:10]

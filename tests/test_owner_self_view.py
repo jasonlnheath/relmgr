@@ -65,7 +65,7 @@ def test_dashboard_view_profile_link_carries_owner_email(tmp_path):
     conn = whitelist_db.wl_connect(db)
     whitelist_db.create_grant(conn, 1, "someone@x.com", "Someone")  # entry renders
     conn.close()
-    tok = wl_tokens.make_token(b"test-secret", "owner_dashboard", "owner")
+    tok = wl_tokens.make_token(b"test-secret", "owner_dashboard", "1")
     client = TestClient(create_app(db))
     resp = client.get(f"/owner/{tok}")
     assert resp.status_code == 200
