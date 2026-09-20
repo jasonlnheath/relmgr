@@ -1,5 +1,5 @@
 .git
-__pycache__
+**/__pycache__
 *.db
 .pytest_cache
 .venv
@@ -7,4 +7,8 @@ __pycache__
 *.db-wal
 uploads/
 lab/
-scratch_*
+scratch_
+.env
+*.json
+*.key
+*.p12*

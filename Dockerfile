@@ -7,8 +7,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app.py cli.py config.py deduplicator.py fetcher.py normalizer.py \
-     notify.py store.py whitelist_db.py wl_env.py wl_tokens.py \
-     templates/ scripts/ ./
+     notify.py store.py whitelist_db.py wl_env.py wl_tokens.py ./
+COPY templates/ ./templates/
+COPY scripts/ ./scripts/
 
 EXPOSE 8099
 

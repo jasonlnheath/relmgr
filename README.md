@@ -40,11 +40,8 @@ Run the whitelist service in a container — same contract as the native service
 (`uvicorn app:app --host 0.0.0.0 --port 8099`), but fully self-contained.
 
 ```bash
-# Build
- docker build -t relmgr .
-
-# Run (contacts.db mounted from host)
- docker compose up
+# Build and run (contacts.db mounted from host)
+ docker compose up --build
 ```
 
 The database file lives on the host and is bind-mounted into the container;
@@ -52,8 +49,14 @@ rebuilding the image never touches the data.
 
 ### Systemd unit (switching from native to container)
 
-To run the container via systemd instead of the native venv service, create
-`/etc/systemd/system/relmgr.service`:
+Before starting the container service, disable the native venv service to
+avoid a port conflict on :8099:
+
+```bash
+systemctl --user disable --now whitelist
+```
+
+Then create `/etc/systemd/system/relmgr.service`:
 
 ```ini
 [Unit]
@@ -65,7 +68,6 @@ Type=simple
 WorkingDirectory=/path/to/relmgr
 ExecStart=/usr/bin/docker compose up
 Restart=unless-stopped
-Environment=RELMGR_DB_PATH=/app/contacts.db
 
 [Install]
 WantedBy=multi-user.target
