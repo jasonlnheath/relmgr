@@ -14,6 +14,7 @@ Tests pin:
 """
 import io
 import os
+import re
 from pathlib import Path
 
 os.environ["WHITELIST_SECRET"] = "test-secret"
@@ -113,29 +114,44 @@ class TestCreateCard:
 # ============================================================
 
 class TestCardFields:
+    def _first_edit_card(self, client, tok):
+        """Find a card via its Edit action on the profile page, then open
+        the editor (the inline field pickers moved off the dashboard)."""
+        resp = client.get(f"/owner/{tok}/profile")
+        assert resp.status_code == 200
+        m = re.search(r'cards/(\d+)/edit', resp.text)
+        assert m, "No card Edit action on the profile page"
+        return int(m.group(1))
+
     def test_field_add_remove_round_trip(self, tmp_path):
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
-        # Get the Work card id (first card from seed)
-        resp = client.get(f"/owner/{_owner_token()}/profile")
-        assert resp.status_code == 200
-        # Find Work card id from the page
-        import re
-        m = re.search(r'cards/(\d+)/fields', resp.text)
-        if not m:
-            assert False, "No card fields route found"
-        card_id = int(m.group(1))
+        tok = _owner_token()
+        card_id = self._first_edit_card(client, tok)
 
-        # Get all field ids from the page
-        field_ids = re.findall(r'value="(\d+)"', resp.text)
-        # Pick one field id
-        if field_ids:
-            fid = int(field_ids[0])
-            resp = client.post(
-                f"/owner/{_owner_token()}/cards/{card_id}/fields",
-                data={"field_ids": [fid]},
-            )
-            assert resp.status_code == 200
+        # The editor renders the card's existing field rows.
+        resp = client.get(f"/owner/{tok}/cards/{card_id}/edit")
+        assert resp.status_code == 200
+        m = re.search(r'name="field_(\d+)_value"', resp.text)
+        assert m, "No existing field row in the editor"
+        fid = int(m.group(1))
+
+        # Save an updated value + visibility through the editor form.
+        resp = client.post(
+            f"/owner/{tok}/cards/{card_id}/edit",
+            data={f"field_{fid}_value": "renamed@example.com",
+                  f"field_{fid}_visibility": "private"},
+        )
+        assert resp.status_code == 200
+        assert "renamed@example.com" in resp.text
+
+        # Remove it again via the editor's remove checkbox.
+        resp = client.post(
+            f"/owner/{tok}/cards/{card_id}/edit",
+            data={f"field_{fid}_remove": "1"},
+        )
+        assert resp.status_code == 200
+        assert "renamed@example.com" not in resp.text
 
     def test_unknown_field_id_400(self, tmp_path):
         db = _make_db(tmp_path)
@@ -148,10 +164,18 @@ class TestCardFields:
 
 
 # ============================================================
-# Photo upload
+# Photo upload (via the card editor page)
 # ============================================================
 
 class TestPhotoUpload:
+    def _first_edit_card(self, client, tok):
+        """Card id from its Edit action; the photo form lives in the editor."""
+        resp = client.get(f"/owner/{tok}/profile")
+        assert resp.status_code == 200
+        m = re.search(r'cards/(\d+)/edit', resp.text)
+        assert m, "No card Edit action on the profile page"
+        return int(m.group(1))
+
     def _make_jpeg(self):
         img = Image.new("RGB", (100, 100), color="red")
         buf = io.BytesIO()
@@ -162,29 +186,22 @@ class TestPhotoUpload:
     def test_jpeg_upload(self, tmp_path):
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
-        # Get Work card id
-        resp = client.get(f"/owner/{_owner_token()}/profile")
-        import re
-        m = re.search(r'cards/(\d+)/photo', resp.text)
-        assert m, "No photo route found"
-        card_id = int(m.group(1))
+        tok = _owner_token()
+        card_id = self._first_edit_card(client, tok)
 
         resp = client.post(
-            f"/owner/{_owner_token()}/cards/{card_id}/photo",
+            f"/owner/{tok}/cards/{card_id}/photo",
             files={"photo": ("test.jpg", self._make_jpeg(), "image/jpeg")},
         )
         assert resp.status_code == 200
-        # Photo upload succeeded — page still renders
-        assert "My Profile" in resp.text
+        # Back on the editor page after upload
+        assert "Edit Card" in resp.text
 
     def test_png_upload_accepted(self, tmp_path):
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
-        resp = client.get(f"/owner/{_owner_token()}/profile")
-        import re
-        m = re.search(r'cards/(\d+)/photo', resp.text)
-        assert m
-        card_id = int(m.group(1))
+        tok = _owner_token()
+        card_id = self._first_edit_card(client, tok)
 
         img = Image.new("RGB", (100, 100), color="blue")
         buf = io.BytesIO()
@@ -192,7 +209,7 @@ class TestPhotoUpload:
         buf.seek(0)
 
         resp = client.post(
-            f"/owner/{_owner_token()}/cards/{card_id}/photo",
+            f"/owner/{tok}/cards/{card_id}/photo",
             files={"photo": ("test.png", buf, "image/png")},
         )
         assert resp.status_code == 200
@@ -200,14 +217,11 @@ class TestPhotoUpload:
     def test_text_file_jpg_400(self, tmp_path):
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
-        resp = client.get(f"/owner/{_owner_token()}/profile")
-        import re
-        m = re.search(r'cards/(\d+)/photo', resp.text)
-        assert m
-        card_id = int(m.group(1))
+        tok = _owner_token()
+        card_id = self._first_edit_card(client, tok)
 
         resp = client.post(
-            f"/owner/{_owner_token()}/cards/{card_id}/photo",
+            f"/owner/{tok}/cards/{card_id}/photo",
             files={"photo": ("fake.jpg", b"not an image", "image/jpeg")},
         )
         assert resp.status_code == 400
@@ -215,15 +229,12 @@ class TestPhotoUpload:
     def test_oversize_413(self, tmp_path):
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
-        resp = client.get(f"/owner/{_owner_token()}/profile")
-        import re
-        m = re.search(r'cards/(\d+)/photo', resp.text)
-        assert m
-        card_id = int(m.group(1))
+        tok = _owner_token()
+        card_id = self._first_edit_card(client, tok)
 
         big = b"\xff\xd8\xff\xe0" + b"\x00" * (11 * 1024 * 1024)
         resp = client.post(
-            f"/owner/{_owner_token()}/cards/{card_id}/photo",
+            f"/owner/{tok}/cards/{card_id}/photo",
             files={"photo": ("big.jpg", big, "image/jpeg")},
         )
         assert resp.status_code == 413
@@ -231,24 +242,21 @@ class TestPhotoUpload:
     def test_photo_served(self, tmp_path):
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
-        resp = client.get(f"/owner/{_owner_token()}/profile")
-        import re
-        m = re.search(r'cards/(\d+)/photo', resp.text)
-        assert m, f"No photo upload route found in profile page"
-        card_id = int(m.group(1))
+        tok = _owner_token()
+        card_id = self._first_edit_card(client, tok)
 
         # Upload first
         img = Image.new("RGB", (100, 100), color="green")
         buf = io.BytesIO()
         img.save(buf, format="JPEG")
         buf.seek(0)
-        client.post(
-            f"/owner/{_owner_token()}/cards/{card_id}/photo",
+        resp = client.post(
+            f"/owner/{tok}/cards/{card_id}/photo",
             files={"photo": ("test.jpg", buf, "image/jpeg")},
         )
+        assert resp.status_code == 200
 
-        # Now the photo URL should appear in the page
-        resp = client.get(f"/owner/{_owner_token()}/profile")
+        # The editor page now renders the photo URL
         m2 = re.search(r'photos/\d+/(\d+)', resp.text)
         assert m2, "Photo URL not rendered after upload"
         card_id2 = int(m2.group(1))
@@ -261,11 +269,8 @@ class TestPhotoUpload:
     def test_photo_remove(self, tmp_path):
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
-        resp = client.get(f"/owner/{_owner_token()}/profile")
-        import re
-        m = re.search(r'cards/(\d+)/photo', resp.text)
-        assert m
-        card_id = int(m.group(1))
+        tok = _owner_token()
+        card_id = self._first_edit_card(client, tok)
 
         # Upload
         img = Image.new("RGB", (100, 100), color="yellow")
@@ -273,13 +278,13 @@ class TestPhotoUpload:
         img.save(buf, format="JPEG")
         buf.seek(0)
         client.post(
-            f"/owner/{_owner_token()}/cards/{card_id}/photo",
+            f"/owner/{tok}/cards/{card_id}/photo",
             files={"photo": ("test.jpg", buf, "image/jpeg")},
         )
 
         # Remove
         resp = client.post(
-            f"/owner/{_owner_token()}/cards/{card_id}/photo",
+            f"/owner/{tok}/cards/{card_id}/photo",
             data={"remove_photo": "1"},
         )
         assert resp.status_code == 200

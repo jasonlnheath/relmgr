@@ -92,6 +92,39 @@ def _get_secret():
 _JINJA_DIR = Path(__file__).parent / "templates"
 
 
+def _encode_square_jpeg(content: bytes) -> bytes:
+    """Validate + normalize an uploaded or client-cropped image for storage.
+
+    Magic-byte sniff (JPEG/PNG only), PIL verify, center-crop to square
+    (the client cropper already squares; this is defense in depth), then
+    Lanczos-resample to the stored display size: 512×512 JPEG q82.
+
+    Raises ValueError on junk/unsupported content (route maps to 400).
+    """
+    import io
+    if not (content[:3] == b"\xff\xd8\xff" or content[:4] == b"\x89PNG"):
+        raise ValueError("unsupported image format")
+    try:
+        img = Image.open(io.BytesIO(content))
+        img.verify()
+        img = Image.open(io.BytesIO(content))
+        if img.format not in ("JPEG", "PNG"):
+            raise ValueError("unsupported image format")
+        w, h = img.size
+        side = min(w, h)
+        left = (w - side) // 2
+        top = (h - side) // 2
+        img = img.crop((left, top, left + side, top + side))
+        img = img.resize((512, 512), Image.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=82)
+        return buf.getvalue()
+    except ValueError:
+        raise
+    except Exception:
+        raise ValueError("invalid image file")
+
+
 def _make_jinja():
     return Jinja2Templates(directory=str(_JINJA_DIR))
 
@@ -1018,13 +1051,6 @@ def create_app(db_path: Path = None) -> FastAPI:
             card["photo_path"] = card.get("photo_path")
             card["field_ids"] = [f["id"] for f in card.get("fields", [])]
 
-        # All profile fields for the field picker
-        all_fields = conn.execute(
-            "SELECT * FROM profile_fields WHERE profile_id = ? ORDER BY field_type, field_value",
-            (profile_id,),
-        ).fetchall()
-        all_fields = [dict(f) for f in all_fields]
-
         # B2: header card keeps its scan stats (last 14 days).
         scan_stats = whitelist_db.get_scan_stats(conn, profile_id)
         visit_count = sum(s["scans"] for s in scan_stats)
@@ -1045,7 +1071,6 @@ def create_app(db_path: Path = None) -> FastAPI:
             owner_id=profile_id,
             owner_email=owner_email,
             cards=cards,
-            all_fields=all_fields,
             token=token,
             bio=bio,
             bio_len=len(bio),
@@ -1257,6 +1282,139 @@ def create_app(db_path: Path = None) -> FastAPI:
         finally:
             conn.close()
 
+    # ------------------------------------------------------------------ Card editor (2026-09-20)
+    # Conventional vCard creation/edit page for ONE card: photo with
+    # client-side crop/zoom/position, every conventional field from the
+    # store with its own visibility control. Single render site (same
+    # lesson as _my_profile_html: forked render blocks drop state).
+    _EDITOR_MULTI_TYPES = ("email", "phone")
+
+    def _resolve_editor_card(conn, request, token: str, card_id: int):
+        """Shared auth + ownership guard for the card-editor routes.
+
+        Returns (profile_id, card, error_response) — error_response is set
+        when the caller must return it immediately (403 invalid link,
+        session-redirect, or 404 unknown/foreign card — ruling 2A).
+        """
+        result = _resolve_owner(conn, request, token, _get_secret())
+        if result[0] is None and result[2] is None:
+            return None, None, HTMLResponse("Invalid or expired link", status_code=403)
+        if result[2]:
+            return None, None, RedirectResponse(url=f"/owner/{result[2]}")
+        profile_id = result[0]
+        card = whitelist_db.get_card_by_id(conn, card_id)
+        if not card:
+            return None, None, HTMLResponse("Card not found", status_code=404)
+        if card["owner_profile_id"] != profile_id:
+            return None, None, HTMLResponse("Not found", status_code=404)
+        return profile_id, card, None
+
+    def _card_editor_html(conn, request, token: str, profile: dict, card: dict,
+                          error: str = None, status_code: int = 200) -> HTMLResponse:
+        """Render card_editor.html from ONE place.
+
+        GET /cards/{id}/edit, POST /cards/{id}/edit (validation errors and
+        the success re-render) and POST /cards/{id}/photo all answer
+        through here so the editor page can never drift between routes.
+        """
+        field_types = whitelist_db.CARD_EDITOR_FIELD_TYPES
+        by_type = {t: [] for t in field_types}
+        for f in card.get("fields", []):
+            if f["field_type"] in by_type:
+                by_type[f["field_type"]].append(dict(f))
+        base_url = wl_env.get_secret("BASE_URL") or "https://whitelist.app"
+        return HTMLResponse(jinja.get_template("card_editor.html").render(
+            request=request,
+            profile=profile,
+            card=card,
+            by_type=by_type,
+            field_types=field_types,
+            multi_types=_EDITOR_MULTI_TYPES,
+            token=token,
+            owner_id=profile["id"],
+            error=error,
+            BASE_URL=base_url,
+        ), status_code=status_code)
+
+    @application.get("/owner/{token}/cards/{card_id}/edit", response_class=HTMLResponse)
+    async def owner_card_edit(request: Request, token: str, card_id: int):
+        conn = whitelist_db.wl_connect(path)
+        try:
+            profile_id, card, err = _resolve_editor_card(conn, request, token, card_id)
+            if err is not None:
+                return err
+            profile = whitelist_db.get_profile_by_id(conn, profile_id)
+            if not profile:
+                return HTMLResponse("Profile not found", status_code=404)
+            return _card_editor_html(conn, request, token, profile, card)
+        finally:
+            conn.close()
+
+    _FIELD_KEY_RE = re.compile(r"^field_(\d+)_(value|remove)$")
+
+    @application.post("/owner/{token}/cards/{card_id}/edit", response_class=HTMLResponse)
+    async def owner_card_edit_save(request: Request, token: str, card_id: int):
+        form = await request.form()
+        conn = whitelist_db.wl_connect(path)
+        try:
+            profile_id, card, err = _resolve_editor_card(conn, request, token, card_id)
+            if err is not None:
+                return err
+
+            display_name = (form.get("display_name") or "").strip()
+            card_name = (form.get("card_name") or "").strip()
+
+            # Existing rows: field_{id}_value (+ _visibility, + _remove).
+            # Collect both key kinds first — a row with a remove checkbox
+            # (and no value input, e.g. a checkbox-only POST) must still
+            # register as a removal.
+            remove_ids: set[int] = set()
+            value_rows: dict[int, tuple[str, str | None]] = {}
+            for key in form.keys():
+                m = _FIELD_KEY_RE.match(key)
+                if not m:
+                    continue
+                fid = int(m.group(1))
+                if m.group(2) == "remove":
+                    remove_ids.add(fid)
+                else:
+                    value_rows[fid] = (form.get(key) or "",
+                                       form.get(f"field_{fid}_visibility"))
+            updates = [(fid, v, vis) for fid, (v, vis) in value_rows.items()
+                       if fid not in remove_ids]
+            removals = list(remove_ids)
+
+            # New rows: new_{type}_value[] + new_{type}_visibility[] as
+            # parallel getlists (the + Add rows from the editor UI).
+            new_fields: list[tuple[str, str, str]] = []
+            for t in whitelist_db.CARD_EDITOR_FIELD_TYPES:
+                values = form.getlist(f"new_{t}_value")
+                vis = form.getlist(f"new_{t}_visibility")
+                for i, value in enumerate(values):
+                    # Absent visibility defaults to private — zero-trust
+                    # default (user decides, app enforces).
+                    visibility = vis[i] if i < len(vis) else "private"
+                    new_fields.append((t, value, visibility))
+
+            try:
+                whitelist_db.save_card_editor(
+                    conn, card_id,
+                    display_name=display_name, card_name=card_name,
+                    field_updates=updates, field_removals=removals,
+                    new_fields=new_fields,
+                )
+            except ValueError as exc:
+                profile = whitelist_db.get_profile_by_id(conn, profile_id)
+                card = whitelist_db.get_card_by_id(conn, card_id)
+                return _card_editor_html(conn, request, token, profile, card,
+                                         error=str(exc), status_code=400)
+
+            card = whitelist_db.get_card_by_id(conn, card_id)
+            profile = whitelist_db.get_profile_by_id(conn, profile_id)
+            return _card_editor_html(conn, request, token, profile, card)
+        finally:
+            conn.close()
+
     @application.post("/owner/{token}/cards/{card_id}/photo")
     async def owner_upload_photo(request: Request, token: str, card_id: int):
         from starlette.datastructures import UploadFile
@@ -1267,19 +1425,9 @@ def create_app(db_path: Path = None) -> FastAPI:
 
         conn = whitelist_db.wl_connect(path)
         try:
-            result = _resolve_owner(conn, request, token, _get_secret())
-            if result[0] is None and result[2] is None:
-                return HTMLResponse("Invalid or expired link", status_code=403)
-            if result[2]:
-                return RedirectResponse(url=f"/owner/{result[2]}")
-            profile_id = result[0]
-
-            # Cross-owner guard (same check as the card-preview route).
-            card = whitelist_db.get_card_by_id(conn, card_id)
-            if not card:
-                return HTMLResponse("Card not found", status_code=404)
-            if card["owner_profile_id"] != profile_id:
-                return HTMLResponse("Not found", status_code=404)
+            profile_id, card, err = _resolve_editor_card(conn, request, token, card_id)
+            if err is not None:
+                return err
 
             upload_dir = Path(__file__).parent / "uploads"
             upload_dir.mkdir(exist_ok=True)
@@ -1295,47 +1443,42 @@ def create_app(db_path: Path = None) -> FastAPI:
                         pass
                 whitelist_db.update_card_photo(conn, card_id, None)
             else:
-                # Upload photo
+                # Two upload paths: the client-side cropper posts its result
+                # as a base64 data URL (photo_data); a raw file (photo) is
+                # the no-JS fallback. photo_data wins when both arrive.
                 photo_file = form.get("photo")
-                if isinstance(photo_file, UploadFile) and photo_file.filename:
+                photo_data = form.get("photo_data")
+                content = None
+                if isinstance(photo_data, str) and photo_data.startswith("data:image/"):
+                    import base64
+                    m = re.match(r"^data:image/(jpeg|png);base64,(.*)$", photo_data, re.DOTALL)
+                    if not m:
+                        return HTMLResponse("Invalid image data", status_code=400)
+                    try:
+                        content = base64.b64decode(m.group(2))
+                    except Exception:
+                        return HTMLResponse("Invalid image file", status_code=400)
+                    if len(content) > 10 * 1024 * 1024:  # 10 MB
+                        return HTMLResponse("File too large (max 10 MB)", status_code=413)
+                elif isinstance(photo_file, UploadFile) and photo_file.filename:
                     content = await photo_file.read()
                     if len(content) > 10 * 1024 * 1024:  # 10 MB
                         return HTMLResponse("File too large (max 10 MB)", status_code=413)
 
-                    # Sniff magic bytes
-                    if content[:3] == b"\xff\xd8\xff" or content[:4] == b"\x89PNG":
-                        from PIL import Image
-                        import io
-                        try:
-                            img = Image.open(io.BytesIO(content))
-                            img.verify()
-                            img = Image.open(io.BytesIO(content))
-                            if img.format not in ("JPEG", "PNG"):
-                                return HTMLResponse("Unsupported image format", status_code=400)
-                            # Center-crop to square
-                            w, h = img.size
-                            side = min(w, h)
-                            left = (w - side) // 2
-                            top = (h - side) // 2
-                            img = img.crop((left, top, left + side, top + side))
-                            # Resize to 512x512
-                            img = img.resize((512, 512), Image.LANCZOS)
-                            # Save as JPEG
-                            buf = io.BytesIO()
-                            img.save(buf, format="JPEG", quality=82)
-                            buf.seek(0)
-                            full_path.write_bytes(buf.read())
-                        except Exception:
-                            return HTMLResponse("Invalid image file", status_code=400)
-                    else:
+                if content is not None:
+                    try:
+                        data = _encode_square_jpeg(content)
+                    except ValueError:
                         return HTMLResponse("Invalid image file", status_code=400)
-
+                    full_path.write_bytes(data)
                     whitelist_db.update_card_photo(conn, card_id, photo_path)
 
+            card = whitelist_db.get_card_by_id(conn, card_id)
             profile = whitelist_db.get_profile_by_id(conn, profile_id)
             if not profile:
                 return HTMLResponse("Profile not found", status_code=404)
-            return _my_profile_html(conn, request, token, profile)
+            # Back to the editor (the upload lives there now).
+            return _card_editor_html(conn, request, token, profile, card)
         finally:
             conn.close()
 

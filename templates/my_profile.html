@@ -6,7 +6,7 @@
     <div class="wl-card p-6">
         <h1 class="wl-heading wl-heading-md mb-6">My Profile</h1>
 
-        {# Header card: name/title/company, bio, scan stats #}
+        {# Identity header: name/title/company, visits, share #}
         <div class="mb-6 pb-4" style="border-bottom: 1px solid var(--wl-glass-border);">
             <div class="flex items-center justify-between mb-2">
                 <div>
@@ -48,11 +48,10 @@
                 <p id="copy-msg" class="text-xs wl-text-faint mt-1 hidden">Copied!</p>
             </div>
 
-            {# Bio section #}
+            {# Bio #}
             <div class="mt-3">
                 <div class="flex items-center justify-between mb-1">
                     <label class="text-sm font-medium wl-text-sub">Bio</label>
-                    {# Bio visibility toggle #}
                     <form method="POST" action="/owner/{{ token }}/bio-visibility" class="flex items-center gap-1">
                         <select name="bio_visibility"
                                 class="text-xs border border-gray-600 rounded px-1 py-0.5 bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
@@ -83,13 +82,15 @@
             </div>
         </div>
 
-        {# Cards section #}
+        {# My cards — the owner's own cards only (isolation is enforced by
+           the data layer; this page renders list_cards(profile_id) and
+           nothing else), each with a clear Edit action. #}
         <div>
             <div class="flex items-center justify-between mb-3">
-                <h2 class="wl-heading wl-heading-sm wl-text">Cards</h2>
+                <h2 class="wl-heading wl-heading-sm wl-text">My Cards</h2>
                 <button type="button" onclick="document.getElementById('new-card-form').classList.toggle('hidden')"
                         class="wl-link text-sm">
-                    + Create card
+                    + New card
                 </button>
             </div>
 
@@ -110,105 +111,40 @@
                 </form>
             </div>
 
-            {# Card list #}
             {% if cards %}
             <div class="space-y-3">
                 {% for card in cards %}
-                <div class="wl-card p-3">
-                    <div class="flex items-center justify-between">
-                        <div class="flex items-center gap-3">
-                            {# Photo placeholder or actual photo #}
+                <div class="wl-card p-4">
+                    <div class="flex items-center justify-between gap-3">
+                        <div class="flex items-center gap-3 min-w-0">
                             {% if card.photo_path %}
                             <img src="/photos/{{ owner_id }}/{{ card.id }}"
                                  alt="{{ card.name }} photo"
-                                 class="w-10 h-10 rounded-full object-cover">
+                                 class="w-10 h-10 rounded-full object-cover flex-shrink-0">
                             {% else %}
-                            <div class="w-10 h-10 rounded-full flex items-center justify-center"
+                            <div class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
                                  style="background: var(--wl-btn-slate);">
                                 <span class="text-sm wl-text-muted">
                                     {{ card.name[:2].upper() }}
                                 </span>
                             </div>
                             {% endif %}
-                            <div>
-                                <h3 class="wl-heading wl-heading-sm wl-text">{{ card.name }}</h3>
-                                <p class="text-xs wl-text-faint">{{ card.fields|length }} fields</p>
+                            <div class="min-w-0">
+                                <h3 class="wl-heading wl-heading-sm wl-text truncate">{{ card.name }}</h3>
+                                <p class="text-xs wl-text-faint">{{ card.fields|length }} field{{ '' if card.fields|length == 1 else 's' }}</p>
                             </div>
                         </div>
-                        <div class="flex items-center gap-2">
+                        <div class="flex items-center gap-2 flex-shrink-0">
                             <a href="/owner/{{ token }}/profile/card/{{ card.id }}"
                                class="wl-link text-xs">
                                 Preview
                             </a>
-                            <form method="POST" action="/owner/{{ token }}/cards/{{ card.id }}/fields">
-                                <select name="field_ids" multiple class="text-xs border border-gray-600 rounded px-1 py-0.5 bg-transparent" size="3">
-                                    {% for pf in all_fields %}
-                                    <option value="{{ pf.id }}"
-                                            {% if pf.id in card.field_ids %}selected{% endif %}>
-                                        {{ pf.field_value }} ({{ pf.field_type }})
-                                    </option>
-                                    {% endfor %}
-                                </select>
-                                <button type="submit"
-                                        class="wl-btn-approve px-2 py-0.5 rounded text-xs">
-                                    Save
-                                </button>
-                            </form>
-                            {# Add field button #}
-                            <button type="button" onclick="document.getElementById('add-field-{{ card.id }}').classList.toggle('hidden')"
-                                    class="wl-link text-xs">
-                                + Field
-                            </button>
-                            {# Add field form #}
-                            <div id="add-field-{{ card.id }}" class="hidden mt-1">
-                                <form method="POST" action="/owner/{{ token }}/fields/new">
-                                    <input type="hidden" name="card_id" value="{{ card.id }}">
-                                    <select name="field_type" class="text-xs border border-gray-600 rounded px-1 py-0.5 focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8] bg-transparent">
-                                        <option value="email">Email</option>
-                                        <option value="phone">Phone</option>
-                                    </select>
-                                    <input type="text" name="field_value" placeholder="value"
-                                           class="text-xs border border-gray-600 rounded px-2 py-0.5 bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
-                                    <select name="visibility" class="text-xs border border-gray-600 rounded px-1 py-0.5 focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8] bg-transparent">
-                                        <option value="public">Public</option>
-                                        <option value="granted">Granted</option>
-                                    </select>
-                                    <button type="submit"
-                                            class="wl-btn-ink px-2 py-0.5 rounded text-xs">
-                                        Add
-                                    </button>
-                                </form>
-                            </div>
-                            {# Photo upload #}
-                            <form method="POST" action="/owner/{{ token }}/cards/{{ card.id }}/photo"
-                                  enctype="multipart/form-data" class="flex items-center gap-1">
-                                <input type="file" name="photo" accept="image/*"
-                                       class="text-xs">
-                                <button type="submit"
-                                        class="wl-btn-gray px-2 py-0.5 rounded text-xs">
-                                    Upload
-                                </button>
-                                {% if card.photo_path %}
-                                <button type="submit" name="remove_photo" value="1"
-                                        class="wl-btn-deny px-2 py-0.5 rounded text-xs">
-                                    Remove
-                                </button>
-                                {% endif %}
-                            </form>
+                            <a href="/owner/{{ token }}/cards/{{ card.id }}/edit"
+                               class="wl-btn-ink px-3 py-1 rounded text-xs">
+                                Edit
+                            </a>
                         </div>
                     </div>
-                    {# Fields list #}
-                    {% if card.fields %}
-                    <div class="mt-2 pt-2" style="border-top: 1px solid var(--wl-glass-border);">
-                        {% for f in card.fields %}
-                        <div class="flex items-center text-xs wl-text-sub">
-                            <span class="w-16 wl-text-faint">{{ f.field_type }}</span>
-                            <span>{{ f.field_value }}</span>
-                            <span class="ml-1 wl-text-faint">({{ f.visibility }})</span>
-                        </div>
-                        {% endfor %}
-                    </div>
-                    {% endif %}
                 </div>
                 {% endfor %}
             </div>
