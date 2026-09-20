@@ -12,6 +12,7 @@ import os
 import re
 import sys
 import time
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import FastAPI, Request, Query
@@ -794,8 +795,10 @@ def create_app(db_path: Path = None) -> FastAPI:
                 # Cosmetic, display-only id so the success page is
                 # INDISTINGUISHABLE from a real one — a blank Grant ID would
                 # let the sender detect their blacklisted status (silence
-                # rule). This id backs no row anywhere.
-                grant_id = os.urandom(6).hex()
+                # rule). This id backs no row anywhere. Fix-pass F3: it is
+                # a full uuid4 string, byte-shape-identical to a real
+                # grant id (os.urandom(6).hex() had the wrong shape).
+                grant_id = str(uuid.uuid4())
             else:
                 quarantined = False
                 grant_id = whitelist_db.create_grant(conn, profile["id"], email, name, profile.get("owner_id"))
@@ -909,6 +912,11 @@ def create_app(db_path: Path = None) -> FastAPI:
                 card_ids = [int(c) for c in raw_ids]
             except (ValueError, TypeError):
                 card_ids = []
+            # Fix-pass F1: ownership parity with the create route — a
+            # foreign or nonexistent card id must never render here, so
+            # filter to the owner's own cards before resolving.
+            card_ids = whitelist_db.filter_owned_cards(
+                conn, profile_id, card_ids)
             cards = whitelist_db.cards_for_share_bundle(
                 conn, {"card_ids": card_ids}, "anonymous")
             return HTMLResponse(jinja.get_template(

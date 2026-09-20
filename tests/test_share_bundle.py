@@ -21,6 +21,8 @@ Pins:
   row-preservingly.
 """
 import os
+import re
+import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -194,13 +196,37 @@ class TestChooserFlow:
         assert "Work" in resp.text
 
     def test_preview_ignores_foreign_cards(self, tmp_path):
+        """Fix-pass F1 LEAK PIN: the preview filters card_ids to the
+        owner's own cards exactly like the create route. The previous
+        pin was vacuous — it checked the display name, which never
+        renders in the fragment, while the foreign card's public field
+        content DID leak into the HTML."""
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
         foreign = _card_id(db, "Work", owner=2)
         resp = client.post(f"/owner/{_owner_token()}/share/preview",
                            data={"card_ids": [str(foreign)]})
         assert resp.status_code == 200
-        assert "Other Owner" not in resp.text
+        assert "other@example.com" not in resp.text, \
+            "foreign card field content must never render in the preview"
+        assert ">Work</h3>" not in resp.text, \
+            "a foreign card must not render a group block at all"
+        assert "Nothing shared yet." in resp.text, \
+            "foreign-only selection drops to an empty fragment"
+
+    def test_preview_mixed_ids_keeps_own_drops_foreign(self, tmp_path):
+        """Fix-pass F1: filtering keeps the owner's own cards; only the
+        foreign ids are dropped (not the whole fragment)."""
+        db = _make_db(tmp_path)
+        client = TestClient(create_app(db))
+        own = _card_id(db, "Contact")
+        foreign = _card_id(db, "Work", owner=2)
+        resp = client.post(f"/owner/{_owner_token()}/share/preview",
+                           data={"card_ids": [str(own), str(foreign)]})
+        assert resp.status_code == 200
+        assert "555-0000" in resp.text, "own card still previews"
+        assert "other@example.com" not in resp.text, \
+            "foreign card dropped from a mixed selection"
 
 
 # ============================================================
@@ -293,6 +319,35 @@ class TestSharedView:
         i_tel = html.index('href="tel:')
         assert i_work < i_mail < i_contact < i_tel, \
             "each card's action icons must sit inside its own block"
+
+    def test_each_group_header_carries_its_card_photo(self, tmp_path):
+        """Fix-pass F2 (captain ruling): EVERY chosen card's picture is
+        rendered at its own group header — photo when the card has one,
+        initials circle otherwise (page-avatar pattern)."""
+        db, client, bundle_id = self._bundle(tmp_path)
+        work, contact = _card_id(db, "Work"), _card_id(db, "Contact")
+        conn = whitelist_db.wl_connect(db)
+        whitelist_db.update_card_photo(conn, work, f"1_{work}.jpg")
+        whitelist_db.update_card_photo(conn, contact, f"1_{contact}.jpg")
+        conn.close()
+        html = client.get(f"/s/{bundle_id}").text
+        assert f'/photos/1/{work}' in html, "Work header must carry its photo"
+        assert f'/photos/1/{contact}' in html, \
+            "Contact header must carry its photo — not just the first card"
+        # Each photo sits in its own block: card img above card heading.
+        i_work_img = html.index(f'/photos/1/{work}')
+        i_contact_img = html.index(f'/photos/1/{contact}')
+        assert i_work_img < html.index(">Work</h3>")
+        assert i_contact_img < html.index(">Contact</h3>")
+
+    def test_photoless_cards_show_initials_not_foreign_photos(self, tmp_path):
+        """The page-avatar pattern stays: no photo_path → initials circle,
+        never a broken or borrowed image."""
+        db, client, bundle_id = self._bundle(tmp_path)
+        html = client.get(f"/s/{bundle_id}").text
+        assert "/photos/" not in html
+        assert ">WO<" in html and ">CO<" in html, \
+            "each header falls back to its own initials circle"
 
     def test_no_forward_section(self, tmp_path):
         db, client, bundle_id = self._bundle(tmp_path)
@@ -625,6 +680,59 @@ class TestBlacklistSilence:
         # The success page's background task is None — nothing queued.
         # (No notification row exists to drive any digest/mail either.)
         assert _notification_kinds(db) == []
+
+    def test_quarantined_grant_id_is_full_uuid4(self, tmp_path):
+        """Fix-pass F3: the display-only Grant ID must be a full uuid4
+        string so the success page is byte-shape indistinguishable from
+        a real grant (os.urandom(6).hex() had the wrong shape)."""
+        db, client, email = self._blacklisted(tmp_path)
+        resp = client.post("/p/jasonheath/request",
+                           data={"name": "Enemy", "email": email})
+        m = re.search(r"Grant ID:\s*([0-9a-fA-F-]+)", resp.text)
+        assert m, "success page shows a Grant ID"
+        display_id = m.group(1).strip()
+        assert len(display_id) == 36, display_id
+        parsed = uuid.UUID(display_id)
+        assert parsed.version == 4
+        assert str(parsed) == display_id, "canonical uuid4 rendering"
+
+    def test_quarantine_dedupes_per_email_per_day(self, tmp_path):
+        """Fix-pass F4: repeat quarantined requests from the same
+        blacklisted email on the same day collapse to one row."""
+        db, client, email = self._blacklisted(tmp_path)
+        for _ in range(3):
+            resp = client.post("/p/jasonheath/request",
+                               data={"name": "Enemy", "email": email})
+            assert resp.status_code == 200
+        conn = whitelist_db.wl_connect(db)
+        rows = conn.execute(
+            "SELECT * FROM quarantined_requests WHERE LOWER(email) = LOWER(?)",
+            (email,)).fetchall()
+        conn.close()
+        assert len(rows) == 1, "one quarantined row per email per day"
+
+    def test_quarantine_dedupe_is_scoped_per_profile(self, tmp_path):
+        """Same email blacklisted by two owners: each owner's quarantine
+        keeps its own (single) row."""
+        db = _make_db(tmp_path)
+        client = TestClient(create_app(db))
+        conn = whitelist_db.wl_connect(db)
+        for pid in (1, 2):
+            gid = whitelist_db.create_grant(conn, pid, "dup@example.com", "D")
+            whitelist_db.apply_decision(conn, gid, "approve", "lifetime",
+                                        merge_contacts=False)
+            whitelist_db.revoke_grant(conn, gid)
+        conn.close()
+        client.post("/p/jasonheath/request",
+                    data={"name": "D", "email": "dup@example.com"})
+        client.post("/p/otherowner/request",
+                    data={"name": "D", "email": "dup@example.com"})
+        conn = whitelist_db.wl_connect(db)
+        rows = conn.execute(
+            "SELECT profile_id FROM quarantined_requests "
+            "WHERE LOWER(email) = LOWER('dup@example.com')").fetchall()
+        conn.close()
+        assert sorted(r["profile_id"] for r in rows) == [1, 2]
 
     def test_normal_request_still_notifies(self, tmp_path):
         db = _make_db(tmp_path)

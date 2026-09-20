@@ -8,7 +8,23 @@
     {% for card in cards %}
     <div class="{% if not loop.first %}mt-5 pt-4{% endif %}" style="{% if not loop.first %}border-top: 1px solid var(--wl-glass-border);{% endif %}">
         <div class="flex items-center justify-between gap-3 mb-3">
-            <h3 class="wl-heading wl-heading-sm wl-text truncate">{{ card.name }}</h3>
+            <div class="flex items-center gap-3 min-w-0">
+                {# Fix-pass F2 (captain ruling): EACH category header
+                   carries its own card's picture — same page-avatar
+                   pattern as the profile header (photo when set,
+                   initials circle otherwise). #}
+                {% if card.photo_path %}
+                <img src="/photos/{{ card.owner_profile_id }}/{{ card.id }}"
+                     alt="{{ card.name }} photo"
+                     class="w-10 h-10 rounded-full object-cover flex-shrink-0">
+                {% else %}
+                <div class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
+                     style="background: var(--wl-btn-slate);">
+                    <span class="text-sm wl-text-muted">{{ card.name[:2].upper() }}</span>
+                </div>
+                {% endif %}
+                <h3 class="wl-heading wl-heading-sm wl-text truncate">{{ card.name }}</h3>
+            </div>
             {# Reach me — this card's actions, in this block #}
             <div class="flex gap-2 flex-shrink-0">
                 {% for f in card.visible_fields %}

@@ -2449,6 +2449,27 @@ def bundle_is_expired(bundle: dict, now: Optional[datetime] = None) -> bool:
     return now >= expires
 
 
+def filter_owned_cards(conn: sqlite3.Connection, profile_id: int,
+                       card_ids: list[int]) -> list[int]:
+    """card_ids filtered to cards that exist AND belong to profile_id
+    (the exact ownership predicate create_share_bundle enforces), deduped
+    while preserving first-seen order.
+
+    Fix-pass F1: any route that renders cards from caller-supplied ids
+    (create AND the live preview) must pass the ids through this filter
+    so a foreign card id can never leak another owner's content.
+    """
+    ordered: list[int] = []
+    for cid in card_ids:
+        row = conn.execute(
+            "SELECT 1 FROM cards WHERE id = ? AND owner_profile_id = ?",
+            (cid, profile_id),
+        ).fetchone()
+        if row is not None and cid not in ordered:
+            ordered.append(cid)
+    return ordered
+
+
 def create_share_bundle(conn: sqlite3.Connection, profile_id: int,
                         card_ids: list[int]) -> dict:
     """Create a share bundle: a stable ID for a chosen set of cards.
@@ -2467,18 +2488,15 @@ def create_share_bundle(conn: sqlite3.Connection, profile_id: int,
     if not card_ids:
         raise ValueError("share bundle needs at least one card")
     # Validate existence + ownership BEFORE insert (same ruling-2A posture
-    # as set_grant_cards). Dedupe while preserving first-seen order.
-    ordered: list[int] = []
-    for cid in card_ids:
-        row = conn.execute(
-            "SELECT 1 FROM cards WHERE id = ? AND owner_profile_id = ?",
-            (cid, profile_id),
-        ).fetchone()
-        if row is None:
-            raise ValueError(
-                f"card_id {cid} not found or not owned by profile {profile_id}")
-        if cid not in ordered:
-            ordered.append(cid)
+    # as set_grant_cards): every requested id must be an owned card —
+    # cross-owner attach by ID manipulation must fail (ValueError).
+    requested = list(dict.fromkeys(card_ids))  # dedupe, first-seen order
+    ordered = filter_owned_cards(conn, profile_id, requested)
+    if len(ordered) != len(requested):
+        raise ValueError(
+            "card_id(s) not found or not owned by profile "
+            f"{profile_id}: "
+            + ", ".join(str(c) for c in requested if c not in ordered))
 
     bundle_id = secrets.token_urlsafe(9)
     conn.execute(
@@ -2561,10 +2579,24 @@ def quarantine_request(conn: sqlite3.Connection, profile_id: int,
     """Silently file a blacklisted sender's request. ALWAYS SILENT: no
     notification row, no email push, no badge count — the owner is never
     bothered by people they have blacklisted, and the sender gets the
-    standard success page."""
+    standard success page.
+
+    Fix-pass F4: simple per-email dedupe — at most one quarantined row
+    per blacklisted email per day, so repeat re-POSTs collapse instead
+    of piling up identical rows.
+    """
+    addr = (email or "").strip()
+    existing = conn.execute(
+        """SELECT 1 FROM quarantined_requests
+           WHERE profile_id = ? AND LOWER(email) = LOWER(?)
+             AND date(created_at) = date('now') LIMIT 1""",
+        (profile_id, addr),
+    ).fetchone()
+    if existing:
+        return
     conn.execute(
         "INSERT INTO quarantined_requests (profile_id, email, name) VALUES (?, ?, ?)",
-        (profile_id, (email or "").strip(), (name or "").strip() or None),
+        (profile_id, addr, (name or "").strip() or None),
     )
     conn.commit()
 
