@@ -21,7 +21,7 @@
                     <p class="text-xs wl-text-faint mt-1">{{ visit_count }} visits (last 14 days)</p>
                 </div>
                 <div class="flex items-center gap-2">
-                    <button type="button" onclick="document.getElementById('qr-panel').classList.toggle('hidden')"
+                    <button type="button" onclick="document.getElementById('share-chooser').classList.toggle('hidden')"
                             class="wl-btn-ink px-3 py-1 rounded text-xs">
                         📤 Share
                     </button>
@@ -32,20 +32,37 @@
                 </div>
             </div>
 
-            {# QR share panel (hidden by default) #}
-            <div id="qr-panel" class="hidden mt-3 p-3 rounded-lg" style="background: rgba(255,255,255,0.03); border: 1px solid var(--wl-glass-border);">
-                <p class="text-xs wl-text-faint mb-2">Scan to connect</p>
-                <img src="/qr/{{ profile.handle }}" alt="QR code" class="w-32 h-32 rounded-lg mb-3" style="background: #fff; padding: 8px;">
-                <div class="flex items-center gap-2">
-                    <input type="text" id="share-link" readonly
-                           class="flex-1 text-xs border border-gray-600 rounded px-2 py-1 bg-transparent wl-text"
-                           value="{{ BASE_URL }}/p/{{ profile.handle }}">
-                    <button type="button" onclick="copyShareLink()"
-                            class="wl-btn-ink px-2 py-1 rounded text-xs">
-                        Copy
+            {# Share flow (2026-09-20): card chooser → Next → one QR + one
+               link encoding the chosen set. No QR here anymore — the link
+               is minted on the next screen. #}
+            <div id="share-chooser" class="hidden mt-3 p-3 rounded-lg" style="background: rgba(255,255,255,0.03); border: 1px solid var(--wl-glass-border);">
+                <p class="text-xs wl-text-faint mb-2">Choose the cards to share</p>
+                <form id="share-chooser-form" method="POST" action="/owner/{{ token }}/share">
+                    <div class="space-y-1">
+                        {% for card in cards %}
+                        <label class="flex items-center gap-2 text-sm cursor-pointer">
+                            <input type="checkbox" name="card_ids" value="{{ card.id }}"
+                                   class="w-4 h-4 rounded"
+                                   style="accent-color: #E8E8E8;">
+                            <span class="wl-text">{{ card.name }}</span>
+                            <span class="text-xs wl-text-faint">{{ card.fields|length }} field{{ '' if card.fields|length == 1 else 's' }}</span>
+                        </label>
+                        {% else %}
+                        <p class="text-xs wl-text-faint">No cards to share yet — create one below.</p>
+                        {% endfor %}
+                    </div>
+                    {% if share_error %}
+                    <p class="text-xs mt-2" style="color: var(--wl-danger);">{{ share_error }}</p>
+                    {% endif %}
+                    <button type="submit"
+                            class="wl-btn-ink px-3 py-1 rounded text-xs mt-2">
+                        Next
                     </button>
-                </div>
-                <p id="copy-msg" class="text-xs wl-text-faint mt-1 hidden">Copied!</p>
+                </form>
+                {# Live 'what they'll see' preview — the bundle exactly as an
+                   anonymous recipient sees it (public fields only), rendered
+                   before the Next step (ruling 2026-09-20). #}
+                <div id="share-preview" class="hidden mt-3" aria-live="polite"></div>
             </div>
 
             {# Bio #}
@@ -114,7 +131,9 @@
             {% if cards %}
             <div class="space-y-3">
                 {% for card in cards %}
-                <div class="wl-card p-4">
+                <div class="wl-card p-4 cursor-pointer"
+                     onclick="window.location='/owner/{{ token }}/profile/card/{{ card.id }}'"
+                     title="Preview this card">
                     <div class="flex items-center justify-between gap-3">
                         <div class="flex items-center gap-3 min-w-0">
                             {% if card.photo_path %}
@@ -135,11 +154,8 @@
                             </div>
                         </div>
                         <div class="flex items-center gap-2 flex-shrink-0">
-                            <a href="/owner/{{ token }}/profile/card/{{ card.id }}"
-                               class="wl-link text-xs">
-                                Preview
-                            </a>
                             <a href="/owner/{{ token }}/cards/{{ card.id }}/edit"
+                               onclick="event.stopPropagation()"
                                class="wl-btn-ink px-3 py-1 rounded text-xs">
                                 Edit
                             </a>
@@ -156,15 +172,22 @@
 </div>
 
 <script>
-function copyShareLink() {
-    const input = document.getElementById('share-link');
-    input.select();
-    input.setSelectionRange(0, 99999);
-    navigator.clipboard.writeText(input.value).then(() => {
-        const msg = document.getElementById('copy-msg');
-        msg.classList.remove('hidden');
-        setTimeout(() => msg.classList.add('hidden'), 2000);
-    });
+// Live 'what they'll see' preview: re-fetch the anonymous-tier fragment
+// whenever the chooser selection changes (degrades to no preview w/o JS).
+function updateSharePreview() {
+    const form = document.getElementById('share-chooser-form');
+    const panel = document.getElementById('share-preview');
+    const data = new FormData(form);
+    fetch('/owner/{{ token }}/share/preview', { method: 'POST', body: data })
+        .then(r => r.text())
+        .then(html => {
+            panel.innerHTML = html;
+            panel.classList.toggle('hidden', !document.querySelector('#share-chooser input[name="card_ids"]:checked'));
+        })
+        .catch(() => {});
 }
+document.querySelectorAll('#share-chooser input[name="card_ids"]').forEach(cb => {
+    cb.addEventListener('change', updateSharePreview);
+});
 </script>
 {% endblock %}

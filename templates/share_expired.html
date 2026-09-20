@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Link expired — Whitelist{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto py-8 px-4">
+    <div class="wl-card p-6 text-center">
+        <div class="w-14 h-14 mx-auto mb-4 rounded-full flex items-center justify-center"
+             style="background: var(--wl-btn-slate);">
+            <svg class="w-7 h-7 wl-text" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+        </div>
+        <h1 class="wl-heading wl-heading-md mb-2">This link has expired</h1>
+        <p class="wl-text-sub text-sm mb-6">
+            {{ profile.display_name }}'s share link is no longer active.
+            The owner has been notified — you can still request access below.
+        </p>
+        <a href="/p/{{ profile.handle }}/request-form"
+           class="wl-btn-ink inline-block px-6 py-2 rounded-lg text-sm">
+            Connect
+        </a>
+    </div>
+</div>
+{% endblock %}

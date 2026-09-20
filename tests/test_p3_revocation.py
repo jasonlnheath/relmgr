@@ -152,8 +152,13 @@ def test_revoked_grant_denies_profile_access(tmp_path):
         "REVOKED grant must not expose connection fields"
 
 
-def test_revoked_requester_can_re_request(tmp_path):
-    """Revocation is history, not a life-ban — re-request lands fresh pending."""
+def test_revoked_requester_request_quarantines_silently(tmp_path):
+    """SUPERSEDED 2026-09-20 (captain ruling, blacklist silence both
+    directions): a revoked (= blacklisted, one state) requester who
+    re-requests sees the SAME success page — they can never detect their
+    status — but the request is quarantined silently: no fresh pending
+    grant, no notification, no badge count. The old F6 'fresh pending'
+    pin is deliberately inverted here by the newer ruling."""
     db = _make_db(tmp_path)
     gid = _grant_for(db, "bob@x.com")
     _approve(db, gid, "14")
@@ -162,7 +167,6 @@ def test_revoked_requester_can_re_request(tmp_path):
     whitelist_db.revoke_grant(conn, gid)
     conn.close()
 
-    # Re-request through the public form path (dedupe must miss the dead row).
     from app import create_app
     from fastapi.testclient import TestClient
 
@@ -170,16 +174,21 @@ def test_revoked_requester_can_re_request(tmp_path):
     resp = client.post("/p/dana_reyes/request",
                        data={"name": "Bob B.", "email": "bob@x.com"})
     assert resp.status_code == 200
+    assert "Request Sent" in resp.text, "sender sees the normal confirmation"
 
     conn = whitelist_db.wl_connect(db)
     rows = conn.execute(
         "SELECT id, status FROM access_grants WHERE LOWER(requester_email)=LOWER('bob@x.com')"
     ).fetchall()
+    quarantined = conn.execute(
+        "SELECT * FROM quarantined_requests WHERE LOWER(email)=LOWER('bob@x.com')"
+    ).fetchall()
+    notifications = conn.execute("SELECT * FROM notifications").fetchall()
     conn.close()
-    assert len(rows) == 2, f"expected original revoked + fresh pending (found {len(rows)})"
-    statuses = sorted(r["status"] for r in rows)
-    assert statuses == ["pending", "revoked"], \
-        f"re-request must be a FRESH pending row, got statuses {statuses}"
+    assert len(rows) == 1, "no fresh grant row lands for a blacklisted sender"
+    assert rows[0]["status"] == "revoked"
+    assert len(quarantined) == 1, "request filed in the quarantine store"
+    assert notifications == [], "no notification row, no badge count"
 
 
 def test_owner_revoke_route_revokes_and_confirms(tmp_path):

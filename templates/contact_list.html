@@ -75,22 +75,31 @@
                     <span class="wl-heading wl-heading-sm wl-text block truncate">{{ row.name }}</span>
                 </div>
 
-                {# Access badges #}
+                {# Access badges — click-to-change (2026-09-20): the badge IS
+                   the access governor. One click cycles
+                   Whitelist → Greylist → Blocked → Whitelist. INSTANT and
+                   ALWAYS SILENT: the contact is never notified of a move. #}
                 <div class="flex flex-col items-end gap-1 flex-shrink-0">
                     {% if row.is_pending %}
                     <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs wl-badge-greylist">
                         Pending
                     </span>
+                    {% elif row.live_grant %}
+                    {% if row.granted and row.perm == 'permanent' %}
+                    {% set badge_label, badge_style, next_state = 'Whitelist', 'wl-badge-whitelist', 'greylist' %}
                     {% elif row.granted %}
-                    {% if row.perm == 'permanent' %}
-                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs wl-badge-whitelist">
-                        Whitelist
-                    </span>
-                    {% elif row.perm == 'temp' %}
-                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs wl-badge-greylist">
-                        Greylist
-                    </span>
+                    {% set badge_label, badge_style, next_state = 'Greylist', 'wl-badge-greylist', 'blocked' %}
+                    {% else %}
+                    {% set badge_label, badge_style, next_state = 'Blocked', 'wl-badge-blocked', 'whitelist' %}
                     {% endif %}
+                    <form method="POST" action="/owner/{{ token }}/badge">
+                        <input type="hidden" name="grant_id" value="{{ row.live_grant.id }}">
+                        <input type="hidden" name="state" value="{{ next_state }}">
+                        <button type="submit" title="Click to change access"
+                                class="inline-flex items-center px-2 py-0.5 rounded-full text-xs cursor-pointer {{ badge_style }}">
+                            {{ badge_label }}
+                        </button>
+                    </form>
                     {% else %}
                     <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs wl-badge-blocked">
                         Blocked

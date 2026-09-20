@@ -328,6 +328,82 @@ def _send_connection_request_email(db_path: Path, grant_id: str) -> None:
     mailer.send_email(owner_email, "RelMgr: new connection request", body)
 
 
+def _qr_png(payload: str) -> bytes:
+    """Render *payload* to a PNG QR code (single generator for the profile
+    QR and share-bundle QR — one place to keep size/error-correction)."""
+    import qrcode
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=8,
+        border=4,
+    )
+    qr.add_data(payload)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _vcf_escape(value: str) -> str:
+    """Escape one vCard text value (backslash first, then ; , \n)."""
+    return (value.replace("\\", "\\\\").replace(";", "\\;")
+            .replace(",", "\\,").replace("\r\n", "\\n").replace("\n", "\\n"))
+
+
+def _build_vcard(profile: dict, cards: list[dict]) -> str:
+    """vCard 3.0 built from EXACTLY the fields the viewer can see.
+
+    Ruling 2026-09-20 (VCF download): the 'Save to contacts' file
+    carries the same visibility-filtered set the shared view renders —
+    cards arrive as cards_for_share_bundle output (visible_fields only).
+    Fields are deduped by id (cards are lenses: one field can sit in
+    several chosen cards). CRLF line endings per the vCard spec.
+    """
+    display = profile.get("display_name") or "Unknown"
+    parts = display.split(" ", 1)
+    first = parts[0]
+    last = parts[1] if len(parts) > 1 else ""
+    lines = [
+        "BEGIN:VCARD",
+        "VERSION:3.0",
+        f"N:{_vcf_escape(last)};{_vcf_escape(first)};;;",
+        f"FN:{_vcf_escape(display)}",
+    ]
+    if profile.get("title"):
+        lines.append(f"TITLE:{_vcf_escape(profile['title'])}")
+    if profile.get("company"):
+        lines.append(f"ORG:{_vcf_escape(profile['company'])}")
+    seen: set[int] = set()
+    for card in cards:
+        for f in card.get("visible_fields", []):
+            fid = f.get("id")
+            if fid in seen:
+                continue
+            seen.add(fid)
+            v = _vcf_escape(f["field_value"])
+            t = f["field_type"]
+            if t == "email":
+                lines.append(f"EMAIL;TYPE=INTERNET:{v}")
+            elif t == "phone":
+                lines.append(f"TEL;TYPE=CELL:{v}")
+            elif t == "address":
+                lines.append(f"ADR;TYPE=HOME:;;{v};;;")
+            elif t == "website":
+                lines.append(f"URL:{v}")
+            elif t == "birthday":
+                lines.append(f"BDAY:{v}")
+            elif t == "note":
+                lines.append(f"NOTE:{v}")
+            elif t == "title":
+                lines.append(f"TITLE:{v}")
+            elif t == "company":
+                lines.append(f"ORG:{v}")
+    lines.append("END:VCARD")
+    return "\r\n".join(lines) + "\r\n"
+
+
 def create_app(db_path: Path = None) -> FastAPI:
     """Create and configure the FastAPI application.
 
@@ -700,31 +776,48 @@ def create_app(db_path: Path = None) -> FastAPI:
         form = await request.form()
         name = form.get("name", "")
         email = form.get("email", "")
+        grant_id = None
 
         conn = whitelist_db.wl_connect(path)
         try:
             profile = whitelist_db.resolve_handle(conn, handle)
             if not profile:
                 return HTMLResponse("Profile not found", status_code=404)
-            grant_id = whitelist_db.create_grant(conn, profile["id"], email, name, profile.get("owner_id"))
-            # Two-layer notification (2026-09-20): the in-app row is the
-            # source of truth and commits here; the email is only the push
-            # (BackgroundTask below). dedupe_key collapses re-POSTs of a
-            # still-pending grant to the same single row.
-            grant = whitelist_db.get_grant(conn, grant_id)
-            owner_id = grant["owner_id"] or profile["id"]
-            whitelist_db.create_notification(
-                conn, owner_id, "connection_request",
-                title=f"Connection request from {name or email}",
-                grant_id=grant_id,
-                dedupe_key=f"grant:{grant_id}")
+            if whitelist_db.is_blacklisted(conn, profile["id"], email):
+                # Blacklist silence, BOTH directions (ruling 2026-09-20):
+                # the sender still sees the normal 'request sent'
+                # confirmation below — they can never detect their status —
+                # but the request is quarantined silently: no pending
+                # grant, no notification, no badge count, no email push.
+                whitelist_db.quarantine_request(conn, profile["id"], email, name)
+                quarantined = True
+                # Cosmetic, display-only id so the success page is
+                # INDISTINGUISHABLE from a real one — a blank Grant ID would
+                # let the sender detect their blacklisted status (silence
+                # rule). This id backs no row anywhere.
+                grant_id = os.urandom(6).hex()
+            else:
+                quarantined = False
+                grant_id = whitelist_db.create_grant(conn, profile["id"], email, name, profile.get("owner_id"))
+                # Two-layer notification (2026-09-20): the in-app row is the
+                # source of truth and commits here; the email is only the push
+                # (BackgroundTask below). dedupe_key collapses re-POSTs of a
+                # still-pending grant to the same single row.
+                grant = whitelist_db.get_grant(conn, grant_id)
+                owner_id = grant["owner_id"] or profile["id"]
+                whitelist_db.create_notification(
+                    conn, owner_id, "connection_request",
+                    title=f"Connection request from {name or email}",
+                    grant_id=grant_id,
+                    dedupe_key=f"grant:{grant_id}")
         finally:
             conn.close()
 
+        background = None if quarantined else BackgroundTask(
+            _send_connection_request_email, path, grant_id)
         return HTMLResponse(jinja.get_template("request_success.html").render(
             request=request, profile=profile, grant_id=grant_id),
-            background=BackgroundTask(
-                _send_connection_request_email, path, grant_id))
+            background=background)
 
     @application.post("/p/{handle}/forward")
     async def forward_card(request: Request, handle: str):
@@ -780,6 +873,273 @@ def create_app(db_path: Path = None) -> FastAPI:
             recipient_email=recipient_email),
             background=BackgroundTask(
                 _send_connection_request_email, path, grant_id))
+
+    # ------------------------------------------------------------------
+    # Share bundles (captain ruling 2026-09-20): the Share flow is
+    # chooser → Next → ONE QR + ONE link encoding the chosen card set.
+    # The bundle link is stable while fields update (card IDs stored,
+    # values read live) and expires exactly one week after creation.
+    # ------------------------------------------------------------------
+
+    def _bundle_share_url(bundle_id: str) -> str:
+        return f"{mailer.app_base_url()}/s/{bundle_id}"
+
+    def _bundle_share_message(display_name: str, bundle_id: str) -> str:
+        # Exact copy sent by the native share sheet (ruling 2026-09-20).
+        return (f"{display_name} wants to share their Whitelist card: "
+                f"{_bundle_share_url(bundle_id)}")
+
+    @application.post("/owner/{token}/share/preview")
+    async def owner_share_preview(request: Request, token: str):
+        """'What they'll see' fragment for the chooser (ruling 2026-09-20):
+        the bundle exactly as an anonymous recipient will see it, public
+        fields only — rendered BEFORE the Next step so the user confirms.
+        """
+        form = await request.form()
+        raw_ids = form.getlist("card_ids")
+        conn = whitelist_db.wl_connect(path)
+        try:
+            result = _resolve_owner(conn, request, token, _get_secret())
+            if result[0] is None and result[2] is None:
+                return HTMLResponse("Invalid or expired link", status_code=403)
+            if result[2]:
+                return HTMLResponse("")  # session flow: fragment only
+            profile_id = result[0]
+            try:
+                card_ids = [int(c) for c in raw_ids]
+            except (ValueError, TypeError):
+                card_ids = []
+            cards = whitelist_db.cards_for_share_bundle(
+                conn, {"card_ids": card_ids}, "anonymous")
+            return HTMLResponse(jinja.get_template(
+                "share_cards_fragment.html").render(
+                request=request, cards=cards, preview_mode=True))
+        finally:
+            conn.close()
+
+    @application.post("/owner/{token}/share")
+    async def owner_share_create(request: Request, token: str):
+        """Chooser Next step: create ONE bundle for the chosen card set,
+        then show the owner the single QR + single link for it."""
+        form = await request.form()
+        raw_ids = form.getlist("card_ids")
+        conn = whitelist_db.wl_connect(path)
+        try:
+            result = _resolve_owner(conn, request, token, _get_secret())
+            if result[0] is None and result[2] is None:
+                return HTMLResponse("Invalid or expired link", status_code=403)
+            if result[2]:
+                return RedirectResponse(url=f"/owner/{result[2]}")
+            profile_id = result[0]
+            profile = result[1]
+            try:
+                card_ids = [int(c) for c in raw_ids]
+            except (ValueError, TypeError):
+                card_ids = None
+            try:
+                bundle = whitelist_db.create_share_bundle(
+                    conn, profile_id, card_ids or [])
+            except ValueError:
+                return _my_profile_html(
+                    conn, request, token, profile,
+                    share_error=("Choose at least one card to share"
+                                 if not card_ids else
+                                 "Invalid card selection"),
+                    status_code=400)
+            return RedirectResponse(
+                url=f"/owner/{token}/share/{bundle['id']}", status_code=303)
+        finally:
+            conn.close()
+
+    @application.get("/owner/{token}/share/{bundle_id}", response_class=HTMLResponse)
+    async def owner_share_page(request: Request, token: str, bundle_id: str):
+        """Owner's share sheet: single QR + single link + native share."""
+        conn = whitelist_db.wl_connect(path)
+        try:
+            result = _resolve_owner(conn, request, token, _get_secret())
+            if result[0] is None and result[2] is None:
+                return HTMLResponse("Invalid or expired link", status_code=403)
+            if result[2]:
+                return RedirectResponse(url=f"/owner/{result[2]}")
+            profile_id = result[0]
+            profile = result[1]
+            bundle = whitelist_db.get_share_bundle(conn, bundle_id)
+            if not bundle or bundle["profile_id"] != profile_id:
+                return HTMLResponse("Not found", status_code=404)
+            expired = whitelist_db.bundle_is_expired(bundle)
+            card_names = []
+            for cid in bundle["card_ids"]:
+                card = whitelist_db.get_card_by_id(conn, cid)
+                if card:
+                    card_names.append(card["name"])
+        finally:
+            conn.close()
+
+        share_url = _bundle_share_url(bundle_id)
+        return HTMLResponse(jinja.get_template("owner_share.html").render(
+            request=request,
+            token=token,
+            profile=profile,
+            bundle_id=bundle_id,
+            card_names=card_names,
+            share_url=share_url,
+            share_message=_bundle_share_message(profile["display_name"], bundle_id),
+            expired=expired,
+        ))
+
+    @application.post("/owner/{token}/share/{bundle_id}/reshare")
+    async def owner_share_reshare(request: Request, token: str, bundle_id: str):
+        """Re-share path for an expired link (ruling 2026-09-20): stamp a
+        fresh one-week shelf life on the same bundle/link."""
+        conn = whitelist_db.wl_connect(path)
+        try:
+            result = _resolve_owner(conn, request, token, _get_secret())
+            if result[0] is None and result[2] is None:
+                return HTMLResponse("Invalid or expired link", status_code=403)
+            if result[2]:
+                return RedirectResponse(url=f"/owner/{result[2]}")
+            profile_id = result[0]
+            bundle = whitelist_db.get_share_bundle(conn, bundle_id)
+            if not bundle or bundle["profile_id"] != profile_id:
+                return HTMLResponse("Not found", status_code=404)
+            whitelist_db.renew_share_bundle(conn, bundle_id)
+        finally:
+            conn.close()
+        return RedirectResponse(
+            url=f"/owner/{token}/share/{bundle_id}", status_code=303)
+
+    @application.get("/s/{bundle_id}/card.vcf")
+    async def share_bundle_vcf(request: Request, bundle_id: str,
+                               e: str = Query(None, alias="e")):
+        """'Save to contacts' — vCard from EXACTLY the fields this viewer
+        may see (same tier filter as the shared view page)."""
+        conn = whitelist_db.wl_connect(path)
+        try:
+            bundle = whitelist_db.get_share_bundle(conn, bundle_id)
+            if not bundle:
+                return HTMLResponse("Not found", status_code=404)
+            profile = whitelist_db.get_profile_by_id(conn, bundle["profile_id"])
+            if not profile:
+                return HTMLResponse("Profile not found", status_code=404)
+            tier = whitelist_db.effective_tier(
+                conn, profile["id"], e if e else None)
+            if whitelist_db.bundle_is_expired(bundle) and tier != "granted":
+                return HTMLResponse("Link expired", status_code=404)
+            cards = whitelist_db.cards_for_share_bundle(conn, bundle, tier)
+            vcf = _build_vcard(profile, cards)
+            filename = profile["handle"] or "card"
+        finally:
+            conn.close()
+        return Response(
+            content=vcf,
+            media_type="text/vcard",
+            headers={"Content-Disposition":
+                     f'attachment; filename="{filename}.vcf"'},
+        )
+
+    @application.get("/s/{bundle_id}", response_class=HTMLResponse)
+    async def share_bundle_view(request: Request, bundle_id: str,
+                                e: str = Query(None, alias="e")):
+        """The recipient's page: the chosen card set as ONE combined card,
+        grouped per card with reach-me actions inside each block.
+
+        Link lifecycle (ruling 2026-09-20):
+        - a connected viewer (any list tier — their live grant resolves to
+          'granted') sees their normal governed view even after expiry;
+          the connection outlives the link
+        - an expired link opened by a stranger pings the owner ONCE (per
+          bundle, deduped) and shows the expired page with a Connect path
+        - a BLACKLISTED opener gets the same expired page but triggers NO
+          ping — the owner is never bothered by blacklisted people
+        """
+        conn = whitelist_db.wl_connect(path)
+        try:
+            bundle = whitelist_db.get_share_bundle(conn, bundle_id)
+            if not bundle:
+                return HTMLResponse("<h1>Link not found</h1>", status_code=404)
+            profile = whitelist_db.get_profile_by_id(conn, bundle["profile_id"])
+            if not profile:
+                return HTMLResponse("<h1>Profile not found</h1>", status_code=404)
+
+            viewer_email = e if e else None
+            tier = whitelist_db.effective_tier(conn, profile["id"], viewer_email)
+
+            if whitelist_db.bundle_is_expired(bundle) and tier != "granted":
+                if not whitelist_db.is_blacklisted(
+                        conn, profile["id"], viewer_email or ""):
+                    # Stranger at an expired link → ping the owner ONCE
+                    # (dedupe per bundle) with a fresh dashboard path —
+                    # the re-share lives on the owner share page.
+                    owner_id = profile.get("owner_id") or profile["id"]
+                    dashboard_token = wl_tokens.make_token(
+                        _get_secret(), "owner_dashboard", str(owner_id),
+                        expires_days=7)
+                    who = viewer_email or "Someone"
+                    whitelist_db.create_notification(
+                        conn, owner_id, "expired_link",
+                        title="An expired share link was opened",
+                        body=(f"{who} opened an expired link to your card. "
+                              "Open your share page to re-share it, or let "
+                              "them connect from your dashboard."),
+                        link=f"/owner/{dashboard_token}",
+                        dedupe_key=f"expired_link:{bundle_id}")
+                return HTMLResponse(jinja.get_template(
+                    "share_expired.html").render(
+                    request=request, profile=profile, bundle_id=bundle_id))
+
+            if not whitelist_db.bundle_is_expired(bundle):
+                # Tracked event, same P3-T4 contract as /p/{handle}.
+                whitelist_db.record_scan(conn, profile["id"],
+                                         viewer_email if viewer_email else None)
+
+            stale = is_verified_stale(profile.get("verified_at"))
+            cards = whitelist_db.cards_for_share_bundle(conn, bundle, tier)
+            bio_visibility = whitelist_db.get_bio_visibility(conn, profile["id"])
+
+            return HTMLResponse(jinja.get_template("share_bundle.html").render(
+                request=request, profile=profile, bundle_id=bundle_id,
+                tier=tier, stale=stale, cards=cards,
+                bio_visibility=bio_visibility, viewer_email=viewer_email,
+                days_since=days_since))
+        finally:
+            conn.close()
+
+    # ------------------------------------------------------------------ Badge-governed access (2026-09-20)
+
+    @application.post("/owner/{token}/badge")
+    async def owner_badge_state(request: Request, token: str):
+        """Click-to-change contact-list badges (Whitelist/Grey/Blocked).
+
+        INSTANT and ALWAYS SILENT: the badge flip is the access governor,
+        and the affected contact is NEVER notified — no notification row,
+        no email, ever. The notification center only tells the OWNER
+        about incoming events, never contacts about rulings.
+        """
+        form = await request.form()
+        grant_id = form.get("grant_id", "")
+        state = form.get("state", "")
+        conn = whitelist_db.wl_connect(path)
+        try:
+            result = _resolve_owner(conn, request, token, _get_secret())
+            if result[0] is None and result[2] is None:
+                return HTMLResponse("Invalid or expired link", status_code=403)
+            if result[2]:
+                return RedirectResponse(url=f"/owner/{result[2]}")
+            profile_id = result[0]
+            is_explicit = result[3]
+
+            grant = whitelist_db.get_grant(conn, grant_id)
+            if not grant:
+                return HTMLResponse("Grant not found", status_code=404)
+            if not _verify_grant_ownership(conn, grant, profile_id, is_explicit):
+                return HTMLResponse("Not found", status_code=404)
+            try:
+                whitelist_db.set_badge_state(conn, grant_id, state)
+            except ValueError:
+                return HTMLResponse("Invalid badge state", status_code=400)
+        finally:
+            conn.close()
+        return RedirectResponse(url=f"/owner/{token}", status_code=303)
 
     @application.get("/a/{token}", response_class=HTMLResponse)
     async def admin_link(request: Request, token: str):
@@ -1167,7 +1527,7 @@ def create_app(db_path: Path = None) -> FastAPI:
 
     def _my_profile_html(conn, request, token: str, profile: dict,
                         bio_error=None, new_card_error=None,
-                        bio_override=None, status_code=200) -> HTMLResponse:
+                        bio_override=None, share_error=None, status_code=200) -> HTMLResponse:
         """Render my_profile.html from ONE place.
 
         ALL five My Profile sites (GET /profile, POST /bio, /cards/new,
@@ -1221,6 +1581,7 @@ def create_app(db_path: Path = None) -> FastAPI:
             visit_count=visit_count,
             days_since=days_since,
             days_until=days_until,
+            share_error=share_error,
             BASE_URL=base_url,
         ), status_code=status_code)
 
@@ -1694,6 +2055,19 @@ def create_app(db_path: Path = None) -> FastAPI:
         from fastapi.responses import FileResponse
         return FileResponse(full_path, media_type="image/jpeg")
 
+    @application.get("/qr/share/{bundle_id}")
+    async def serve_bundle_qr(bundle_id: str):
+        """QR for a share bundle — encodes the single /s/{bundle_id} link."""
+        conn = whitelist_db.wl_connect(path)
+        try:
+            bundle = whitelist_db.get_share_bundle(conn, bundle_id)
+            if not bundle:
+                return HTMLResponse("Not found", status_code=404)
+        finally:
+            conn.close()
+        return Response(content=_qr_png(_bundle_share_url(bundle_id)),
+                        media_type="image/png")
+
     @application.get("/qr/{handle}")
     async def serve_qr(handle: str):
         """Serve a QR code PNG for the given profile handle."""
@@ -1705,22 +2079,8 @@ def create_app(db_path: Path = None) -> FastAPI:
         finally:
             conn.close()
 
-        import qrcode
-        qr = qrcode.QRCode(
-            version=1,
-            error_correction=qrcode.constants.ERROR_CORRECT_M,
-            box_size=8,
-            border=4,
-        )
-        base_url = mailer.app_base_url()
-        qr.add_data(f"{base_url}/p/{handle}")
-        qr.make(fit=True)
-        img = qr.make_image(fill_color="black", back_color="white")
-
-        buf = BytesIO()
-        img.save(buf, format="PNG")
-        buf.seek(0)
-        return Response(content=buf.read(), media_type="image/png")
+        return Response(content=_qr_png(f"{mailer.app_base_url()}/p/{handle}"),
+                        media_type="image/png")
 
     @application.post("/owner/{token}/decision")
     async def owner_decision(request: Request, token: str):
