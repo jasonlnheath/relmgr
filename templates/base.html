@@ -57,6 +57,25 @@
         .wl-link { color: var(--wl-ink); text-decoration: underline; }
         .wl-link:hover { opacity: 0.75; }
 
+        /* Dropdowns: every <select> keeps the dark glass background. With
+           bg-transparent the native option popup renders the light ink
+           (#E8E8E8) on the OS's white menu — unreadable white-on-white
+           (bio-visibility dropdown, captain ruling 2026-09-20). The
+           explicit dark fill + color-scheme: dark forces a dark popup
+           everywhere; option colors are pinned for engines that ignore
+           color-scheme. */
+        .wl-select {
+            background: rgba(20, 20, 20, 0.92);
+            color: var(--wl-ink);
+            color-scheme: dark;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+        .wl-select option, .wl-select optgroup {
+            background: #141414;
+            color: var(--wl-ink);
+        }
+
         /* Buttons — slate-grey liquid-glass */
         .wl-btn-approve { background: var(--wl-success); color: #000; }
         .wl-btn-approve:hover { opacity: 0.85; }

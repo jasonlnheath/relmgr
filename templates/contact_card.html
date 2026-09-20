@@ -217,8 +217,23 @@
 {% macro _field_label(field_type) %}
     {%- if field_type == 'email' -%}email
     {%- elif field_type == 'phone' -%}phone
+    {%- elif field_type == 'text_number' -%}text number
+    {%- elif field_type == 'facetime_number' -%}FaceTime number
+    {%- elif field_type == 'facetime' -%}FaceTime
+    {%- elif field_type == 'skype' -%}skype
+    {%- elif field_type == 'video_app' -%}video app
+    {%- elif field_type == 'messenger' -%}messenger
+    {%- elif field_type == 'messaging_app' -%}messaging app
+    {%- elif field_type == 'facebook' -%}facebook
+    {%- elif field_type == 'instagram' -%}instagram
+    {%- elif field_type == 'social_other' -%}social
     {%- elif field_type == 'title' -%}title
     {%- elif field_type == 'company' -%}company
+    {%- elif field_type == 'address1' -%}address 1
+    {%- elif field_type == 'address2' -%}address 2
+    {%- elif field_type == 'city' -%}city
+    {%- elif field_type == 'state' -%}state/province
+    {%- elif field_type == 'zip' -%}zip/postal code
     {%- elif field_type == 'address' -%}address
     {%- elif field_type == 'website' -%}website
     {%- elif field_type == 'birthday' -%}birthday

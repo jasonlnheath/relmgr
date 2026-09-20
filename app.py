@@ -1429,7 +1429,6 @@ def create_app(db_path: Path = None) -> FastAPI:
     # client-side crop/zoom/position, every conventional field from the
     # store with its own visibility control. Single render site (same
     # lesson as _my_profile_html: forked render blocks drop state).
-    _EDITOR_MULTI_TYPES = ("email", "phone")
 
     def _resolve_editor_card(conn, request, token: str, card_id: int):
         """Shared auth + ownership guard for the card-editor routes.
@@ -1470,8 +1469,10 @@ def create_app(db_path: Path = None) -> FastAPI:
             profile=profile,
             card=card,
             by_type=by_type,
+            sections=whitelist_db.CARD_EDITOR_SECTIONS,
+            labels=whitelist_db.CARD_EDITOR_FIELD_LABELS,
             field_types=field_types,
-            multi_types=_EDITOR_MULTI_TYPES,
+            multi_types=whitelist_db.CARD_EDITOR_MULTI_TYPES,
             token=token,
             owner_id=profile["id"],
             error=error,
@@ -1554,6 +1555,35 @@ def create_app(db_path: Path = None) -> FastAPI:
             card = whitelist_db.get_card_by_id(conn, card_id)
             profile = whitelist_db.get_profile_by_id(conn, profile_id)
             return _card_editor_html(conn, request, token, profile, card)
+        finally:
+            conn.close()
+
+    @application.post("/owner/{token}/cards/{card_id}/delete")
+    async def owner_delete_card(request: Request, token: str, card_id: int):
+        """Delete ONE card (round-2 captain ask: destructive action with a
+        confirm step). The confirm step lives in the editor UI (two-stage
+        button); the route itself is the guarded write: ownership is
+        enforced by _resolve_editor_card (foreign card → 404, ruling 2A),
+        profile_fields survive (cards are lenses, not containers), and
+        grant_cards links cascade away with the card."""
+        conn = whitelist_db.wl_connect(path)
+        try:
+            profile_id, card, err = _resolve_editor_card(conn, request, token, card_id)
+            if err is not None:
+                return err
+
+            whitelist_db.delete_card(conn, card_id, profile_id)
+
+            # The card's photo file has no DB row anymore — unlink it.
+            photo_path = f"{profile_id}_{card_id}.jpg"
+            try:
+                (Path(__file__).parent / "uploads" / photo_path).unlink()
+            except OSError:
+                pass
+
+            # 303 (See Other): the browser must land on My Profile with a
+            # GET — a 307 would replay the POST onto /profile (405).
+            return RedirectResponse(url=f"/owner/{token}/profile", status_code=303)
         finally:
             conn.close()
 
