@@ -21,6 +21,7 @@ import qrcode
 sys.path.insert(0, str(Path(__file__).parent.parent))
 import whitelist_db
 import wl_env
+import mailer
 
 
 BASE_DIR = Path(__file__).parent.parent
@@ -29,7 +30,7 @@ EXPORTS_DIR = BASE_DIR / "exports"
 BACKUPS_DIR = BASE_DIR / "backups"
 CANONICAL_PATH = Path("/home/jason/profile/jason.heath.canonical.json")
 
-BASE_URL = wl_env.get_secret("BASE_URL") or "https://whitelist.app"
+BASE_URL = mailer.app_base_url()
 
 
 DEMO_PROFILES = [

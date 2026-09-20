@@ -25,6 +25,7 @@ from whitelist_db import (
     get_grey_contacts,
     _now_iso,
 )
+import mailer
 
 
 def build_quarterly_review(conn) -> str | None:
@@ -83,7 +84,7 @@ def build_quarterly_review(conn) -> str | None:
 
     lines.append("=" * 60)
     lines.append("")
-    lines.append("Review at: https://whitelist.example.com/dashboard")
+    lines.append(f"Review at: {mailer.app_base_url()}/dashboard")
     lines.append("")
 
     return "\n".join(lines)

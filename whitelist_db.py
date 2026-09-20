@@ -232,6 +232,29 @@ def wl_init(conn: sqlite3.Connection) -> None:
             forwarded_at TEXT NOT NULL DEFAULT (datetime('now')),
             FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
         );
+
+        -- In-app notification center (2026-09-20): the source of truth;
+        -- email is only the push. One row per owner event (connection
+        -- request, forward, quarterly prompt). dedupe_key carries the
+        -- idempotency contract: NULL means always insert, otherwise the
+        -- unique index collapses repeats (one row per grant, one per
+        -- owner+quarter for the quarterly prompt).
+        CREATE TABLE IF NOT EXISTS notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            owner_profile_id INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+            kind TEXT NOT NULL CHECK(kind IN ('connection_request', 'forward', 'quarterly')),
+            title TEXT NOT NULL,
+            body TEXT,
+            link TEXT,
+            grant_id TEXT,
+            dedupe_key TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            read_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_notifications_owner
+            ON notifications(owner_profile_id, created_at);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_notifications_dedupe
+            ON notifications(dedupe_key) WHERE dedupe_key IS NOT NULL;
     """)
     # P3-T2: append-only audit trail — DDL comes from the shared _grant_logs_ddl()
     # so the action vocabulary can never drift between wl_init / ensure / heal.
@@ -2252,6 +2275,121 @@ def get_forwardings_for_profile(
         (profile_id,),
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+# ============================================================
+# In-app notification center (2026-09-20) — the source of truth.
+# Email is the push, these rows are the record: unread badge on the
+# dashboard, full list at /owner/{token}/notifications.
+# ============================================================
+
+_NOTIFICATION_KINDS = ("connection_request", "forward", "quarterly")
+
+
+def create_notification(
+    conn: sqlite3.Connection,
+    owner_profile_id: int,
+    kind: str,
+    title: str,
+    body: Optional[str] = None,
+    link: Optional[str] = None,
+    grant_id: Optional[str] = None,
+    dedupe_key: Optional[str] = None,
+) -> Optional[int]:
+    """Insert one notification row. Returns its id, or None when a
+    dedupe_key collision suppressed the insert (one row per grant, one
+    per owner+quarter — repeats never re-alert)."""
+    if kind not in _NOTIFICATION_KINDS:
+        raise ValueError(f"unknown notification kind: {kind}")
+    cur = conn.execute(
+        """INSERT OR IGNORE INTO notifications
+           (owner_profile_id, kind, title, body, link, grant_id, dedupe_key)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (owner_profile_id, kind, title, body, link, grant_id, dedupe_key),
+    )
+    conn.commit()
+    return cur.lastrowid if cur.rowcount else None
+
+
+def list_notifications(
+    conn: sqlite3.Connection, owner_profile_id: int, limit: int = 200
+) -> list[dict]:
+    """All notifications for ONE owner, newest first (per-owner isolation:
+    a foreign owner's rows are unreachable by construction)."""
+    rows = conn.execute(
+        """SELECT * FROM notifications
+           WHERE owner_profile_id = ?
+           ORDER BY created_at DESC, id DESC LIMIT ?""",
+        (owner_profile_id, limit),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def unread_notification_count(conn: sqlite3.Connection, owner_profile_id: int) -> int:
+    """Unread badge count for one owner."""
+    row = conn.execute(
+        "SELECT COUNT(*) FROM notifications "
+        "WHERE owner_profile_id = ? AND read_at IS NULL",
+        (owner_profile_id,),
+    ).fetchone()
+    return row[0]
+
+
+def get_notification(
+    conn: sqlite3.Connection, owner_profile_id: int, notification_id: int
+) -> Optional[dict]:
+    """Fetch one notification, owner-scoped; None when missing or foreign."""
+    row = conn.execute(
+        "SELECT * FROM notifications WHERE id = ? AND owner_profile_id = ?",
+        (notification_id, owner_profile_id),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def mark_notification_read(
+    conn: sqlite3.Connection, owner_profile_id: int, notification_id: int
+) -> bool:
+    """Stamp read_at on ONE owner's notification. Returns True when a row
+    was flipped; False for unknown id, foreign id, or already-read."""
+    cur = conn.execute(
+        """UPDATE notifications SET read_at = ?
+           WHERE id = ? AND owner_profile_id = ? AND read_at IS NULL""",
+        (_now_iso(), notification_id, owner_profile_id),
+    )
+    conn.commit()
+    return bool(cur.rowcount)
+
+
+def mark_all_notifications_read(conn: sqlite3.Connection, owner_profile_id: int) -> int:
+    """Mark every unread notification for one owner read; returns count."""
+    cur = conn.execute(
+        """UPDATE notifications SET read_at = ?
+           WHERE owner_profile_id = ? AND read_at IS NULL""",
+        (_now_iso(), owner_profile_id),
+    )
+    conn.commit()
+    return cur.rowcount
+
+
+def sync_quarterly_notifications(
+    conn: sqlite3.Connection, owner_profile_id: int
+) -> Optional[int]:
+    """Raise ONE quarterly-review notification when this owner has grey
+    contacts (expired quarter grants awaiting make-permanent / revoke /
+    punt). Idempotent per owner per quarter via the dedupe key — the
+    dashboard calls this on every render, so repeats must be free."""
+    grey_count = get_grey_contact_count(conn, owner_profile_id)
+    if not grey_count:
+        return None
+    label = "contact" if grey_count == 1 else "contacts"
+    return create_notification(
+        conn,
+        owner_profile_id,
+        "quarterly",
+        f"Quarterly review: {grey_count} grey {label} awaiting a decision",
+        body="Expired quarter grants are waiting — make permanent, revoke, or punt.",
+        dedupe_key=f"quarterly:{owner_profile_id}:{quarter_end_iso()}",
+    )
 
 
 # ============================================================
