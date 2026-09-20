@@ -201,17 +201,18 @@ def _resolve_owner(
     return None, None, None, False
 
 
-def _verify_grant_ownership(conn, grant, profile_id, is_explicit):
-    """Verify a grant belongs to the current owner.
+def _verify_grant_ownership(conn, grant, profile_id, is_explicit=True):
+    """Verify a grant belongs to the current owner (ruling 2A).
 
-    For explicit (session-authenticated) owners, the grant's owner_id must
-    match. For legacy fallback (non-integer token payload), we accept any
-    grant (backward compat).
+    ALWAYS enforced — the legacy fallback (non-integer token payload) is
+    owner-scoped like every other path: a dashboard link may only decide
+    grants owned by the profile it resolves to. Fail-closed: a grant with
+    no owner_id (unmigrated row) is undecidable → deny. The is_explicit
+    parameter is kept for call-site compatibility and ignored.
     """
-    if is_explicit and grant and grant.get("owner_id") is not None:
-        if grant["owner_id"] != profile_id:
-            return False
-    return True
+    if grant is None:
+        return False
+    return grant.get("owner_id") == profile_id
 
 
 def _decision_outcome(conn, jinja, request, grant_id, decision,
@@ -294,7 +295,9 @@ def create_app(db_path: Path = None) -> FastAPI:
             # Set session cookie
             secret = _get_secret()
             session_cookie = _make_session_cookie(profile["id"], secret)
-            response = RedirectResponse(url="/")
+            # 303 See Other: the browser must follow with GET — a default 307
+            # re-POSTs to "/" and lands on 405 Method Not Allowed.
+            response = RedirectResponse(url="/", status_code=303)
             response.set_cookie(
                 key="wl_session",
                 value=session_cookie,
@@ -323,7 +326,12 @@ def create_app(db_path: Path = None) -> FastAPI:
         errors = []
         if not display_name:
             errors.append("Display name is required.")
-        if not handle or not re.match(r"^[a-z0-9][a-z0-9-]*[a-z0-9]$", handle):
+        if (
+            not handle
+            or len(handle) < 2
+            or len(handle) > 40
+            or not re.match(r"^[a-z0-9][a-z0-9-]*[a-z0-9]$", handle)
+        ):
             errors.append("Handle must be 2-40 lowercase alphanumeric chars (hyphens ok).")
         if not email or "@" not in email:
             errors.append("Valid email is required.")
@@ -343,7 +351,9 @@ def create_app(db_path: Path = None) -> FastAPI:
             # Set session cookie
             secret = _get_secret()
             session_cookie = _make_session_cookie(profile["id"], secret)
-            response = RedirectResponse(url="/")
+            # 303 See Other: the browser must follow with GET — a default 307
+            # re-POSTs to "/" and lands on 405 Method Not Allowed.
+            response = RedirectResponse(url="/", status_code=303)
             response.set_cookie(
                 key="wl_session",
                 value=session_cookie,
@@ -361,7 +371,9 @@ def create_app(db_path: Path = None) -> FastAPI:
 
     @application.post("/signout")
     async def signout_submit(request: Request):
-        response = RedirectResponse(url="/signin")
+        # 303 See Other: follow with GET — a default 307 would re-POST to
+        # "/signin" and land on 405 Method Not Allowed.
+        response = RedirectResponse(url="/signin", status_code=303)
         response.delete_cookie(key="wl_session", path="/")
         return response
 
@@ -572,7 +584,6 @@ def create_app(db_path: Path = None) -> FastAPI:
             if result[2]:
                 return RedirectResponse(url=f"/owner/{result[2]}")
             profile_id = result[0]
-            is_explicit = result[3]  # True if session-authenticated, False if legacy fallback
 
             # Get query params — junk input must degrade to page 0, not 500.
             q = request.query_params.get("q")
@@ -582,12 +593,10 @@ def create_app(db_path: Path = None) -> FastAPI:
                 page = 0
             per_page = 50
 
-            # Owner dashboard: explicit auth = only this owner's profiles;
-            # legacy fallback (non-integer token payload or no token) = all profiles.
-            if is_explicit:
-                all_profiles = conn.execute("SELECT * FROM profiles WHERE owner_id = ? ORDER BY id", (profile_id,)).fetchall()
-            else:
-                all_profiles = conn.execute("SELECT * FROM profiles ORDER BY id").fetchall()
+            # Owner dashboard: per-owner isolation (ruling 2A). Every auth
+            # path — session cookie, integer-payload token, and the legacy
+            # fallback link — sees exactly this owner's world, nothing else.
+            all_profiles = conn.execute("SELECT * FROM profiles WHERE owner_id = ? ORDER BY id", (profile_id,)).fetchall()
             all_profile_ids = [dict(p)["id"] for p in all_profiles]
             if not all_profile_ids:
                 all_profile_ids = [profile_id]
@@ -612,17 +621,11 @@ def create_app(db_path: Path = None) -> FastAPI:
                 start = page * per_page
                 rows = all_rows[start:start + per_page]
             else:
-                # Pure whitelist mode — list grants (legacy = all, explicit = owner's)
-                if is_explicit:
-                    all_grants = conn.execute(
-                        "SELECT * FROM access_grants WHERE owner_id = ? AND profile_id IN ({}) ORDER BY status, created_at".format(",".join("?" for _ in all_profile_ids)),
-                        [profile_id] + all_profile_ids,
-                    ).fetchall()
-                else:
-                    all_grants = conn.execute(
-                        "SELECT * FROM access_grants WHERE profile_id IN ({}) ORDER BY status, created_at".format(",".join("?" for _ in all_profile_ids)),
-                        all_profile_ids,
-                    ).fetchall()
+                # Pure whitelist mode — owner-scoped grants (ruling 2A).
+                all_grants = conn.execute(
+                    "SELECT * FROM access_grants WHERE owner_id = ? AND profile_id IN ({}) ORDER BY status, created_at".format(",".join("?" for _ in all_profile_ids)),
+                    [profile_id] + all_profile_ids,
+                ).fetchall()
                 rows = []
                 profile_map = {p["id"]: dict(p) for p in all_profiles}
                 for g in all_grants:
@@ -733,10 +736,15 @@ def create_app(db_path: Path = None) -> FastAPI:
 
             outcome = _decision_outcome(conn, jinja, request, grant_id,
                                        decision, expiry_choice)
-            # If approved, set the card assignments
+            # If approved, set the card assignments (junk ids degrade to 400,
+            # never 500 — spec B3/q38; foreign-card ids are rejected inside
+            # set_grant_cards, ruling 2A).
             if decision == "approve" and outcome.status_code == 200:
-                card_ids = [int(c) for c in card_ids_raw]
-                whitelist_db.set_grant_cards(conn, grant_id, card_ids)
+                try:
+                    card_ids = [int(c) for c in card_ids_raw]
+                    whitelist_db.set_grant_cards(conn, grant_id, card_ids)
+                except ValueError:
+                    return HTMLResponse("Invalid card selection", status_code=400)
             return outcome
         finally:
             conn.close()
@@ -815,9 +823,13 @@ def create_app(db_path: Path = None) -> FastAPI:
                                          "approved", expiry_choice)
                 conn.commit()
 
-            # Update cards
-            card_ids = [int(c) for c in card_ids_raw] if card_ids_raw else []
-            whitelist_db.set_grant_cards(conn, grant_id, card_ids)
+            # Update cards (junk ids degrade to 400, never 500 — spec B3/q38;
+            # foreign-card ids are rejected inside set_grant_cards, ruling 2A).
+            try:
+                card_ids = [int(c) for c in card_ids_raw] if card_ids_raw else []
+                whitelist_db.set_grant_cards(conn, grant_id, card_ids)
+            except ValueError:
+                return HTMLResponse("Invalid card selection", status_code=400)
 
             return HTMLResponse("Access updated")
         finally:

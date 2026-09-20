@@ -179,44 +179,52 @@ def _canonical_owner_handle() -> str:
 def notify_owner_link(dry_run: bool = True, db_path=None):
     """Print (or email) the owner dashboard magic link.
 
+    The link is owner-scoped: the token payload is the owner's profile id —
+    never the legacy unscoped ``"owner"`` payload — and it expires in 7
+    days (review F2: 365-day unscoped links were a cross-owner God-view).
+
     ``db_path`` defaults to the prod DB (whitelist_db default); tests must
     pass an explicit copy — never point this at live data with --apply.
     """
     base_url = wl_env.get_secret("BASE_URL") or "https://whitelist.app"
-    token = wl_tokens.make_token(
-        wl_env.get_secret("WHITELIST_SECRET").encode(),
-        "owner_dashboard", "owner", expires_days=365,
-    )
-    link = f"{base_url}/owner/{token}"
 
-    if dry_run:
-        print(f"[DRY-RUN] Owner dashboard link:")
-        print(f"  {link}")
-    else:
-        conn = whitelist_db.wl_connect(db_path)
-        try:
-            owner_handle = _canonical_owner_handle()
-            jason = whitelist_db.get_profile(conn, owner_handle)
-            if not jason:
-                # Hard fail — sending a dashboard link to a demo persona is
-                # worse than no email. No silent rowid-1 fallback.
-                print(f"[ERROR] Profile '{owner_handle}' not found in DB — "
-                      f"run scripts/seed_demo.py --apply first.")
-                sys.exit(1)
-            owner_email = _owner_email(jason)
-            if not owner_email:
-                print(f"[WARN] No email field on profile {jason['handle']} — skipped.")
-                sys.exit(1)
-            body = (
-                "Hi,\n\n"
-                "Your whitelist dashboard link:\n\n"
-                f"{link}\n\n"
-                "This link expires in 365 days.\n"
-            )
-            send_email(owner_email, "Whitelist: Dashboard link", body)
-            print(f"[OK] Sent owner dashboard link to {owner_email}")
-        finally:
-            conn.close()
+    conn = whitelist_db.wl_connect(db_path)
+    try:
+        owner_handle = _canonical_owner_handle()
+        jason = whitelist_db.get_profile(conn, owner_handle)
+        if not jason:
+            # Hard fail — sending a dashboard link to a demo persona is
+            # worse than no email. No silent rowid-1 fallback.
+            print(f"[ERROR] Profile '{owner_handle}' not found in DB — "
+                  f"run scripts/seed_demo.py --apply first.")
+            sys.exit(1)
+
+        # Owner-scoped, 7-day token (ruling 2A; review F2 recommendation c).
+        token = wl_tokens.make_token(
+            wl_env.get_secret("WHITELIST_SECRET").encode(),
+            "owner_dashboard", str(jason["id"]), expires_days=7,
+        )
+        link = f"{base_url}/owner/{token}"
+
+        if dry_run:
+            print(f"[DRY-RUN] Owner dashboard link:")
+            print(f"  {link}")
+            return
+
+        owner_email = _owner_email(jason)
+        if not owner_email:
+            print(f"[WARN] No email field on profile {jason['handle']} — skipped.")
+            sys.exit(1)
+        body = (
+            "Hi,\n\n"
+            "Your whitelist dashboard link:\n\n"
+            f"{link}\n\n"
+            "This link expires in 7 days.\n"
+        )
+        send_email(owner_email, "Whitelist: Dashboard link", body)
+        print(f"[OK] Sent owner dashboard link to {owner_email}")
+    finally:
+        conn.close()
 
 
 def main():
