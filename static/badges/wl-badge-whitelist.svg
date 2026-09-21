@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
+  <title>WhiteList badge — white scroll list</title>
+  <!-- scroll: portrait sheet, roll tube poking top-right past a ground notch,
+       unrolled strip poking bottom-left, flush bottom edge -->
+  <g>
+    <path d="M3.2 11.0 L3.2 2.7 A1.0 1.0 0 0 1 4.2 1.8 L12.9 1.8 A0.75 0.75 0 0 1 14.0 2.9 L14.0 3.2 A0.4 0.4 0 0 1 13.6 3.6 L12.55 3.6 Q12.4 3.1 12.55 2.65 L11.95 2.65 L11.95 12.3 A1.0 1.0 0 0 1 10.95 13.3 L3.2 13.3 Z" fill="#FFFFFF" fill-opacity="0.95"/>
+    <path d="M3.05 11.0 L9.4 11.0 A0.91 0.91 0 0 1 9.4 13.32 L3.05 13.32 A0.91 0.91 0 0 1 3.05 11.0 Z" fill="#FFFFFF" fill-opacity="0.95"/>
+  </g>
+</svg>

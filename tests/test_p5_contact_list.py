@@ -182,7 +182,7 @@ class TestPermTempBadge:
         resp = client_obj.get(f"/owner/{_token(client, owner_id)}")
         assert resp.status_code == 200
         # round-2: Whitelist badge for lifetime (replaces "Permanent")
-        assert "Whitelist" in resp.text or "Permanent" in resp.text or "permanent" in resp.text.lower()
+        assert "WhiteList" in resp.text or "Permanent" in resp.text or "permanent" in resp.text.lower()
 
     def test_quarter_shows_temp(self, client):
         client_obj, db, conn, owner_id, _, _ = client

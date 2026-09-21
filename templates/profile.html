@@ -41,7 +41,7 @@
                     {% set days = days_since(profile.verified_at) %}
                     <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs
                         {% if stale %}wl-badge-greylist{% else %}wl-badge-approved{% endif %}">
-                        {% if stale %}⚠ Stale ({{ days }}d){% else %}✓ Verified ({{ days }}d){% endif %}
+                        {% if stale %}⚠ GreyList ({{ days }}d){% else %}✓ WhiteList ({{ days }}d){% endif %}
                     </span>
                 </div>
                 {% endif %}

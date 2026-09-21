@@ -1116,7 +1116,7 @@ def create_app(db_path: Path = None) -> FastAPI:
 
     @application.post("/owner/{token}/badge")
     async def owner_badge_state(request: Request, token: str):
-        """Click-to-change contact-list badges (Whitelist/Grey/Blocked).
+        """Click-to-change contact-list badges (WhiteList/GreyList/BlackList).
 
         INSTANT and ALWAYS SILENT: the badge flip is the access governor,
         and the affected contact is NEVER notified — no notification row,

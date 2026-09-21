@@ -83,4 +83,4 @@ def test_dashboard_still_works_without_context(tmp_path):
     resp = client.get(f"/owner/{_token(db)}")
     assert resp.status_code == 200
     assert "plain@y.com" in resp.text and "ctx@y.com" in resp.text
-    assert "Permanent" in resp.text or "permanent" in resp.text.lower() or "Whitelist" in resp.text  # round-2: Whitelist badge for lifetime
+    assert "Permanent" in resp.text or "permanent" in resp.text.lower() or "WhiteList" in resp.text  # round-2: WhiteList badge for lifetime

@@ -13,7 +13,7 @@ Pins:
   ping the owner once for strangers, never for blacklisted openers; a
   connected viewer's governed view outlives the link; re-share renews.
 - BADGE-GOVERNED ACCESS: contact-list badges click-to-change
-  (Whitelist/Greylist/Blocked), instant and ALWAYS SILENT.
+  (WhiteList/GreyList/BlackList), instant and ALWAYS SILENT.
 - BLACKLIST SILENCE, BOTH DIRECTIONS: blacklisted senders see the normal
   success page but their request is quarantined — no grant row, no
   notification, no badge count.
@@ -635,7 +635,7 @@ class TestBadgeGovernedAccess:
         html = client.get(f"/owner/{token}").text
         assert f'action="/owner/{token}/badge"' in html
         assert 'name="state"' in html
-        assert "Whitelist" in html and "Click to change access" in html
+        assert "WhiteList" in html and "Click to change access" in html
 
 
 # ============================================================
