@@ -98,7 +98,7 @@ def test_dashboard_shows_grant_age_not_today(tmp_path):
 def test_profile_page_shows_verified_days(tmp_path):
     """Profile page for a profile verified 8 days ago must show verified badge.
 
-    round-2/verb-sweep: profile shows '✓ WhiteList (8d)' badge instead of '8 days ago' text.
+    round-2: profile shows '✓ Verified (8d)' badge instead of '8 days ago' text.
     The key assertion is that days_since doesn't fail silently (A1 bug).
     """
     from app import create_app
@@ -121,8 +121,8 @@ def test_profile_page_shows_verified_days(tmp_path):
     client = TestClient(create_app(db))
     resp = client.get("/p/veruser")
     assert resp.status_code == 200
-    # round-2/verb-sweep: profile shows WhiteList badge with day count like 'WhiteList (8d)'
-    assert "WhiteList" in resp.text
+    # round-2: profile shows verified badge with day count like 'Verified (8d)'
+    assert "Verified" in resp.text
     assert "8d" in resp.text, f"profile must show verified day count; got: {resp.text[:400]}"
 
 

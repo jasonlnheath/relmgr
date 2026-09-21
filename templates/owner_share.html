@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Share your card — Whitelist{% endblock %}
+{% block title %}Share your card — WhiteList{% endblock %}
 
 {% block content %}
 <div class="max-w-2xl mx-auto py-8 px-4">
@@ -77,7 +77,7 @@ async function nativeShare() {
     // Phone's standard sharing sheet where the Web Share API exists.
     if (navigator.share) {
         try {
-            await navigator.share({ title: 'Whitelist card', text: text, url: url });
+            await navigator.share({ title: 'WhiteList card', text: text, url: url });
             return;
         } catch (err) {
             if (err && err.name === 'AbortError') return;  // user closed the sheet

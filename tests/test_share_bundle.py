@@ -244,7 +244,7 @@ class TestOwnerSharePage:
         assert f"/qr/share/{bundle_id}" in resp.text
         assert f"/s/{bundle_id}" in resp.text
         # Exact native-share message, and the fallback pair.
-        assert "Jason Heath wants to share their Whitelist card:" in resp.text
+        assert "Jason Heath wants to share their WhiteList card:" in resp.text
         assert "navigator.share" in resp.text
         assert "copyShareLink" in resp.text
 

@@ -267,7 +267,7 @@ def test_empty_state_shows_no_pending(tmp_path):
     assert resp.status_code == 200
     html = resp.text
     # round-2/verb-sweep: single-surface WhiteList uses "No WhiteList entries yet"
-    assert "No WhiteList entries" in html or "no Whitelist entries" in html.lower() or "✓" in html, \
+    assert "No WhiteList entries" in html or "no whitelist entries" in html.lower() or "✓" in html, \
         f"Empty state message not found. HTML: {html[:500]}"
 
 

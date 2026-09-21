@@ -423,7 +423,7 @@ def create_app(db_path: Path = None) -> FastAPI:
     path = Path(db_path or os.environ.get("RELMGR_DB_PATH")
                 or Path(__file__).parent / "contacts.db")
     jinja = _make_jinja()
-    application = FastAPI(title="Whitelist")
+    application = FastAPI(title="WhiteList")
 
     # Retired pre-migration owner magic links (captain ruling, option A):
     # one app-wide handler so every /owner/… route sends legacy-link holders
@@ -889,7 +889,7 @@ def create_app(db_path: Path = None) -> FastAPI:
 
     def _bundle_share_message(display_name: str, bundle_id: str) -> str:
         # Exact copy sent by the native share sheet (ruling 2026-09-20).
-        return (f"{display_name} wants to share their Whitelist card: "
+        return (f"{display_name} wants to share their WhiteList card: "
                 f"{_bundle_share_url(bundle_id)}")
 
     @application.post("/owner/{token}/share/preview")
@@ -2208,7 +2208,7 @@ def create_app(db_path: Path = None) -> FastAPI:
 
         return HTMLResponse(
             f"Bulk {decision}: {summary['approved']} approved, "
-            f"{summary['denied']} denied, {summary['revoked']} revoked, "
+            f"{summary['denied']} BlackListed, {summary['revoked']} BlackListed, "
             f"{summary['skipped']} skipped (wrong status or unknown id).")
 
     @application.post("/owner/{token}/revoke", response_class=HTMLResponse)

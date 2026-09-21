@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ profile.display_name }} — Whitelist{% endblock %}
+{% block title %}{{ profile.display_name }} — WhiteList{% endblock %}
 
 {% block content %}
 <div class="max-w-2xl mx-auto py-8 px-4">
@@ -124,12 +124,10 @@
                 <div class="flex items-center wl-text-sub">
                     <span class="w-20 text-xs wl-text-faint uppercase tracking-wide">quarter</span>
                     <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs
-                        {% if grant.quarter_status == 'pending_review' %}wl-badge-greylist
-                        {% elif grant.quarter_status == 'punted' %}wl-badge-greylist
-                        {% else %}wl-badge-approved{% endif %}">
-                        {% if grant.quarter_status == 'pending_review' %}GreyList
-                        {% elif grant.quarter_status == 'punted' %}GreyList
-                        {% else %}WhiteList{% endif %}
+                        {% if grant.expires_at is none %}wl-badge-approved
+                        {% else %}wl-badge-greylist{% endif %}">
+                        {% if grant.expires_at is none %}WhiteList
+                        {% else %}GreyList{% endif %}
                     </span>
                 </div>
                 {% endif %}

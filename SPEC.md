@@ -142,7 +142,7 @@ Every permission has an expiration policy. Exactly three durations:
 - **No auto-expiry** — GreyList contacts never auto-expire or auto-transition.
 - **No expired state** — the concept of "expired" is absorbed into the GreyList state; there is no separate expired badge or view.
 
-**Grey state** is derived: a grant is grey when `status='granted'`, `expires_at` has passed, and `quarter_status` is `'pending_review'` or `'punted'`. The `quarter_status` column tracks the review cycle:
+**GreyList state** is derived: a grant is GreyList when `status='granted'`, `expires_at` has passed, and `quarter_status` is `'pending_review'` or `'punted'`. The `quarter_status` column tracks the review cycle:
 
 | quarter_status | Meaning |
 |---|---|
@@ -151,11 +151,11 @@ Every permission has an expiration policy. Exactly three durations:
 | `punted` | Owner chose to extend for another quarter |
 | `NULL` | Lifetime grant or legacy grant |
 
-**Quarterly review email** uses the existing `notify.py` infrastructure (`build_quarterly_review()`). It groups grey contacts by owner, shows review status per contact, and links to the owner dashboard. No new external services or queues — the digest is built via `build_quarterly_review()`; sending machinery (SMTP/Gmail) is future work.
+**Quarterly review email** uses the existing `notify.py` infrastructure (`build_quarterly_review()`). It groups GreyList contacts by owner, shows review status per contact, and links to the owner dashboard. No new external services or queues — the digest is built via `build_quarterly_review()`; sending machinery (SMTP/Gmail) is future work.
 
 **Grey contacts become prompt-eligible at each quarterly boundary** for their owner. No age minimums, no countdown display, no auto-expiry. The quarterly email is the sole decision mechanism.
 
-*The revocation path preserves audit rows (append-only). `last_reviewed_at` stamps when the owner last made a decision on a grey contact.*
+*The revocation path preserves audit rows (append-only). `last_reviewed_at` stamps when the owner last made a decision on a GreyList contact.*
 
 ### BlackList State
 
@@ -196,7 +196,7 @@ The public profile is the contact entry point — a **friend-request model**.
   - Friendship requests → link the requester's Facebook/Instagram
   - Work requests → link the requester's LinkedIn
 - The owner reviews the request (with bio + social proof) and decides: grant or deny.
-- Denials land in the junk view, never greyed inline.
+- Denials land in the junk view, never BlackListed inline.
 
 ## Standing Captain Rulings (Behavioral Constraints)
 
@@ -206,7 +206,7 @@ The following rulings were established during development and are preserved as b
 |---|---|
 | User decides, app enforces | The system never overrides user preference. No auto-approvals. |
 | Context layer | **Bookshelved** — moved to Deferred section below. |
-| Denials live in the junk view | Denied contacts go to a separate `/owner/{token}/junk` view — never greyed out inline. |
+| Denials live in the junk view | Denied contacts go to a separate `/owner/{token}/junk` view — never BlackListed inline. |
 | Tests never write the prod DB | All tests use tmp_db fixtures. The live `contacts.db` is never modified by the test suite. Hermeticity is verified by a row-sha digest. |
 | `merge_all` / `merge_and_dedup` never called | These scripts `DROP TABLE contacts`. They are dead ends. Never executed. |
 | `grant_logs` is append-only | The audit log table is never purged. Rows are permanent — the "alibi" convention. |
@@ -215,7 +215,7 @@ The following rulings were established during development and are preserved as b
 | Standing posture | **Personal-local now, public deployment deferred** — this is a standing decision. |
 | Bio only for anonymous | Anonymous visitors see the profile bio only; all fields and cards require a grant. Supersedes the Work-card public default. |
 | Photo originals | **Kept** — originals are kept after the 512-square encode. Spec-level ruling; code follow-up pending (current implementation discards them). |
-| Contact list shows all live contacts | The contact list view shows all contacts from `contacts.db` (1,920+), not just whitelist-approved ones. |
+| Contact list shows all live contacts | The contact list view shows all contacts from `contacts.db` (1,920+), not just WhiteList-approved ones. |
 | Bio cap | **2,000 confirmed** — 2,000 character cap confirmed for now. |
 
 | Seed default cards cover all owners | `seed_default_cards()` now seeds Work (email fields) and Personal (phone fields) cards for every profile, not just the default owner. |
@@ -269,7 +269,7 @@ The following rulings were established during development and are preserved as b
 
 - **302 tests** pass (3 fail due to missing canonical JSON path in detached HEAD — not a code issue).
 - 36 test files across 5 phases + audit regressions.
-- Baseline: 42 normalizer tests; whitelist adds 260+ tests.
+- Baseline: 42 normalizer tests; WhiteList adds 260+ tests.
 - Hermeticity verified: `contacts.db` sha256 identical before/after full suite.
 
 ## Roadmap: Phases 0–6
@@ -301,7 +301,7 @@ The following rulings were established during development and are preserved as b
 | Revocation cascade | **None** | Revoking a grant doesn't cascade to audit rows or scan_events. |
 | Scan event IP tracking | **Disabled** | Privacy default — no IP or user-agent stored. |
 | `grant_logs` purging | **Never** | Append-only alibi convention. |
-| Denials display | **Junk view only** | Denied contacts appear in `/owner/{token}/junk`, never greyed inline. |
+| Denials display | **Junk view only** | Denied contacts appear in `/owner/{token}/junk`, never BlackListed inline. |
 | Domain / BASE_URL | `https://whitelist.app` | Placeholder; set via `.env` at deploy time. |
 | Hosting | Render free tier, personal account | Never Walther-branded. |
 | Email delivery | Gmail API (not SMTP) | `notify.py --apply` exits 1 without SMTP creds; production uses Gmail OAuth. |
