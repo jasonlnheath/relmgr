@@ -329,7 +329,7 @@ def wl_init(conn: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS notifications (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             owner_profile_id INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-            kind TEXT NOT NULL CHECK(kind IN ('connection_request', 'forward', 'quarterly')),
+            kind TEXT NOT NULL CHECK(kind IN ('connection_request', 'forward', 'quarterly', 'expired_link')),
             title TEXT NOT NULL,
             body TEXT,
             link TEXT,
@@ -1653,6 +1653,66 @@ def revoke_grant(conn: sqlite3.Connection, grant_id: str) -> Optional[dict]:
 # Quarterly rhythm — grey state helpers
 # ============================================================
 
+def set_badge_state(conn: sqlite3.Connection, grant_id: str,
+                    state: str) -> Optional[dict]:
+    """Badge-governed access (ruling 2026-09-20): one-click badge moves
+    from the contact list, INSTANT and ALWAYS SILENT.
+
+    state vocabulary (the contact-list badge labels):
+    - 'whitelist': status='granted', lifetime access (expires_at NULL,
+      quarter_status cleared) — revived from blocked too
+    - 'greylist':  status='granted', expires at the next quarter end
+      (temp access; enters the quarterly cycle when it lapses)
+    - 'blocked':   status='revoked' (revoked == blocked, one state);
+      granted_at/expires_at preserved as history
+
+    SILENCE CONTRACT: the affected contact is NEVER notified — no
+    notification row (those are owner-only anyway), no email, nothing.
+    Only the grant state flips and an audit row lands (reusing the
+    existing grant_logs vocabulary: permanent / approved / revoked).
+
+    Returns the refreshed grant dict, None when the grant is unknown,
+    ValueError on an unknown state.
+    """
+    if state not in ("whitelist", "greylist", "blocked"):
+        raise ValueError(f"unknown badge state: {state!r}")
+    grant = get_grant(conn, grant_id)
+    if grant is None:
+        return None
+    if state == "whitelist":
+        conn.execute(
+            """UPDATE access_grants
+               SET status = 'granted', expires_at = NULL,
+                   quarter_status = NULL,
+                   last_reviewed_at = datetime('now'),
+                   updated_at = datetime('now')
+               WHERE id = ?""",
+            (grant_id,),
+        )
+        _log_action(conn, grant_id, grant["profile_id"], "permanent")
+    elif state == "greylist":
+        conn.execute(
+            """UPDATE access_grants
+               SET status = 'granted', expires_at = ?,
+                   quarter_status = NULL,
+                   last_reviewed_at = datetime('now'),
+                   updated_at = datetime('now')
+               WHERE id = ?""",
+            (quarter_end_iso(), grant_id),
+        )
+        _log_action(conn, grant_id, grant["profile_id"], "approved",
+                    requested_expiry="quarter")
+    else:  # blocked
+        conn.execute(
+            """UPDATE access_grants SET status = 'revoked',
+               updated_at = datetime('now') WHERE id = ?""",
+            (grant_id,),
+        )
+        _log_action(conn, grant_id, grant["profile_id"], "revoked")
+    conn.commit()
+    return get_grant(conn, grant_id)
+
+
 def is_grey(grant: dict) -> bool:
     """Return True if a grant is in the grey state.
 
@@ -2331,6 +2391,247 @@ def get_active_cards_for_grant(conn: sqlite3.Connection, grant_id: str) -> list[
 
 
 # ============================================================
+# Share bundles (captain ruling 2026-09-20): one link encodes the
+# CHOSEN SET of cards; the recipient page renders that set as one
+# combined card. The link is stable while fields update because the
+# bundle stores card IDs — field VALUES are read live at render time.
+# Shelf life (ruling 2026-09-20, link lifecycle): every bundle link
+# expires exactly one week after creation.
+# ============================================================
+
+_BUNDLE_TTL_DAYS = 7
+
+
+def bundle_expiry_iso(created: Optional[datetime] = None) -> str:
+    """Expiry instant for a bundle created at *created* (UTC now default):
+    exactly one week later, _ISO_Z format."""
+    if created is None:
+        created = datetime.now(timezone.utc)
+    expires = created + timedelta(days=_BUNDLE_TTL_DAYS)
+    return expires.strftime(_ISO_Z)
+
+
+def ensure_share_bundles_schema(conn: sqlite3.Connection) -> None:
+    """Create the share_bundles table if it doesn't exist (idempotent).
+
+    Also heals the pre-TTL shape (no expires_at column) additively —
+    SQLite cannot add a column with a non-constant default, so the
+    heal is a plain ADD COLUMN; create_share_bundle always writes it.
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS share_bundles (
+            id TEXT PRIMARY KEY,
+            profile_id INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+            card_ids TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            expires_at TEXT NOT NULL DEFAULT '9999-12-31T23:59:59Z'
+        )
+    """)
+    cols = [r["name"] for r in conn.execute("PRAGMA table_info(share_bundles)").fetchall()]
+    if "expires_at" not in cols:
+        conn.execute(
+            "ALTER TABLE share_bundles ADD COLUMN expires_at TEXT "
+            "NOT NULL DEFAULT '9999-12-31T23:59:59Z'")
+    conn.commit()
+
+
+def bundle_is_expired(bundle: dict, now: Optional[datetime] = None) -> bool:
+    """True when the bundle's one-week shelf life has passed."""
+    if now is None:
+        now = datetime.now(timezone.utc)
+    raw = (bundle.get("expires_at") or "").strip()
+    if not raw:
+        return False
+    try:
+        expires = datetime.strptime(raw, _ISO_Z).replace(tzinfo=timezone.utc)
+    except ValueError:
+        return False
+    return now >= expires
+
+
+def filter_owned_cards(conn: sqlite3.Connection, profile_id: int,
+                       card_ids: list[int]) -> list[int]:
+    """card_ids filtered to cards that exist AND belong to profile_id
+    (the exact ownership predicate create_share_bundle enforces), deduped
+    while preserving first-seen order.
+
+    Fix-pass F1: any route that renders cards from caller-supplied ids
+    (create AND the live preview) must pass the ids through this filter
+    so a foreign card id can never leak another owner's content.
+    """
+    ordered: list[int] = []
+    for cid in card_ids:
+        row = conn.execute(
+            "SELECT 1 FROM cards WHERE id = ? AND owner_profile_id = ?",
+            (cid, profile_id),
+        ).fetchone()
+        if row is not None and cid not in ordered:
+            ordered.append(cid)
+    return ordered
+
+
+def create_share_bundle(conn: sqlite3.Connection, profile_id: int,
+                        card_ids: list[int]) -> dict:
+    """Create a share bundle: a stable ID for a chosen set of cards.
+
+    Contract:
+    - card_ids must be non-empty (ValueError otherwise)
+    - every card_id must exist AND belong to profile_id (ValueError
+      otherwise — cross-owner attach by ID manipulation must fail)
+    - duplicates collapse, bundle order preserves the caller's order
+    - the link carries a one-week shelf life (expires_at = now + 7d)
+    - commits before returning
+
+    Returns the bundle dict {id, profile_id, card_ids, created_at,
+    expires_at}.
+    """
+    if not card_ids:
+        raise ValueError("share bundle needs at least one card")
+    # Validate existence + ownership BEFORE insert (same ruling-2A posture
+    # as set_grant_cards): every requested id must be an owned card —
+    # cross-owner attach by ID manipulation must fail (ValueError).
+    requested = list(dict.fromkeys(card_ids))  # dedupe, first-seen order
+    ordered = filter_owned_cards(conn, profile_id, requested)
+    if len(ordered) != len(requested):
+        raise ValueError(
+            "card_id(s) not found or not owned by profile "
+            f"{profile_id}: "
+            + ", ".join(str(c) for c in requested if c not in ordered))
+
+    bundle_id = secrets.token_urlsafe(9)
+    conn.execute(
+        "INSERT INTO share_bundles (id, profile_id, card_ids, expires_at) "
+        "VALUES (?, ?, ?, ?)",
+        (bundle_id, profile_id, json.dumps(ordered), bundle_expiry_iso()),
+    )
+    conn.commit()
+    return get_share_bundle(conn, bundle_id)
+
+
+def renew_share_bundle(conn: sqlite3.Connection, bundle_id: str) -> Optional[dict]:
+    """Re-share path for an expired link: stamp a fresh one-week shelf
+    life on the SAME bundle (same chosen set, same stable link id — the
+    id is un-guessable, and renewal is owner-only via the token route).
+    Returns the refreshed bundle, or None when unknown."""
+    bundle = get_share_bundle(conn, bundle_id)
+    if bundle is None:
+        return None
+    conn.execute(
+        "UPDATE share_bundles SET expires_at = ? WHERE id = ?",
+        (bundle_expiry_iso(), bundle_id),
+    )
+    conn.commit()
+    return get_share_bundle(conn, bundle_id)
+
+
+def get_share_bundle(conn: sqlite3.Connection, bundle_id: str) -> Optional[dict]:
+    """Fetch one share bundle; card_ids comes back as a list[int]."""
+    row = conn.execute(
+        "SELECT * FROM share_bundles WHERE id = ?", (bundle_id,)
+    ).fetchone()
+    if row is None:
+        return None
+    bundle = dict(row)
+    try:
+        bundle["card_ids"] = [int(c) for c in json.loads(row["card_ids"])]
+    except (ValueError, TypeError):
+        bundle["card_ids"] = []
+    return bundle
+
+
+def is_blacklisted(conn: sqlite3.Connection, profile_id: int,
+                   email: str) -> bool:
+    """True when *email* has a revoked (blacklisted) grant for this
+    profile. Revoked and blocked are one state (spec ruling) — any
+    'revoked' row marks the sender blacklisted forever, regardless of
+    newer grants."""
+    row = conn.execute(
+        """SELECT 1 FROM access_grants
+           WHERE profile_id = ? AND LOWER(requester_email) = LOWER(?)
+             AND status = 'revoked' LIMIT 1""",
+        (profile_id, (email or "").strip()),
+    ).fetchone()
+    return row is not None
+
+
+def ensure_quarantine_schema(conn: sqlite3.Connection) -> None:
+    """Create the quarantined_requests table if missing (idempotent).
+
+    Blacklist silence, both directions (ruling 2026-09-20): a blacklisted
+    person's connection request is stored HERE — never in access_grants,
+    never in the notification center, never emailed. The sender still
+    sees the normal success page (they can never detect their status).
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS quarantined_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            profile_id INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+            email TEXT NOT NULL,
+            name TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+    conn.commit()
+
+
+def quarantine_request(conn: sqlite3.Connection, profile_id: int,
+                       email: str, name: str = "") -> None:
+    """Silently file a blacklisted sender's request. ALWAYS SILENT: no
+    notification row, no email push, no badge count — the owner is never
+    bothered by people they have blacklisted, and the sender gets the
+    standard success page.
+
+    Fix-pass F4: simple per-email dedupe — at most one quarantined row
+    per blacklisted email per day, so repeat re-POSTs collapse instead
+    of piling up identical rows.
+    """
+    addr = (email or "").strip()
+    existing = conn.execute(
+        """SELECT 1 FROM quarantined_requests
+           WHERE profile_id = ? AND LOWER(email) = LOWER(?)
+             AND date(created_at) = date('now') LIMIT 1""",
+        (profile_id, addr),
+    ).fetchone()
+    if existing:
+        return
+    conn.execute(
+        "INSERT INTO quarantined_requests (profile_id, email, name) VALUES (?, ?, ?)",
+        (profile_id, addr, (name or "").strip() or None),
+    )
+    conn.commit()
+
+
+def cards_for_share_bundle(
+    conn: sqlite3.Connection,
+    bundle: dict,
+    tier: str,
+) -> list[dict]:
+    """The bundle's chosen cards, tier-filtered like the public profile.
+
+    Visibility tiers behave EXACTLY as cards_for_public_view today:
+    - anonymous: public fields only
+    - granted (incl. owner self-view): public + granted + private
+    - a card with zero visible fields for this tier is hidden
+    Only the CHOSEN SET differs: the bundle's cards render (in bundle
+    order) instead of the default-card-only anonymous rule.
+    """
+    visible_vis = (("public", "granted", "private")
+                   if tier == "granted" else ("public",))
+    out: list[dict] = []
+    for card_id in bundle["card_ids"]:
+        card = get_card_by_id(conn, card_id)
+        if card is None:
+            continue
+        visible_fields = [f for f in card["fields"]
+                          if f["visibility"] in visible_vis]
+        if not visible_fields:
+            continue
+        card["visible_fields"] = visible_fields
+        out.append(card)
+    return out
+
+
+# ============================================================
 # Phase A1 boot migrations: bio + photo_path columns
 # ============================================================
 
@@ -2457,7 +2758,52 @@ def get_forwardings_for_profile(
 # dashboard, full list at /owner/{token}/notifications.
 # ============================================================
 
-_NOTIFICATION_KINDS = ("connection_request", "forward", "quarterly")
+_NOTIFICATION_KINDS = (
+    "connection_request", "forward", "quarterly", "expired_link")
+
+
+def ensure_notification_kinds(conn: sqlite3.Connection) -> None:
+    """Heal the notifications kind CHECK to the current vocabulary
+    (idempotent, row-preserving table swap — SQLite cannot ALTER a
+    CHECK in place; same pattern as ensure_grant_log_actions).
+
+    Adds 'expired_link' (ruling 2026-09-20): the ping an owner receives
+    when a stranger opens their expired share link. Detection reads the
+    stored DDL, not PRAGMA — column sets match, only CHECK text differs.
+    """
+    if not _table_exists(conn, "notifications"):
+        return
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='notifications'"
+    ).fetchone()
+    if row and row[0] and "'expired_link'" in row[0]:
+        return  # current DDL
+    conn.executescript("""
+        CREATE TABLE notifications_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            owner_profile_id INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+            kind TEXT NOT NULL CHECK(kind IN ('connection_request', 'forward', 'quarterly', 'expired_link')),
+            title TEXT NOT NULL,
+            body TEXT,
+            link TEXT,
+            grant_id TEXT,
+            dedupe_key TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            read_at TEXT
+        );
+        INSERT INTO notifications_new
+            (id, owner_profile_id, kind, title, body, link, grant_id,
+             dedupe_key, created_at, read_at)
+        SELECT id, owner_profile_id, kind, title, body, link, grant_id,
+               dedupe_key, created_at, read_at FROM notifications;
+        DROP TABLE notifications;
+        ALTER TABLE notifications_new RENAME TO notifications;
+        CREATE INDEX idx_notifications_owner
+            ON notifications(owner_profile_id, created_at);
+        CREATE UNIQUE INDEX idx_notifications_dedupe
+            ON notifications(dedupe_key) WHERE dedupe_key IS NOT NULL;
+    """)
+    conn.commit()
 
 
 def create_notification(
@@ -2661,6 +3007,9 @@ def ensure_whitelist_schema(conn: sqlite3.Connection) -> None:
     ensure_scan_events(conn)              # P3-T4 profile-view events
     ensure_access_grants_context(conn)    # v2-without-context prod case, LAST
     ensure_cards_schema(conn)             # P5 cards tables (depends on profiles/fields)
+    ensure_share_bundles_schema(conn)           # share bundles: one link = chosen card set
+    ensure_notification_kinds(conn)             # 'expired_link' kind heal (table swap)
+    ensure_quarantine_schema(conn)              # blacklist silence: quarantine store
     ensure_vcard_fields_schema(conn)      # VCard field expansion (field_type + visibility)
     ensure_vcard_fields_v3_schema(conn)   # Round-2 types: 'address'→'address1' + apps (AFTER v2)
     ensure_profile_bio_column(conn)       # Phase A1: profiles.bio

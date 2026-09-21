@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}{{ profile.display_name }} — Whitelist{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto py-8 px-4">
+    <div class="wl-card p-6">
+        {# Header: picture + name + title/company + verified badge #}
+        <div class="flex items-start gap-4 mb-6">
+            {% if profile.avatar_url %}
+            <img src="{{ profile.avatar_url }}" alt="{{ profile.display_name }}"
+                 class="w-16 h-16 rounded-full object-cover flex-shrink-0">
+            {% elif cards %}
+            {% set main_card = cards[0] %}
+            {% if main_card.photo_path %}
+            <img src="/photos/{{ profile.id }}/{{ main_card.id }}"
+                 alt="{{ profile.display_name }} photo"
+                 class="w-16 h-16 rounded-full object-cover flex-shrink-0">
+            {% else %}
+            <div class="w-16 h-16 rounded-full flex items-center justify-center flex-shrink-0"
+                 style="background: var(--wl-btn-slate);">
+                <span class="wl-text text-xl">{{ profile.display_name[:2].upper() }}</span>
+            </div>
+            {% endif %}
+            {% else %}
+            <div class="w-16 h-16 rounded-full flex items-center justify-center flex-shrink-0"
+                 style="background: var(--wl-btn-slate);">
+                <span class="wl-text text-xl">{{ profile.display_name[:2].upper() }}</span>
+            </div>
+            {% endif %}
+            <div class="flex-1">
+                <h1 class="wl-heading wl-heading-md">{{ profile.display_name }}</h1>
+                {% if profile.title or profile.company %}
+                <p class="wl-text-sub text-sm mt-0.5">
+                    {% if profile.title %}{{ profile.title }}{% endif %}
+                    {% if profile.title and profile.company %} at {% endif %}
+                    {% if profile.company %}{{ profile.company }}{% endif %}
+                </p>
+                {% endif %}
+                {% if profile.verified_at %}
+                <div class="mt-1">
+                    {% set days = days_since(profile.verified_at) %}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs
+                        {% if stale %}wl-badge-greylist{% else %}wl-badge-approved{% endif %}">
+                        {% if stale %}⚠ Stale ({{ days }}d){% else %}✓ Verified ({{ days }}d){% endif %}
+                    </span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {# Bio — shown when public, or when granted-tier viewer #}
+        {% if profile.bio and (bio_visibility == 'public' or tier == 'granted') %}
+        <div class="mb-6 pb-4" style="border-bottom: 1px solid var(--wl-glass-border);">
+            <p class="wl-text-sub text-sm whitespace-pre-line">{{ profile.bio }}</p>
+        </div>
+        {% endif %}
+
+        {# THE shared card: the chosen set as ONE card, grouped per card,
+           actions inside their blocks. NOTE: no separate "Reach me" row
+           and no "Forward your card" section (removed per ruling). #}
+        {% include "share_cards_fragment.html" %}
+
+        {# Save to contacts — vCard built from exactly what this viewer can see #}
+        <div class="mt-6 pt-4" style="border-top: 1px solid var(--wl-glass-border);">
+            <a href="/s/{{ bundle_id }}/card.vcf{% if tier == 'granted' and viewer_email %}?e={{ viewer_email | urlencode }}{% endif %}"
+               class="wl-btn-ink inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm"
+               download>
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/>
+                </svg>
+                Save to contacts
+            </a>
+        </div>
+
+        {# Connect — recipients can always request access #}
+        {% if tier != 'granted' %}
+        <div class="mt-6 pt-4" style="border-top: 1px solid var(--wl-glass-border);">
+            <a href="/p/{{ profile.handle }}/request-form"
+               class="wl-btn-ink inline-block px-6 py-2 rounded-lg text-sm">
+                Connect
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

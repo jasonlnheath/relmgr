@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Share your card — Whitelist{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto py-8 px-4">
+    <div class="wl-card p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h1 class="wl-heading wl-heading-sm wl-text">Share your card</h1>
+            <a href="/owner/{{ token }}/profile" class="wl-link text-sm">← Back to My Profile</a>
+        </div>
+
+        <p class="text-xs wl-text-faint mb-4">
+            One link for: {{ card_names | join(', ') }} — expires one week after you share it.
+        </p>
+
+        {% if expired %}
+        <div class="mb-4 p-3 rounded-lg text-xs" style="background: rgba(251,191,36,0.12); border: 1px solid rgba(251,191,36,0.4); color: var(--wl-amber);">
+            This share link has expired. Re-share it below to stamp a fresh one-week shelf life on the same link.
+            <form method="POST" action="/owner/{{ token }}/share/{{ bundle_id }}/reshare" class="mt-2">
+                <button type="submit" class="wl-btn-ink px-3 py-1 rounded text-xs">
+                    Re-share (fresh 7 days)
+                </button>
+            </form>
+        </div>
+        {% endif %}
+
+        {# QR — one bundle, one code #}
+        <div class="flex flex-col items-center mb-4">
+            <img src="/qr/share/{{ bundle_id }}" alt="QR code for your shared card"
+                 class="w-40 h-40 rounded-lg mb-2" style="background: #fff; padding: 8px;">
+            <p class="text-xs wl-text-faint">Scan to open your shared card</p>
+        </div>
+
+        {# Link + copy + native share #}
+        <div class="flex items-center gap-2 mb-1">
+            <input type="text" id="share-link" readonly
+                   class="flex-1 text-xs border border-gray-600 rounded px-2 py-1 bg-transparent wl-text"
+                   value="{{ share_url }}">
+            <button type="button" onclick="copyShareLink()" title="Copy link"
+                    class="wl-btn-ink px-2 py-1 rounded text-xs">
+                Copy
+            </button>
+            <button type="button" onclick="nativeShare()" title="Share"
+                    class="wl-btn-ink w-8 h-8 rounded inline-flex items-center justify-center flex-shrink-0">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 12.632a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z"/>
+                </svg>
+            </button>
+        </div>
+        <p id="share-msg" class="text-xs wl-text-faint mt-1 hidden">Link copied!</p>
+        <input type="hidden" id="share-text" value="{{ share_message }}">
+        <p class="text-xs wl-text-faint mt-3">Sharing sends: “{{ share_message }}”</p>
+    </div>
+</div>
+
+<script>
+async function copyShareLink() {
+    const input = document.getElementById('share-link');
+    const msg = document.getElementById('share-msg');
+    try {
+        await navigator.clipboard.writeText(input.value);
+        msg.classList.remove('hidden');
+        setTimeout(() => msg.classList.add('hidden'), 2000);
+    } catch (err) {
+        // Clipboard API unavailable (e.g. non-secure context): select for manual copy.
+        input.select();
+        input.setSelectionRange(0, 99999);
+        document.execCommand('copy');
+        msg.classList.remove('hidden');
+        setTimeout(() => msg.classList.add('hidden'), 2000);
+    }
+}
+
+async function nativeShare() {
+    const text = document.getElementById('share-text').value;
+    const url = document.getElementById('share-link').value;
+    // Phone's standard sharing sheet where the Web Share API exists.
+    if (navigator.share) {
+        try {
+            await navigator.share({ title: 'Whitelist card', text: text, url: url });
+            return;
+        } catch (err) {
+            if (err && err.name === 'AbortError') return;  // user closed the sheet
+        }
+    }
+    // Graceful fallback where navigator.share is unavailable: copy the link.
+    await copyShareLink();
+}
+</script>
+{% endblock %}
