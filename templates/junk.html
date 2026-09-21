@@ -1,14 +1,14 @@
 {% extends "base.html" %}
-{% block title %}Whitelist — Denied{% endblock %}
+{% block title %}WhiteList — BlackList{% endblock %}
 
 {% block content %}
 <div class="max-w-2xl mx-auto py-8 px-4">
     <div class="wl-card p-4">
-        <h1 class="wl-heading wl-heading-sm mb-4">Denied Requests</h1>
+        <h1 class="wl-heading wl-heading-sm mb-4">BlackList Requests</h1>
 
         {% if not denied %}
         <div class="text-center py-6">
-            <p class="wl-text-faint text-sm">No denied requests</p>
+            <p class="wl-text-faint text-sm">No BlackList entries</p>
         </div>
         {% else %}
         <div class="space-y-2">
@@ -24,7 +24,7 @@
                         </p>
                     </div>
                     <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium wl-badge-blocked">
-                        Denied
+                        BlackList
                     </span>
                 </div>
             </div>

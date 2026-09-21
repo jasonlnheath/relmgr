@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Whitelist — Notifications{% endblock %}
+{% block title %}WhiteList — Notifications{% endblock %}
 
 {% block content %}
 <div class="max-w-2xl mx-auto py-8 px-4">
-    {# Header: back to contacts, mark-all-read #}
+    {# Header: back to WhiteList, mark-all-read #}
     <div class="flex items-center justify-between mb-6">
         <div>
             <h1 class="wl-heading wl-heading-md">Notifications</h1>
@@ -17,7 +17,7 @@
                 <button type="submit" class="wl-btn-ink text-xs py-1 px-3 rounded-lg">Mark all read</button>
             </form>
             {% endif %}
-            <a href="/owner/{{ token }}" class="wl-btn-ink text-xs py-1 px-3 rounded-lg">Back to contacts</a>
+            <a href="/owner/{{ token }}" class="wl-btn-ink text-xs py-1 px-3 rounded-lg">Back to WhiteList</a>
         </div>
     </div>
 

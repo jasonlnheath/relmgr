@@ -3,8 +3,8 @@
 Tests pin:
 - Tab nav is ABSENT from contact list and profile pages (round-2 ruling)
 - /owner/{token}/profile → 200 with valid token, 403 tampered/expired
-- The two pages show different content ("Contacts" heading vs "My Profile" heading)
-- Contact list shows "Contacts" header with count, no "Contact List" text
+- The two pages show different content ("WhiteList" heading vs "My Profile" heading)
+- Contact list shows "WhiteList" header with count, no "Contact List" text
 """
 import os
 import sys
@@ -107,12 +107,12 @@ class TestProfileRoute:
 
 class TestDifferentContent:
     def test_contact_list_has_contacts_heading(self, tmp_path):
-        """Contact List page has 'Contacts' heading (round-2: renamed from Contact List)."""
+        """Contact List page has 'WhiteList' heading (round-2: renamed from Contact List)."""
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
         resp = client.get(f"/owner/{_owner_token()}")
         assert resp.status_code == 200
-        assert "Contacts" in resp.text
+        assert "WhiteList" in resp.text
 
     def test_my_profile_has_my_profile_heading(self, tmp_path):
         """My Profile page has 'My Profile' heading."""

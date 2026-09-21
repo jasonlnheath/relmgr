@@ -205,7 +205,7 @@ def test_owner_revoke_route_revokes_and_confirms(tmp_path):
     resp = client.post(f"/owner/{owner_token}/revoke",
                        data={"grant_id": gid, "name": "MVP"})
     assert resp.status_code == 200
-    assert "revoked" in resp.text.lower() or "Access revoked" in resp.text, \
+    assert "revoked" in resp.text.lower() or "Access BlackListed" in resp.text, \
         "confirmation page must acknowledge the revocation"
 
     row = _grant_status(db, gid)

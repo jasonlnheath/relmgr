@@ -1660,10 +1660,10 @@ def set_badge_state(conn: sqlite3.Connection, grant_id: str,
 
     state vocabulary (the contact-list badge labels):
     - 'whitelist': status='granted', lifetime access (expires_at NULL,
-      quarter_status cleared) — revived from blocked too
+      quarter_status cleared) — revived from blacklist too
     - 'greylist':  status='granted', expires at the next quarter end
       (temp access; enters the quarterly cycle when it lapses)
-    - 'blocked':   status='revoked' (revoked == blocked, one state);
+    - 'blocked':   status='revoked' (revoked == blacklisted, one state);
       granted_at/expires_at preserved as history
 
     SILENCE CONTRACT: the affected contact is NEVER notified — no

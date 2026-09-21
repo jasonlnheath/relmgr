@@ -124,7 +124,7 @@ def test_deny_leaves_anonymous(tmp_path: Path):
     # Deny
     resp = client.post(f"/a/{token}/decision", data={"decision": "deny"})
     assert resp.status_code == 200
-    assert "Denied" in resp.text
+    assert "BlackListed" in resp.text
 
     # Verify grant is denied
     conn = whitelist_db.wl_connect(db)
