@@ -12,7 +12,7 @@
               class="flex items-center gap-2 mb-4 rounded-lg px-3 py-2"
               style="background: var(--wl-amber-field); border: 1px solid var(--wl-glass-border);">
             <span class="text-xs font-medium wl-text-sub">Bulk:</span>
-            <select name="expiry" class="text-xs border border-gray-600 rounded px-1 py-0.5 focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8] bg-transparent">
+            <select name="expiry" class="wl-select text-xs border border-gray-600 rounded px-1 py-0.5 focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
                 <option value="14">14d</option>
                 <option value="90" selected>90d</option>
                 <option value="quarter">Quarter</option>
@@ -95,7 +95,7 @@
                             </span>
                             <form method="POST" action="/owner/{{ token }}/decision" class="inline-flex gap-1">
                                 <input type="hidden" name="grant_id" value="{{ grant.id }}">
-                                <select name="expiry" class="text-xs border border-gray-600 rounded px-1 py-0.5 focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8] bg-transparent">
+                                <select name="expiry" class="wl-select text-xs border border-gray-600 rounded px-1 py-0.5 focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
                                     <option value="14">14d</option>
                                     <option value="90" selected>90d</option>
                                     <option value="quarter">Quarter</option>

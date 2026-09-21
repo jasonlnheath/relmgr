@@ -134,6 +134,93 @@ _LIVE_GRANT_EXPIRY_SQL = (
     "(expires_at IS NULL OR (expires_at GLOB '[0-9]*Z' AND expires_at > ?))"
 )
 
+# ============================================================
+# Card-editor field registry (round 2, 2026-09-20 captain walkthrough)
+# ============================================================
+# The full field-type vocabulary a card may carry. Round 2 adds:
+# - preferred-channel phone slots: text_number / facetime_number
+#   (explicit fields, replacing unlabeled per-row checkboxes)
+# - video apps: facetime / skype named slots + video_app generic
+# - messaging apps: messenger named slot + messaging_app generic
+# - socials: facebook / instagram named slots + social_other generic
+# - structured address block: address1/address2/city/state/zip
+#   replacing the single-line 'address' type (migrated 1:1 → address1)
+CARD_EDITOR_FIELD_TYPES = (
+    'email', 'phone', 'text_number', 'facetime_number',
+    'facetime', 'skype', 'video_app',
+    'messenger', 'messaging_app',
+    'facebook', 'instagram', 'social_other',
+    'title', 'company', 'address1', 'address2', 'city', 'state', 'zip',
+    'website', 'birthday', 'note',
+)
+
+CARD_EDITOR_FIELD_LABELS = {
+    'email': 'Email',
+    'phone': 'Phone',
+    'text_number': 'Text number',
+    'facetime_number': 'FaceTime number',
+    'facetime': 'FaceTime',
+    'skype': 'Skype',
+    'video_app': 'Video app',
+    'messenger': 'Messenger',
+    'messaging_app': 'Messaging app',
+    'facebook': 'Facebook',
+    'instagram': 'Instagram',
+    'social_other': 'Social',
+    'title': 'Title',
+    'company': 'Company',
+    'address1': 'Address 1',
+    'address2': 'Address 2',
+    'city': 'City',
+    'state': 'State/Province',
+    'zip': 'Zip/Postal Code',
+    'website': 'Website',
+    'birthday': 'Birthday',
+    'note': 'Note',
+}
+
+# Editor sections in render order: (heading, ((field_type, sublabel), …)).
+# sublabel is the per-row channel label shown when one section hosts several
+# field types (e.g. 'Text number' inside Phone numbers); None for a section
+# whose heading already names the single type.
+CARD_EDITOR_SECTIONS = (
+    ('Emails', (('email', None),)),
+    ('Phone numbers', (
+        ('phone', None),
+        ('text_number', 'Text number'),
+        ('facetime_number', 'FaceTime number'),
+    )),
+    ('Video apps', (
+        ('facetime', 'FaceTime'),
+        ('skype', 'Skype'),
+        ('video_app', 'Video app'),
+    )),
+    ('Messaging apps', (
+        ('messenger', 'Messenger'),
+        ('messaging_app', 'Messaging app'),
+    )),
+    ('Social', (
+        ('facebook', 'Facebook'),
+        ('instagram', 'Instagram'),
+        ('social_other', 'Social'),
+    )),
+    ('Address', (
+        ('address1', 'Address 1'),
+        ('address2', 'Address 2'),
+        ('city', 'City'),
+        ('state', 'State/Province'),
+        ('zip', 'Zip/Postal Code'),
+    )),
+    ('Title', (('title', None),)),
+    ('Company', (('company', None),)),
+    ('Website', (('website', None),)),
+    ('Birthday', (('birthday', None),)),
+    ('Note', (('note', None),)),
+)
+
+# Repeatable types that get a "+ Add …" row button in the editor.
+CARD_EDITOR_MULTI_TYPES = ('email', 'phone', 'video_app', 'messaging_app', 'social_other')
+
 
 def wl_connect(db_path: Optional[Path] = None) -> sqlite3.Connection:
     """Open a connection with WAL, foreign keys, and row factory."""
@@ -147,7 +234,7 @@ def wl_connect(db_path: Optional[Path] = None) -> sqlite3.Connection:
 
 def wl_init(conn: sqlite3.Connection) -> None:
     """Create whitelist tables if they don't exist (additive only)."""
-    conn.executescript("""
+    conn.executescript(f"""
         CREATE TABLE IF NOT EXISTS profiles (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             handle TEXT NOT NULL UNIQUE,
@@ -162,7 +249,7 @@ def wl_init(conn: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS profile_fields (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             profile_id INTEGER NOT NULL,
-            field_type TEXT NOT NULL CHECK(field_type IN ('email', 'phone', 'title', 'company', 'address', 'website', 'birthday', 'note')),
+            field_type TEXT NOT NULL CHECK(field_type IN {CARD_EDITOR_FIELD_TYPES!r}),
             field_value TEXT NOT NULL,
             visibility TEXT NOT NULL CHECK(visibility IN ('public', 'granted', 'private')),
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -338,6 +425,68 @@ def ensure_vcard_fields_schema(conn: sqlite3.Connection) -> None:
 
     # Now seed title/company as profile_fields rows from profiles.* columns.
     _seed_title_company_fields(conn)
+    conn.commit()
+
+
+# Round-2 vCard expansion (2026-09-20): preferred-channel phone slots
+# (text_number / facetime_number), video/messaging/social app types, and the
+# structured address block. SQLite cannot ALTER a CHECK constraint → the
+# same table-swap pattern as v2. The single-line 'address' type maps 1:1
+# onto 'address1' so every existing value survives.
+_PROFILE_FIELDS_V3_DDL = f"""
+CREATE TABLE profile_fields_v3 (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_id INTEGER NOT NULL,
+    field_type TEXT NOT NULL CHECK(field_type IN {CARD_EDITOR_FIELD_TYPES!r}),
+    field_value TEXT NOT NULL,
+    visibility TEXT NOT NULL CHECK(visibility IN {_VCARD_VISIBILITY!r}),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(profile_id, field_type, field_value),
+    FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+)
+"""
+
+
+def ensure_vcard_fields_v3_schema(conn: sqlite3.Connection) -> None:
+    """Migrate profile_fields to the round-2 field-type set.
+
+    Idempotent: detects the v3 CHECK by the distinctive ``'address1'``
+    literal in the table DDL (no earlier vocabulary contains it, and no
+    v2-era value can contain it either — the CHECK forbade it). Must run
+    AFTER ensure_vcard_fields_schema: a pre-v2 table is first swapped to
+    v2 (visibility heal), then v2 → v3 here.
+    """
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='profile_fields'"
+    ).fetchone()
+    if row is None or not row[0]:
+        return  # table absent — wl_init creates it fresh this boot
+    if "'address1'" in row[0]:
+        return  # already v3
+
+    # F3 guard (same as v2): a crashed prior migration may leave the v3
+    # table behind — drop it before swapping.
+    conn.execute("DROP TABLE IF EXISTS profile_fields_v3")
+    conn.execute(_PROFILE_FIELDS_V3_DDL)
+
+    # FK enforcement off around the swap so the DROP TABLE does not
+    # cascade-delete card_fields rows (ids are preserved — same as v2).
+    conn.execute("PRAGMA foreign_keys=OFF")
+    conn.execute("""
+        INSERT INTO profile_fields_v3
+            (id, profile_id, field_type, field_value,
+             visibility, created_at, updated_at)
+        SELECT id, profile_id,
+               CASE WHEN field_type = 'address' THEN 'address1'
+                    ELSE field_type
+               END,
+               field_value, visibility, created_at, updated_at
+        FROM profile_fields
+    """)
+    conn.execute("DROP TABLE profile_fields")
+    conn.execute("ALTER TABLE profile_fields_v3 RENAME TO profile_fields")
+    conn.execute("PRAGMA foreign_keys=ON")
     conn.commit()
 
 
@@ -670,12 +819,13 @@ def seed_profile(conn: sqlite3.Connection, data: dict) -> None:
             (profile_id, website),
         )
 
-    # Address field
+    # Address field (round 2: the single-line address lands in Address 1;
+    # the editor owns the rest of the structured block)
     address = data.get("address")
     if address:
         conn.execute(
             """INSERT OR IGNORE INTO profile_fields (profile_id, field_type, field_value, visibility)
-               VALUES (?, 'address', ?, 'granted')""",
+               VALUES (?, 'address1', ?, 'granted')""",
             (profile_id, address),
         )
 
@@ -2019,6 +2169,30 @@ def create_card(conn: sqlite3.Connection, owner_profile_id: int,
     return get_card_by_id(conn, card_id)
 
 
+def delete_card(conn: sqlite3.Connection, card_id: int,
+                owner_profile_id: int) -> None:
+    """Delete ONE card owned by ``owner_profile_id`` (fail closed).
+
+    Cards are lenses on the profile's field data: deleting a card drops the
+    cards row plus its card_fields and grant_cards links (FK ON DELETE
+    CASCADE) but NEVER touches profile_fields — the data survives and can
+    be re-grouped onto another card. The owner's photo file is unlinked by
+    the route layer (uploads are an app concern, not a data-layer one).
+
+    Raises ValueError when the card doesn't exist or belongs to another
+    profile (IDOR — fail closed, ruling 2A).
+    """
+    row = conn.execute(
+        "SELECT owner_profile_id FROM cards WHERE id = ?", (card_id,)
+    ).fetchone()
+    if row is None or row["owner_profile_id"] != owner_profile_id:
+        raise ValueError(
+            f"card_id {card_id} not found or not owned by profile {owner_profile_id}"
+        )
+    conn.execute("DELETE FROM cards WHERE id = ?", (card_id,))
+    conn.commit()
+
+
 def get_card_by_id(conn: sqlite3.Connection, card_id: int) -> Optional[dict]:
     """Fetch a card by ID with its fields attached."""
     row = conn.execute("SELECT * FROM cards WHERE id = ?", (card_id,)).fetchone()
@@ -2488,6 +2662,7 @@ def ensure_whitelist_schema(conn: sqlite3.Connection) -> None:
     ensure_access_grants_context(conn)    # v2-without-context prod case, LAST
     ensure_cards_schema(conn)             # P5 cards tables (depends on profiles/fields)
     ensure_vcard_fields_schema(conn)      # VCard field expansion (field_type + visibility)
+    ensure_vcard_fields_v3_schema(conn)   # Round-2 types: 'address'→'address1' + apps (AFTER v2)
     ensure_profile_bio_column(conn)       # Phase A1: profiles.bio
     ensure_card_photo_column(conn)              # Phase A1: cards.photo_path
     ensure_profile_bio_visibility_column(conn)  # Whitelist: bio visibility toggle
@@ -2505,9 +2680,10 @@ def seed_default_cards(conn: sqlite3.Connection) -> None:
     Default cards and their field types:
     - Identity: title, company
     - Work: email
-    - Contact: phone
-    - Location: address, website
+    - Contact: phone + preferred channels + video/messaging apps
+    - Location: address1..zip, website
     - Details: birthday, note
+    - Social: facebook, instagram, social_other
 
     Two roles:
     1. First boot after a profile appears: create cards for field types that
@@ -2535,10 +2711,13 @@ def seed_default_cards(conn: sqlite3.Connection) -> None:
     # visible to anon viewers.
     CARD_FIELD_TYPES = {
         "Work": {"email"},
-        "Contact": {"phone"},
+        "Contact": {"phone", "text_number", "facetime_number",
+                    "facetime", "skype", "video_app",
+                    "messenger", "messaging_app"},
         "Identity": {"title", "company"},
-        "Location": {"address", "website"},
+        "Location": {"address1", "address2", "city", "state", "zip", "website"},
         "Details": {"birthday", "note"},
+        "Social": {"facebook", "instagram", "social_other"},
     }
 
     now = _now_iso()
@@ -2688,9 +2867,6 @@ def update_card_photo(conn: sqlite3.Connection, card_id: int,
 # The full vCard field set the card editor covers (SPEC.md §Standard contact
 # field set). Shared with the route so the editor form and the save path can
 # never drift apart on which types are conventional.
-CARD_EDITOR_FIELD_TYPES = _VCARD_FIELD_TYPES
-
-
 def save_card_editor(
     conn: sqlite3.Connection,
     card_id: int,

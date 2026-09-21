@@ -1,11 +1,17 @@
-"""Card editor + dashboard cleanup (2026-09-20 wife-test walk).
+"""Card editor round 2 (2026-09-20 captain walkthrough) + dashboard cleanup.
 
 Pins:
 - Dashboard shows ONLY the owner's own cards, each with a clear Edit action
-- Editor renders every conventional field type for a seeded card
+- Editor renders the FULL round-2 field set: preferred-channel phone slots
+  (Text number / FaceTime number), video/messaging/social app sections with
+  "+ Add …" affordances, and the structured address block
 - Save round-trips ALL fields + visibility (public/granted/private)
 - Photo upload via the client-side cropper (photo_data) stores the cropped
   result at the display size (512×512 square JPEG)
+- Zoom slider starts at 1.0× (fit) and tracks proportionally — no jump
+- All dropdowns keep the dark glass background (wl-select) — no white-on-white
+- Delete-card action with a confirm step; per-user isolation; fields survive
+- Legacy single-line 'address' rows migrate to 'address1'
 - Cross-owner editor access → 404 (ruling 2A)
 - Friendly 400s: duplicate field value, duplicate card name, junk visibility
 """
@@ -24,8 +30,18 @@ from PIL import Image
 from app import create_app
 
 
-FIELD_TYPES = ("email", "phone", "title", "company",
-               "address", "website", "birthday", "note")
+# Round-2 field vocabulary — pinned explicitly (re-pinned, not loosened).
+FIELD_TYPES = (
+    "email", "phone", "text_number", "facetime_number",
+    "facetime", "skype", "video_app",
+    "messenger", "messaging_app",
+    "facebook", "instagram", "social_other",
+    "title", "company", "address1", "address2", "city", "state", "zip",
+    "website", "birthday", "note",
+)
+
+# Legacy 'address' must no longer be creatable — the address block replaced it.
+RETIRED_TYPES = ("address",)
 
 
 def _make_db(tmp_path: Path):
@@ -100,11 +116,11 @@ class TestDashboardOwnsOnlyItsCards:
 
 
 # ============================================================
-# Editor renders every conventional field type
+# Editor renders every round-2 field type, grouped in sections
 # ============================================================
 
 class TestEditorRendersAllFieldTypes:
-    def test_all_eight_types_present_for_seeded_card(self, tmp_path):
+    def test_all_types_present_for_seeded_card(self, tmp_path):
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
         card_id = _first_card_id(db)
@@ -113,9 +129,53 @@ class TestEditorRendersAllFieldTypes:
         for t in FIELD_TYPES:
             assert f'data-type="{t}"' in resp.text, \
                 f"editor section for '{t}' missing"
+        for t in RETIRED_TYPES:
+            assert f'data-type="{t}"' not in resp.text, \
+                f"retired type '{t}' still has its own editor section"
         # Both name inputs (card + profile display name) render too.
         assert 'name="card_name"' in resp.text
         assert 'name="display_name"' in resp.text
+
+    def test_preferred_channel_slots_are_labeled_not_checkboxes(self, tmp_path):
+        """The captain's ask: dedicated, clearly-labeled Text number and
+        FaceTime number slots — never mystery checkboxes next to phones."""
+        db = _make_db(tmp_path)
+        client = TestClient(create_app(db))
+        card_id = _first_card_id(db)
+        html = client.get(f"/owner/{_owner_token()}/cards/{card_id}/edit").text
+        # Section heading + per-row channel labels…
+        assert "Phone numbers" in html
+        assert "Text number" in html
+        assert "FaceTime number" in html
+        # …dedicated always-visible slots for both…
+        assert 'name="new_text_number_value"' in html
+        assert 'name="new_facetime_number_value"' in html
+        # …and the remove control is an explicitly labeled checkbox.
+        assert "> Remove" in html or ">Remove" in html, \
+            "remove checkbox must carry a visible 'Remove' label"
+        assert "\u2705" not in html and "> \u2715" not in html, \
+            "bare mystery ✕ checkbox must be gone"
+
+    def test_app_sections_with_add_affordances(self, tmp_path):
+        """Video apps / Messaging apps / Socials sections show their named
+        slots first, then a '+ Add …' affordance covering all others."""
+        db = _make_db(tmp_path)
+        client = TestClient(create_app(db))
+        card_id = _first_card_id(db)
+        html = client.get(f"/owner/{_owner_token()}/cards/{card_id}/edit").text
+        # Named slots + section headings.
+        for heading in ("Video apps", "Messaging apps", "Social", "Address"):
+            assert heading in html, f"section '{heading}' missing"
+        for slot in ("facetime", "skype", "messenger", "facebook", "instagram"):
+            assert f'name="new_{slot}_value"' in html, f"named slot '{slot}' missing"
+        # + Add affordances (generic types cover all other apps/platforms).
+        for add in ("+ Add video app", "+ Add messaging app", "+ Add social",
+                    "+ Add phone", "+ Add email"):
+            assert add in html, f"'{add}' affordance missing"
+        # The structured address block replaces the single line.
+        for label in ("Address 1", "Address 2", "City", "State/Province",
+                      "Zip/Postal Code"):
+            assert label in html, f"address row '{label}' missing"
 
     def test_existing_values_render_with_visibility(self, tmp_path):
         db = _make_db(tmp_path)
@@ -161,9 +221,23 @@ class TestEditorSaveRoundTrip:
         expectations = {
             "email": ("work@acme.com", "public"),
             "phone": ("+1-555-999-0000", "granted"),
+            "text_number": ("+1-555-999-0001", "public"),
+            "facetime_number": ("+1-555-999-0002", "granted"),
+            "facetime": ("jason@acme.com", "granted"),
+            "skype": ("live:.cid.jason", "private"),
+            "video_app": ("Zoom 555-123-4567", "granted"),
+            "messenger": ("m.me/jasonh", "public"),
+            "messaging_app": ("WhatsApp +1-555-999-0003", "granted"),
+            "facebook": ("facebook.com/jason.heath", "public"),
+            "instagram": ("@jasonheath", "public"),
+            "social_other": ("YouTube @heathtech", "public"),
             "title": ("VP Engineering", "granted"),
             "company": ("Acme Inc.", "private"),
-            "address": ("123 Main St, City, ST 12345", "public"),
+            "address1": ("123 Main St", "public"),
+            "address2": ("Suite 400", "public"),
+            "city": ("Denver", "public"),
+            "state": ("CO", "public"),
+            "zip": ("80014", "public"),
             "website": ("https://acme.com", "granted"),
             "birthday": ("1985-06-15", "private"),
             "note": ("Met at the conference.", "private"),
@@ -530,3 +604,231 @@ class TestEditorPhotoUpload:
         upload = Path(__file__).resolve().parent.parent / "uploads" / f"1_{card_id}.jpg"
         if upload.exists():
             upload.unlink()
+
+
+# ============================================================
+# Zoom slider: starts at 1.0× (fit), tracks proportionally
+# ============================================================
+
+class TestZoomSlider:
+    def test_slider_starts_at_fit_and_tracks_proportionally(self, tmp_path):
+        """Round-2 bug: the instant the slider was touched, zoom jumped to
+        ~4× because pixel scale was slider/100 (natural size). The slider is
+        now a fit-relative multiplier (100 = 1.0× fit, 400 = 4× fit) and
+        pixel scale derives from minZoom × multiplier."""
+        db = _make_db(tmp_path)
+        client = TestClient(create_app(db))
+        card_id = _first_card_id(db)
+        html = client.get(f"/owner/{_owner_token()}/cards/{card_id}/edit").text
+        assert 'id="crop-zoom" min="100" max="400" value="100"' in html, \
+            "slider must be a 100–400 multiplier starting at 1.0×"
+        assert 'id="crop-zoom-val"' in html and "1.0\u00d7" in html, \
+            "a live multiplier readout must start at 1.0×"
+        assert "zoom = minZoom * mult" in html, \
+            "pixel scale must be fit × multiplier (proportional tracking)"
+        assert "zoomInput.value = '100'" in html, \
+            "loading an image must reset the slider to the fit multiplier"
+        assert "zoom = parseInt(zoomInput.value, 10) / 100;" not in html, \
+            "the old natural-size jump must be gone"
+
+
+# ============================================================
+# Dropdowns: dark glass everywhere (bio dropdown was white-on-white)
+# ============================================================
+
+class TestDarkGlassDropdowns:
+    def test_every_editor_select_keeps_dark_glass(self, tmp_path):
+        db = _make_db(tmp_path)
+        client = TestClient(create_app(db))
+        card_id = _first_card_id(db)
+        html = client.get(f"/owner/{_owner_token()}/cards/{card_id}/edit").text
+        selects = re.findall(r"<select\s[^>]*>", html)
+        assert selects, "editor should render visibility dropdowns"
+        for tag in selects:
+            assert "wl-select" in tag, f"dropdown missing dark glass class: {tag}"
+            assert "bg-transparent" not in tag, \
+                f"transparent select renders white-on-white: {tag}"
+        # The shared dark-glass CSS ships on the page (base.html).
+        assert ".wl-select {" in html
+        assert "color-scheme: dark" in html
+
+    def test_bio_visibility_dropdown_dark_glass(self, tmp_path):
+        db = _make_db(tmp_path)
+        client = TestClient(create_app(db))
+        html = client.get(f"/owner/{_owner_token()}/profile").text
+        m = re.search(r'<select name="bio_visibility"[^>]*>', html)
+        assert m, "bio visibility dropdown missing"
+        assert "wl-select" in m.group(0), \
+            "bio visibility dropdown must keep the dark glass background"
+        assert "bg-transparent" not in m.group(0)
+
+
+# ============================================================
+# Delete card: confirm step, isolation, fields survive
+# ============================================================
+
+class TestDeleteCard:
+    def test_editor_offers_delete_with_confirm_step(self, tmp_path):
+        db = _make_db(tmp_path)
+        client = TestClient(create_app(db))
+        card_id = _first_card_id(db)
+        html = client.get(f"/owner/{_owner_token()}/cards/{card_id}/edit").text
+        assert f"/cards/{card_id}/delete" in html, "no delete action in the editor"
+        assert "Yes, delete card" in html, "confirm step missing"
+        assert "Keep card" in html, "confirm cancel missing"
+        assert "the fields stay on your profile" in html, \
+            "confirm copy must say what happens to the data"
+
+    def test_delete_removes_card_but_keeps_profile_fields(self, tmp_path):
+        db = _make_db(tmp_path)
+        client = TestClient(create_app(db))
+        tok = _owner_token()
+        card_id = _first_card_id(db)
+        conn = whitelist_db.wl_connect(db)
+        fields_before = conn.execute(
+            "SELECT COUNT(*) FROM profile_fields WHERE profile_id = 1"
+        ).fetchone()[0]
+        on_card_before = conn.execute(
+            "SELECT COUNT(*) FROM card_fields WHERE card_id = ?", (card_id,)
+        ).fetchone()[0]
+        conn.close()
+        assert on_card_before > 0, "seeded card should carry fields"
+
+        resp = client.post(f"/owner/{tok}/cards/{card_id}/delete",
+                           follow_redirects=False)
+        assert resp.status_code == 303
+        assert resp.headers["location"] == f"/owner/{tok}/profile"
+
+        conn = whitelist_db.wl_connect(db)
+        card_left = conn.execute(
+            "SELECT 1 FROM cards WHERE id = ?", (card_id,)).fetchone()
+        links_left = conn.execute(
+            "SELECT COUNT(*) FROM card_fields WHERE card_id = ?", (card_id,)
+        ).fetchone()[0]
+        fields_after = conn.execute(
+            "SELECT COUNT(*) FROM profile_fields WHERE profile_id = 1"
+        ).fetchone()[0]
+        conn.close()
+        assert card_left is None, "card row survived the delete"
+        assert links_left == 0, "card_fields links survived the delete"
+        assert fields_after == fields_before, \
+            "deleting a card must never destroy profile field data"
+
+    def test_delete_cascades_grant_card_links(self, tmp_path):
+        db = _make_db(tmp_path)
+        client = TestClient(create_app(db))
+        tok = _owner_token()
+        card_id = _first_card_id(db)
+        conn = whitelist_db.wl_connect(db)
+        grant_id = whitelist_db.create_grant(
+            conn, 1, "friend@example.com", "Friend")
+        whitelist_db.set_grant_cards(conn, grant_id, [card_id])
+        conn.close()
+        client.post(f"/owner/{tok}/cards/{card_id}/delete")
+        conn = whitelist_db.wl_connect(db)
+        links = conn.execute(
+            "SELECT COUNT(*) FROM grant_cards WHERE card_id = ?", (card_id,)
+        ).fetchone()[0]
+        conn.close()
+        assert links == 0, "dangling grant_cards link after card delete"
+
+    def test_foreign_card_delete_404_and_survives(self, tmp_path):
+        db = _make_db(tmp_path)
+        conn = whitelist_db.wl_connect(db)
+        conn.execute(
+            "INSERT INTO profiles (handle, display_name) VALUES ('otherco','Other Co')"
+        )
+        intruder = whitelist_db.create_card(conn, 2, "Intruder", [])
+        conn.commit()
+        conn.close()
+        client = TestClient(create_app(db))
+        resp = client.post(f"/owner/{_owner_token('1')}/cards/{intruder['id']}/delete")
+        assert resp.status_code == 404, "cross-owner delete must fail closed"
+        conn = whitelist_db.wl_connect(db)
+        still = conn.execute(
+            "SELECT 1 FROM cards WHERE id = ?", (intruder["id"],)).fetchone()
+        conn.close()
+        assert still is not None, "foreign card was deleted"
+
+    def test_delete_removes_photo_file(self, tmp_path):
+        db = _make_db(tmp_path)
+        client = TestClient(create_app(db))
+        tok = _owner_token()
+        card_id = _first_card_id(db)
+        client.post(f"/owner/{tok}/cards/{card_id}/photo",
+                    data={"photo_data": TestEditorPhotoUpload._jpeg_data_url()})
+        upload = Path(__file__).resolve().parent.parent / "uploads" / f"1_{card_id}.jpg"
+        assert upload.exists(), "photo never landed before delete test"
+        client.post(f"/owner/{tok}/cards/{card_id}/delete")
+        assert not upload.exists(), "orphaned photo file after card delete"
+
+
+# ============================================================
+# Legacy single-line 'address' → structured address block
+# ============================================================
+
+class TestLegacyAddressMigration:
+    @staticmethod
+    def _v2_db(tmp_path: Path) -> Path:
+        """A v2-era DB: profile_fields with the OLD 8-type CHECK (created
+        before wl_init so wl_init's CREATE IF NOT EXISTS skips it)."""
+        db = tmp_path / "v2.db"
+        conn = whitelist_db.wl_connect(db)
+        conn.execute("""
+            CREATE TABLE profile_fields (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                profile_id INTEGER NOT NULL,
+                field_type TEXT NOT NULL CHECK(field_type IN
+                    ('email','phone','title','company','address','website','birthday','note')),
+                field_value TEXT NOT NULL,
+                visibility TEXT NOT NULL CHECK(visibility IN ('public','granted','private')),
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(profile_id, field_type, field_value),
+                FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+            )
+        """)
+        whitelist_db.wl_init(conn)
+        whitelist_db.ensure_cards_schema(conn)
+        conn.execute(
+            "INSERT INTO profiles (handle, display_name) VALUES ('legacy','Legacy Co')"
+        )
+        conn.execute(
+            "INSERT INTO profile_fields (profile_id, field_type, field_value, visibility)"
+            " VALUES (1, 'address', '123 Old Rd, Denver, CO 80014', 'granted')"
+        )
+        conn.execute(
+            "INSERT INTO cards (owner_profile_id, name) VALUES (1, 'Location')"
+        )
+        conn.execute("INSERT INTO card_fields (card_id, field_id) VALUES (1, 1)")
+        conn.commit()
+        conn.close()
+        return db
+
+    def test_address_row_migrates_to_address1(self, tmp_path):
+        db = self._v2_db(tmp_path)
+        conn = whitelist_db.wl_connect(db)
+        whitelist_db.ensure_whitelist_schema(conn)
+        row = conn.execute(
+            "SELECT field_type, field_value, visibility FROM profile_fields WHERE id = 1"
+        ).fetchone()
+        link = conn.execute(
+            "SELECT COUNT(*) FROM card_fields WHERE card_id = 1 AND field_id = 1"
+        ).fetchone()[0]
+        conn.close()
+        assert row["field_type"] == "address1", "legacy address row not migrated"
+        assert row["field_value"] == "123 Old Rd, Denver, CO 80014"
+        assert row["visibility"] == "granted"
+        assert link == 1, "card link lost in migration"
+
+    def test_migrated_address_edits_in_address_section(self, tmp_path):
+        db = self._v2_db(tmp_path)
+        conn = whitelist_db.wl_connect(db)
+        whitelist_db.ensure_whitelist_schema(conn)
+        conn.close()
+        client = TestClient(create_app(db))
+        html = client.get(f"/owner/{_owner_token()}/cards/1/edit").text
+        assert 'value="123 Old Rd, Denver, CO 80014"' in html, \
+            "migrated value missing from the editor"
+        assert 'data-type="address1"' in html, \
+            "migrated field must live in the address1 slot"

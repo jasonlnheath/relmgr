@@ -54,7 +54,7 @@
                     <label class="text-sm font-medium wl-text-sub">Bio</label>
                     <form method="POST" action="/owner/{{ token }}/bio-visibility" class="flex items-center gap-1">
                         <select name="bio_visibility"
-                                class="text-xs border border-gray-600 rounded px-1 py-0.5 bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
+                                class="wl-select text-xs border border-gray-600 rounded px-1 py-0.5 focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
                             <option value="public" {% if profile.get('bio_visibility') == 'public' %}selected{% endif %}>Public</option>
                             <option value="private" {% if profile.get('bio_visibility') == 'private' %}selected{% endif %}>Private</option>
                         </select>

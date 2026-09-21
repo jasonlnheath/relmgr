@@ -3,30 +3,34 @@
 
 {% block content %}
 {% set placeholders = {
+    'email': 'jason@example.com',
+    'phone': '+1-555-123-4567',
+    'text_number': '+1-555-123-4567',
+    'facetime_number': '+1-555-123-4567',
+    'facetime': 'name@example.com or +1-555-123-4567',
+    'skype': 'live:.cid.xxxx',
+    'video_app': 'App — ID, number or link',
+    'messenger': 'm.me/yourname',
+    'messaging_app': 'App — your handle',
+    'facebook': 'facebook.com/yourname',
+    'instagram': '@yourhandle',
+    'social_other': 'Platform — @yourhandle',
     'title': 'VP Engineering',
     'company': 'Acme Inc.',
-    'address': '123 Main St, City, ST 12345',
+    'address1': '123 Main St',
+    'address2': 'Apt, suite, unit',
+    'city': 'City',
+    'state': 'State or province',
+    'zip': 'ZIP or postal code',
     'website': 'https://acme.com',
-    'phone': '+1-555-123-4567',
-    'email': 'jason@example.com',
     'birthday': '',
     'note': 'Freeform note'
-} %}
-{% set labels = {
-    'email': 'Emails',
-    'phone': 'Phones',
-    'title': 'Title',
-    'company': 'Company',
-    'address': 'Address',
-    'website': 'Website',
-    'birthday': 'Birthday',
-    'note': 'Note'
 } %}
 
 {# ---- macros ---- #}
 {% macro vis_select(name, current='') %}
 <select name="{{ name }}"
-        class="text-xs border border-gray-600 rounded px-1 py-1 bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]"
+        class="wl-select text-xs border border-gray-600 rounded px-1 py-1 focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]"
         title="Who can see this field: Public, granted contacts, or only you">
     <option value="public" {% if current == 'public' %}selected{% endif %}>Public</option>
     <option value="granted" {% if current == 'granted' %}selected{% endif %}>Granted</option>
@@ -45,6 +49,44 @@
 <input type="text" name="{{ name }}" value="{{ value }}" placeholder="{{ placeholder }}"
        class="w-full border border-gray-600 rounded-lg px-3 py-2 text-sm bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
 {% endif %}
+{% endmacro %}
+
+{# One existing-field row. sublabel names the channel inside multi-type
+   sections (e.g. "Text number" under Phone numbers); the remove control is
+   an explicitly labeled checkbox — round 2 replaced the bare ✕ mystery box. #}
+{% macro field_row(t, sublabel, f) %}
+<div class="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
+    {% if sublabel %}
+    <span class="w-28 flex-shrink-0 text-xs wl-text-faint uppercase tracking-wide">{{ sublabel }}</span>
+    {% endif %}
+    <div class="flex-1 min-w-0">
+        {{ field_input('field_' ~ f.id ~ '_value', t, f.field_value, placeholders[t]) }}
+    </div>
+    <div class="flex items-center gap-2 flex-shrink-0">
+        {{ vis_select('field_' ~ f.id ~ '_visibility', f.visibility) }}
+        <label class="flex items-center gap-1 text-xs wl-text-faint cursor-pointer"
+               title="Remove this {{ labels[t]|lower }} from the card">
+            <input type="checkbox" name="field_{{ f.id }}_remove" value="1"
+                   class="accent-red-400"> Remove
+        </label>
+    </div>
+</div>
+{% endmacro %}
+
+{# One fresh add-row slot (no-JS fallback for + Add, and the always-visible
+   dedicated slot when the card has no field of this type yet). #}
+{% macro empty_row(t, sublabel) %}
+<div class="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
+    {% if sublabel %}
+    <span class="w-28 flex-shrink-0 text-xs wl-text-faint uppercase tracking-wide">{{ sublabel }}</span>
+    {% endif %}
+    <div class="flex-1 min-w-0">
+        {{ field_input('new_' ~ t ~ '_value', t, '', placeholders[t]) }}
+    </div>
+    <div class="flex items-center gap-2 flex-shrink-0">
+        {{ vis_select('new_' ~ t ~ '_visibility', 'private') }}
+    </div>
+</div>
 {% endmacro %}
 
 <div class="max-w-2xl mx-auto py-8 px-4">
@@ -90,6 +132,7 @@
                     <div id="crop-controls" class="hidden items-center gap-3 mt-3">
                         <span class="text-xs wl-text-sub whitespace-nowrap">Zoom</span>
                         <input type="range" id="crop-zoom" min="100" max="400" value="100" class="flex-1">
+                        <span id="crop-zoom-val" class="text-xs wl-text-faint whitespace-nowrap w-8 text-right">1.0×</span>
                     </div>
                     <div class="mt-3 flex flex-wrap items-center gap-2">
                         <label class="wl-btn-ink px-3 py-1.5 rounded text-xs cursor-pointer">
@@ -128,54 +171,32 @@
                 <p class="text-xs wl-text-faint mt-1">Your identity across all cards.</p>
             </div>
 
-            {% for t in field_types %}
-            <div class="mb-4 pb-4" data-type="{{ t }}" style="border-bottom: 1px solid var(--wl-glass-border);">
-                <label class="block text-sm font-medium wl-text-sub mb-2">{{ labels[t] }}</label>
-                <div class="rows">
-                    {% for f in by_type[t] %}
-                    <div class="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
-                        <div class="flex-1 min-w-0">
-                            {{ field_input('field_' ~ f.id ~ '_value', t, f.field_value, placeholders[t]) }}
-                        </div>
-                        <div class="flex items-center gap-2 flex-shrink-0">
-                            {{ vis_select('field_' ~ f.id ~ '_visibility', f.visibility) }}
-                            <label class="flex items-center gap-1 text-xs wl-text-faint cursor-pointer"
-                                   title="Remove this {{ t }} from the card">
-                                <input type="checkbox" name="field_{{ f.id }}_remove" value="1"
-                                       class="accent-red-400"> ✕
-                            </label>
-                        </div>
-                    </div>
-                    {% endfor %}
+            {% for heading, types in sections %}
+            <div class="mb-4 pb-4" data-section="{{ heading }}" style="border-bottom: 1px solid var(--wl-glass-border);">
+                <label class="block text-sm font-medium wl-text-sub mb-2">{{ heading }}</label>
+                {% for t, sublabel in types %}
+                <div data-type="{{ t }}" class="mb-3">
+                    <div class="rows">
+                        {% for f in by_type[t] %}
+                        {{ field_row(t, sublabel, f) }}
+                        {% endfor %}
 
-                    {# Empty slot: the section always shows at least one
-                       input row — a fresh slot when the card has no field
-                       of this type yet (no-JS fallback for + Add too) #}
-                    {% if not by_type[t] %}
-                    <div class="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
-                        <div class="flex-1 min-w-0">
-                            {{ field_input('new_' ~ t ~ '_value', t, '', placeholders[t]) }}
-                        </div>
-                        <div class="flex items-center gap-2 flex-shrink-0">
-                            {{ vis_select('new_' ~ t ~ '_visibility', 'private') }}
-                        </div>
+                        {# Dedicated slots always show at least one input
+                           row — a fresh slot when the card has no field of
+                           this type yet (no-JS fallback for + Add too) #}
+                        {% if not by_type[t] %}
+                        {{ empty_row(t, sublabel) }}
+                        {% endif %}
                     </div>
+                    {% if t in multi_types %}
+                    <button type="button" class="wl-link text-xs mt-1"
+                            onclick="addFieldRow('{{ t }}')">+ Add {{ labels[t]|lower }}</button>
+                    <template data-newrow="{{ t }}">
+                        {{ empty_row(t, sublabel) }}
+                    </template>
                     {% endif %}
                 </div>
-                {% if t in multi_types %}
-                <button type="button" class="wl-link text-xs mt-1"
-                        onclick="addFieldRow('{{ t }}')">+ Add {{ t }}</button>
-                <template data-newrow="{{ t }}">
-                    <div class="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
-                        <div class="flex-1 min-w-0">
-                            {{ field_input('new_' ~ t ~ '_value', t, '', placeholders[t]) }}
-                        </div>
-                        <div class="flex items-center gap-2 flex-shrink-0">
-                            {{ vis_select('new_' ~ t ~ '_visibility', 'private') }}
-                        </div>
-                    </div>
-                </template>
-                {% endif %}
+                {% endfor %}
             </div>
             {% endfor %}
 
@@ -187,6 +208,32 @@
                 </button>
             </div>
         </form>
+
+        {# ============ Danger zone: delete card (two-step confirm) ============ #}
+        <div class="mt-6 pt-4" style="border-top: 1px solid var(--wl-glass-border);">
+            <button type="button" id="delete-card-btn" onclick="showDeleteCard()"
+                    class="wl-link text-xs" style="color: var(--wl-danger);">
+                Delete card
+            </button>
+            <form id="delete-card-form" method="POST"
+                  action="/owner/{{ token }}/cards/{{ card.id }}/delete"
+                  class="hidden mt-2">
+                <p class="text-xs wl-text-sub mb-2">
+                    Delete “{{ card.name }}”? The card disappears for every contact;
+                    the fields stay on your profile.
+                </p>
+                <div class="flex items-center gap-2">
+                    <button type="submit"
+                            class="wl-btn-deny px-3 py-1.5 rounded text-xs">
+                        Yes, delete card
+                    </button>
+                    <button type="button" onclick="hideDeleteCard()"
+                            class="wl-btn-ink px-3 py-1.5 rounded text-xs">
+                        Keep card
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
 </div>
 
@@ -200,6 +247,16 @@ function addFieldRow(type) {
     rows.appendChild(tpl.content.cloneNode(true));
 }
 
+// ---- Danger zone: two-step delete confirm ----
+function showDeleteCard() {
+    document.getElementById('delete-card-btn').classList.add('hidden');
+    document.getElementById('delete-card-form').classList.remove('hidden');
+}
+function hideDeleteCard() {
+    document.getElementById('delete-card-form').classList.add('hidden');
+    document.getElementById('delete-card-btn').classList.remove('hidden');
+}
+
 // ---- Photo cropper: hand-rolled square canvas (crop / zoom / position) ----
 (function () {
     const canvas = document.getElementById('crop-canvas');
@@ -208,6 +265,7 @@ function addFieldRow(type) {
     const SIZE = canvas.width; // 512 — stored display size
     const fileInput = document.getElementById('photo-file');
     const zoomInput = document.getElementById('crop-zoom');
+    const zoomVal = document.getElementById('crop-zoom-val');
     const controls = document.getElementById('crop-controls');
     const saveBtn = document.getElementById('photo-save');
     const photoData = document.getElementById('photo_data');
@@ -249,9 +307,14 @@ function addFieldRow(type) {
             img = image;
             URL.revokeObjectURL(url);
             minZoom = Math.max(SIZE / img.width, SIZE / img.height);
+            // Zoom starts at 1.0× = fit. The slider is the multiplier
+            // (100 = fit, 400 = 4× fit); pixel scale derives from it, so
+            // touching the slider continues smoothly from the fit view
+            // instead of snapping to the image's natural pixel size.
             zoom = minZoom;
             ox = 0; oy = 0;
-            zoomInput.value = String(Math.round(zoom * 100));
+            zoomInput.value = '100';
+            zoomVal.textContent = '1.0×';
             canvas.classList.remove('hidden');
             controls.classList.remove('hidden');
             controls.classList.add('flex');
@@ -263,7 +326,12 @@ function addFieldRow(type) {
 
     zoomInput.addEventListener('input', () => {
         if (!img) return;
-        zoom = parseInt(zoomInput.value, 10) / 100;
+        // Proportional tracking: slider 100 → fit (1.0×), 400 → 4× fit.
+        // Pixel scale is minZoom × multiplier — never slider/100 alone,
+        // which jumped straight to the natural size (~4×+ on big photos).
+        const mult = parseInt(zoomInput.value, 10) / 100;
+        zoom = minZoom * mult;
+        zoomVal.textContent = mult.toFixed(1) + '×';
         draw();
     });
 
