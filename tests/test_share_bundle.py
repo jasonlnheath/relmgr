@@ -635,8 +635,8 @@ class TestBadgeGovernedAccess:
         html = client.get(f"/owner/{token}").text
         assert f'action="/owner/{token}/badge"' in html
         assert 'name="state"' in html
-        # _granted creates a quarterly grant → greylist badge, next=blocked
-        assert 'data-state="greylist"' in html and "Click to change to Blocked" in html
+        # _granted creates a quarterly grant → greylist badge, next=BlackList
+        assert 'data-state="greylist"' in html and "Click to change to BlackList" in html
 
 
 # ============================================================

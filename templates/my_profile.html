@@ -3,27 +3,28 @@
 
 {% block content %}
 <div class="max-w-2xl mx-auto py-8 px-4">
+    {# UX pass (2026-09-22): way back to the contact list from My Profile #}
+    <div class="mb-4">
+        <a href="/owner/{{ token }}" class="wl-link text-sm">← WhiteList</a>
+    </div>
     <div class="wl-card p-6">
         <h1 class="wl-heading wl-heading-md mb-6">My Profile</h1>
 
-        {# Identity header: name/title/company, visits, share #}
+        {# Identity header: name + visits + share (UX pass: title/company
+           line removed — the bio carries what people need) #}
         <div class="mb-6 pb-4" style="border-bottom: 1px solid var(--wl-glass-border);">
             <div class="flex items-center justify-between mb-2">
                 <div>
                     <h2 class="wl-heading wl-heading-sm wl-text">{{ profile.display_name }}</h2>
-                    {% if profile.title or profile.company %}
-                    <p class="text-sm wl-text-sub">
-                        {% if profile.title %}{{ profile.title }}{% endif %}
-                        {% if profile.title and profile.company %} at {% endif %}
-                        {% if profile.company %}{{ profile.company }}{% endif %}
-                    </p>
-                    {% endif %}
                     <p class="text-xs wl-text-faint mt-1">{{ visit_count }} visits (last 14 days)</p>
                 </div>
                 <div class="flex items-center gap-2">
                     <button type="button" onclick="document.getElementById('share-chooser').classList.toggle('hidden')"
-                            class="wl-btn-ink px-3 py-1 rounded text-xs">
-                        📤 Share
+                            class="wl-btn-ink px-3 py-1 rounded text-xs inline-flex items-center gap-1.5">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 12.632a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z"/>
+                        </svg>
+                        Share
                     </button>
                     <a href="/p/{{ profile.handle }}?e={{ owner_email | urlencode }}"
                        class="wl-link text-sm">
@@ -36,7 +37,7 @@
                link encoding the chosen set. No QR here anymore — the link
                is minted on the next screen. #}
             <div id="share-chooser" class="hidden mt-3 p-3 rounded-lg" style="background: rgba(255,255,255,0.03); border: 1px solid var(--wl-glass-border);">
-                <p class="text-xs wl-text-faint mb-2">Choose the cards to share</p>
+                <p id="share-chooser-hint" class="text-xs wl-text-faint mb-2">Choose the cards you want to share.</p>
                 <form id="share-chooser-form" method="POST" action="/owner/{{ token }}/share">
                     <div class="space-y-1">
                         {% for card in cards %}
@@ -82,11 +83,11 @@
                     </form>
                 </div>
                 <form method="POST" action="/owner/{{ token }}/bio" class="mt-1">
-                    <textarea name="bio" rows="3"
+                    <textarea name="bio" rows="3" maxlength="2000"
                               class="w-full border border-gray-600 rounded-lg px-3 py-2 text-sm bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]"
                               placeholder="Tell us about yourself...">{{ profile.bio or '' }}</textarea>
                     <div class="flex items-center justify-between mt-1">
-                        <span class="text-xs wl-text-faint">{{ bio_len }}/2000 characters</span>
+                        <span id="bio-count" class="text-xs wl-text-faint">{{ bio_len }}/2000 characters</span>
                         <button type="submit"
                                 class="wl-btn-ink px-3 py-1 rounded text-xs">
                             Save
@@ -189,5 +190,32 @@ function updateSharePreview() {
 document.querySelectorAll('#share-chooser input[name="card_ids"]').forEach(cb => {
     cb.addEventListener('change', updateSharePreview);
 });
+
+// UX pass (2026-09-22): chooser copy — 'Click next to share.' once at
+// least one card is selected.
+(function () {
+    const hint = document.getElementById('share-chooser-hint');
+    if (!hint) return;
+    const IDLE = 'Choose the cards you want to share.';
+    const READY = 'Click next to share.';
+    function syncHint() {
+        const any = !!document.querySelector('#share-chooser input[name="card_ids"]:checked');
+        hint.textContent = any ? READY : IDLE;
+    }
+    document.querySelectorAll('#share-chooser input[name="card_ids"]').forEach(cb =>
+        cb.addEventListener('change', syncHint));
+    syncHint();
+})();
+
+// UX pass (2026-09-22): bio carries a LIVE 2000-character limit —
+// maxlength prunes while typing; the counter tracks it live.
+(function () {
+    const bio = document.querySelector('textarea[name="bio"]');
+    const count = document.getElementById('bio-count');
+    if (!bio || !count) return;
+    function sync() { count.textContent = bio.value.length + '/2000 characters'; }
+    bio.addEventListener('input', sync);
+    sync();
+})();
 </script>
 {% endblock %}

@@ -58,26 +58,52 @@
         </div>
         {% endif %}
 
-        {# Card-driven field rendering — grouped by card name #}
+        {# Card-driven field rendering — UX pass (2026-09-22): the contact
+           detail shows ONE card at a time (like My Cards), with a chip
+           switcher when the contact has several. #}
         {% if cards and tier == 'granted' %}
-        {% for card in cards %}
-        {% if card.visible_fields %}
-        <div class="mb-6 {% if not loop.last %}pb-4 border-b{% endif %}" style="border-color: var(--wl-glass-border);">
-            <h2 class="wl-heading wl-heading-sm wl-text mb-3">{{ card.name }}</h2>
-            <div class="space-y-2">
-                {% for f in card.visible_fields %}
-                <div class="flex items-start wl-text-sub">
-                    <span class="w-24 text-xs wl-text-faint uppercase tracking-wide pt-0.5">{{ _field_label(f.field_type) }}</span>
-                    <span class="wl-text">{{ f.field_value }}</span>
-                    {% if f.visibility == 'private' %}
-                    <span class="ml-2 text-xs wl-text-faint" title="Private field">🔒</span>
-                    {% endif %}
-                </div>
+            {% if cards|length > 1 %}
+            <div class="flex flex-wrap gap-1.5 mb-4">
+                {% for c in cards %}
+                <a href="/owner/{{ token }}/contact/{{ grant.id }}?card={{ c.id }}"
+                   class="text-xs px-2 py-1 rounded-full"
+                   aria-label="Show the {{ c.name }} card"
+                   style="{% if selected_card and c.id == selected_card.id %}background: var(--wl-btn-slate); color: var(--wl-ink);{% else %}background: var(--wl-glass-fill-alt); color: var(--wl-ink-muted);{% endif %}
+                          border: 1px solid var(--wl-glass-edge);">{{ c.name }}</a>
                 {% endfor %}
             </div>
-        </div>
-        {% endif %}
-        {% endfor %}
+            {% endif %}
+            {% set card = selected_card %}
+            {% if card %}
+            <div class="mb-6 pb-4" style="border-bottom: 1px solid var(--wl-glass-border);">
+                <div class="flex items-center gap-3 mb-3">
+                    {% if card.photo_path %}
+                    <img src="/photos/{{ profile.id }}/{{ card.id }}"
+                         alt="{{ card.name }} photo"
+                         class="w-10 h-10 rounded-full object-cover flex-shrink-0">
+                    {% else %}
+                    <div class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
+                         style="background: var(--wl-btn-slate);">
+                        <span class="text-sm wl-text-muted">{{ card.name[:2].upper() }}</span>
+                    </div>
+                    {% endif %}
+                    <h2 class="wl-heading wl-heading-sm wl-text">{{ card.name }}</h2>
+                </div>
+                <div class="space-y-2">
+                    {% for f in card.visible_fields %}
+                    <div class="flex items-start wl-text-sub">
+                        <span class="w-24 text-xs wl-text-faint uppercase tracking-wide pt-0.5">{{ _field_label(f.field_type) }}</span>
+                        <span class="wl-text">{{ f.field_value }}</span>
+                        {% if f.visibility == 'private' %}
+                        <span class="ml-2 text-xs wl-text-faint" title="Private field">🔒</span>
+                        {% endif %}
+                    </div>
+                    {% else %}
+                    <p class="text-sm wl-text-faint">No fields on this card.</p>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
         {% elif cards and tier != 'anonymous' %}
         {# Pending/denied tier — show what's available #}
         {% for card in cards %}

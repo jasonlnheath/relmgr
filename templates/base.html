@@ -91,10 +91,13 @@
         }
 
         /* Buttons */
-        .wl-btn-approve { background: var(--wl-success); color: #000; }
-        .wl-btn-approve:hover { opacity: 0.85; }
-        .wl-btn-deny { background: var(--wl-danger); color: #000; }
-        .wl-btn-deny:hover { opacity: 0.85; }
+        /* Buttons — style ruling 2026-09-22: NO green or red buttons
+           anywhere. Every action button (approve/deny included) wears the
+           default slate gray; the class names stay for template stability. */
+        .wl-btn-approve { background: var(--wl-btn-slate); color: var(--wl-ink); border: 1px solid var(--wl-glass-edge); }
+        .wl-btn-approve:hover { background: var(--wl-btn-slate-hover); }
+        .wl-btn-deny { background: var(--wl-btn-slate); color: var(--wl-ink); border: 1px solid var(--wl-glass-edge); }
+        .wl-btn-deny:hover { background: var(--wl-btn-slate-hover); }
         .wl-btn-revoke { background: var(--wl-amber); color: #000; }
         .wl-btn-revoke:hover { opacity: 0.85; }
         .wl-btn-punt { background: var(--wl-amber); color: #000; }

@@ -746,15 +746,40 @@ def create_app(db_path: Path = None) -> FastAPI:
             # visits keep viewer_email NULL — still a scan (that's the point).
             whitelist_db.record_scan(conn, profile["id"], e if e else None)
 
+            # UX pass (2026-09-22): owner detection for the '← back to
+            # My Profile' link. The owner arrives either via session cookie
+            # or the ?e= link carrying their OWN email; anyone else
+            # (granted contact with their ?e=, or anonymous) never sees it.
+            viewer_is_owner = False
+            session_cookie = request.cookies.get("wl_session")
+            if session_cookie:
+                session_profile_id = _consume_session_cookie(
+                    session_cookie, _get_secret())
+                if session_profile_id and session_profile_id == profile["id"]:
+                    viewer_is_owner = True
+            if not viewer_is_owner and e:
+                owner_email = conn.execute(
+                    "SELECT field_value FROM profile_fields "
+                    "WHERE profile_id = ? AND field_type = 'email' LIMIT 1",
+                    (profile["id"],),
+                ).fetchone()
+                if owner_email and owner_email[0].lower() == e.lower():
+                    viewer_is_owner = True
+            owner_token = None
+            if viewer_is_owner:
+                owner_token = wl_tokens.make_token(
+                    _get_secret(), "owner_dashboard", str(profile["id"]),
+                    expires_days=365)
+
             viewer_email = e if e else None
             tier = whitelist_db.effective_tier(conn, profile["id"], viewer_email)
 
             stale = is_verified_stale(profile.get("verified_at"))
 
-            # B4: the public page renders cards. Profiles with NO cards at all
-            # (seed_default_cards only auto-attaches for jasonheath) keep the
-            # legacy flat field list — a card-less profile must not render an
-            # empty public page.
+            # B4: the public page renders cards. Profiles with NO cards at
+            # all (seed_default_cards only auto-attaches for jasonheath) keep
+            # the legacy flat field list — a card-less profile must not
+            # render an empty public page.
             cards = whitelist_db.cards_for_public_view(
                 conn, profile["id"], tier)
 
@@ -762,7 +787,8 @@ def create_app(db_path: Path = None) -> FastAPI:
 
             return HTMLResponse(jinja.get_template("profile.html").render(
                 request=request, profile=profile, tier=tier, stale=stale,
-                cards=cards, bio_visibility=bio_visibility, days_since=days_since))
+                cards=cards, bio_visibility=bio_visibility, days_since=days_since,
+                viewer_is_owner=viewer_is_owner, owner_token=owner_token))
         finally:
             conn.close()
 
@@ -986,6 +1012,11 @@ def create_app(db_path: Path = None) -> FastAPI:
                 card = whitelist_db.get_card_by_id(conn, cid)
                 if card:
                     card_names.append(card["name"])
+            # UX pass (2026-09-22): show the ACTUAL card being shared below
+            # the QR + link — same recipient rendering as /s/{bundle_id}
+            # (share_cards_fragment), public fields only.
+            bundle_cards = whitelist_db.cards_for_share_bundle(
+                conn, {"card_ids": bundle["card_ids"]}, "anonymous")
         finally:
             conn.close()
 
@@ -996,6 +1027,7 @@ def create_app(db_path: Path = None) -> FastAPI:
             profile=profile,
             bundle_id=bundle_id,
             card_names=card_names,
+            cards=bundle_cards,
             share_url=share_url,
             share_message=_bundle_share_message(profile["display_name"], bundle_id),
             expired=expired,
@@ -1237,6 +1269,13 @@ def create_app(db_path: Path = None) -> FastAPI:
             if not all_profile_ids:
                 all_profile_ids = [profile_id]
 
+            # UX pass (2026-09-22): fast alphabetical filter rail — ?letter=X
+            # keeps only names STARTING with X (prefix filter, unlike the
+            # substring search q). Applied to the merged row list below, so
+            # it works in both the contacts and pure-whitelist modes.
+            letter = (request.query_params.get("letter") or "")[:1].upper()
+            available_letters: list[str] = []
+
             # Use the new contact list data layer (graceful if contacts table missing)
             if whitelist_db._table_exists(conn, "contacts"):
                 # Aggregate across all profiles, then paginate at the HTTP level
@@ -1254,8 +1293,7 @@ def create_app(db_path: Path = None) -> FastAPI:
                             seen_emails.add(email)
                             all_rows.append(r)
                 total_rows = len(all_rows)
-                start = page * per_page
-                rows = all_rows[start:start + per_page]
+                rows = all_rows
             else:
                 # Pure whitelist mode — owner-scoped grants (ruling 2A).
                 all_grants = conn.execute(
@@ -1302,6 +1340,35 @@ def create_app(db_path: Path = None) -> FastAPI:
             all_rows = rows
             total_contacts = total_rows
 
+            # UX pass ruling (2026-09-22): ONE ROW PER CARD — a contact with
+            # two cards appears twice in the list, once per card, each row
+            # deep-linking the detail view with that card selected. Contacts
+            # and pending grants without cards render one row as before.
+            expanded_rows: list[dict] = []
+            for r in all_rows:
+                refs = r.get("card_refs") or []
+                if refs:
+                    for ref in refs:
+                        card_row = dict(r)
+                        card_row["row_card"] = ref
+                        expanded_rows.append(card_row)
+                else:
+                    expanded_rows.append(r)
+            all_rows = expanded_rows
+
+            # UX pass (2026-09-22): the A–Z rail + prefix filter run on the
+            # MERGED rows, whatever mode produced them; pagination slices
+            # AFTER the filter so a letter's rows never fall off the page.
+            available_letters = sorted({(r.get("name") or " ")[:1].upper()
+                                        for r in all_rows
+                                        if (r.get("name") or " ")[:1].isalpha()})
+            if letter:
+                all_rows = [r for r in all_rows
+                            if (r.get("name") or " ")[:1].upper() == letter]
+            total_rows = len(all_rows)
+            start = page * per_page
+            all_rows = all_rows[start:start + per_page]
+
             # Owner's own card for the "my card" section
             my_card = None
             owner_profile = conn.execute("SELECT * FROM profiles WHERE id = ?", (profile_id,)).fetchone()
@@ -1334,6 +1401,8 @@ def create_app(db_path: Path = None) -> FastAPI:
                 all_cards=all_cards,
                 token=token,
                 q=q,
+                letter=letter,
+                available_letters=available_letters,
                 page=page,
                 per_page=per_page,
                 total_rows=total_rows,
@@ -1933,6 +2002,33 @@ def create_app(db_path: Path = None) -> FastAPI:
         finally:
             conn.close()
 
+    @application.post("/owner/{token}/cards/{card_id}/fields/{field_id}/delete")
+    async def owner_field_delete(request: Request, token: str, card_id: int,
+                                 field_id: int):
+        """UX pass (2026-09-22): the editor's per-field ✕ deletes the field
+        from the card IMMEDIATELY — no checkbox accumulate-then-save step.
+
+        Unlink semantics match save_card_editor removals: the card_fields
+        row goes, the profile_fields row survives (cards are lenses, not
+        containers). Ownership/IDOR is enforced by save_card_editor
+        (foreign card or field → ValueError → 404).
+        """
+        conn = whitelist_db.wl_connect(path)
+        try:
+            profile_id, card, err = _resolve_editor_card(conn, request, token, card_id)
+            if err is not None:
+                return err
+            try:
+                whitelist_db.save_card_editor(conn, card_id,
+                                              field_removals=[field_id])
+            except ValueError:
+                return HTMLResponse("Not found", status_code=404)
+            # 303 back to the editor GET — the row is gone on landing.
+            return RedirectResponse(
+                url=f"/owner/{token}/cards/{card_id}/edit", status_code=303)
+        finally:
+            conn.close()
+
     @application.post("/owner/{token}/cards/{card_id}/delete")
     async def owner_delete_card(request: Request, token: str, card_id: int):
         """Delete ONE card (round-2 captain ask: destructive action with a
@@ -2160,6 +2256,16 @@ def create_app(db_path: Path = None) -> FastAPI:
                     card["visible_fields"] = card["fields"]
                 else:
                     card["visible_fields"] = []
+            # UX pass (2026-09-22): the detail view shows ONE card at a
+            # time (captain's pass), with a chip switcher when the contact
+            # has several. ?card=<id> selects; default is the first card.
+            try:
+                selected_card_id = int(request.query_params.get("card", ""))
+            except ValueError:
+                selected_card_id = None
+            selected_card = next(
+                (c for c in cards if c["id"] == selected_card_id),
+                cards[0] if cards else None)
             stale = is_verified_stale(profile.get("verified_at"))
             # Determine tier for this grant
             if grant["status"] == "granted":
@@ -2173,6 +2279,7 @@ def create_app(db_path: Path = None) -> FastAPI:
 
         return HTMLResponse(jinja.get_template("contact_card.html").render(
             request=request, profile=profile, grant=grant, cards=cards,
+            selected_card=selected_card,
             tier=tier, stale=stale, days_since=days_since, token=token,
             grant_id=grant_id, is_grey=whitelist_db.is_grey(grant)))
 
