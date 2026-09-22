@@ -128,8 +128,6 @@
                         style="background: {% if grant.expires_at is none %}var(--wl-badge-white){% else %}var(--wl-badge-grey){% endif %};
                         color: {% if grant.expires_at is none %}var(--wl-surface-base){% else %}var(--wl-surface-base){% endif %};">
                         <img src="/static/badge-{{ 'whitelist' if grant.expires_at is none else 'greylist' }}.png" class="w-3 h-3" alt="">
-                        {% if grant.expires_at is none %}WhiteList
-                        {% else %}GreyList{% endif %}
                     </span>
                 </div>
                 {% endif %}
