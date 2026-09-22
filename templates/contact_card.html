@@ -41,8 +41,9 @@
                 {% if profile.verified_at %}
                 <div class="mt-1">
                     {% set days = days_since(profile.verified_at) %}
-                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs
-                        {% if stale %}wl-badge-greylist{% else %}wl-badge-approved{% endif %}">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs"
+                        style="background: {% if stale %}rgba(110,110,118,0.25){% else %}rgba(74,222,128,0.15){% endif %};
+                        color: {% if stale %}var(--wl-ink-muted){% else %}#4ADE80{% endif %};">
                         {% if stale %}⚠ Stale ({{ days }}d){% else %}✓ Verified ({{ days }}d){% endif %}
                     </span>
                 </div>
@@ -123,11 +124,10 @@
                 {% if grant.quarter_status %}
                 <div class="flex items-center wl-text-sub">
                     <span class="w-20 text-xs wl-text-faint uppercase tracking-wide">quarter</span>
-                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs
-                        {% if grant.expires_at is none %}wl-badge-approved
-                        {% else %}wl-badge-greylist{% endif %}">
-                        {% if grant.expires_at is none %}WhiteList
-                        {% else %}GreyList{% endif %}
+                    <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs"
+                        style="background: {% if grant.expires_at is none %}var(--wl-badge-white){% else %}var(--wl-badge-grey){% endif %};
+                        color: {% if grant.expires_at is none %}var(--wl-surface-base){% else %}var(--wl-surface-base){% endif %};">
+                        <img src="/static/badge-{{ 'whitelist' if grant.expires_at is none else 'greylist' }}.png" class="w-3 h-3" alt="">
                     </span>
                 </div>
                 {% endif %}

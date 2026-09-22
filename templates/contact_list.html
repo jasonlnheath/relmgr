@@ -12,9 +12,12 @@
         <div class="flex items-center gap-2">
             {# Notification center (2026-09-20): unread badge on the dashboard #}
             <a href="/owner/{{ token }}/notifications"
-               class="wl-btn-ink text-xs py-1 px-3 rounded-lg relative">
-                Notifications{% if unread_notifications %}
-                <span class="inline-flex items-center justify-center ml-1 px-1.5 py-0.5 rounded-full text-[10px] wl-badge-amber">{{ unread_notifications }}</span>{% endif %}
+               class="wl-btn-ink text-xs py-1 px-3 rounded-lg relative" title="Notifications">
+                <svg class="w-3.5 h-3.5 inline" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a5 5 0 0 0-5 5v2.5L2.5 10.5a.5.5 0 0 0 .45.8h10.1a.5.5 0 0 0 .45-.8L13 8.5V6a5 5 0 0 0-5-5Zm-7 5a7 7 0 0 1 14 0v2.29l1.21 1.21a1.5 1.5 0 0 1-1.06 2.56H1.85A1.5 1.5 0 0 1 .79 10.5L2 9.29V6Z"/></svg>
+                {% if unread_notifications %}
+                <span class="absolute -top-0.5 -right-3 px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+                      style="background: var(--wl-amber-field); color: var(--wl-amber);">{{ unread_notifications }}</span>
+                {% endif %}
             </a>
             <form method="POST" action="/signout">
                 <button type="submit" class="wl-btn-ink text-xs py-1 px-3 rounded-lg">Sign out</button>
@@ -75,37 +78,35 @@
                     <span class="wl-heading wl-heading-sm wl-text block truncate">{{ row.name }}</span>
                 </div>
 
-                {# Access badges — click-to-change (2026-09-20): the badge IS
-                   the access governor. One click cycles
-                   WhiteList → GreyList → BlackList → WhiteList. INSTANT and
-                   ALWAYS SILENT: the contact is never notified of a move. #}
+                {# Access badges — scroll silhouette on colored button.
+                   Click cycles: WhiteList → GreyList → BlackList → WhiteList.
+                   INSTANT and ALWAYS SILENT: contact never notified. #}
                 <div class="flex flex-col items-end gap-1 flex-shrink-0">
                     {% if row.is_pending %}
-                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs wl-badge-greylist">
-                        <svg class="w-3 h-3" viewBox="0 0 16 16" fill="#FBBF24"><path d="M3.2 11.0 L3.2 2.7 A1.0 1.0 0 0 1 4.2 1.8 L12.9 1.8 A0.75 0.75 0 0 1 14.0 2.9 L14.0 3.2 A0.4 0.4 0 0 1 13.6 3.6 L12.55 3.6 Q12.4 3.1 12.55 2.65 L11.95 2.65 L11.95 12.3 A1.0 1.0 0 0 1 10.95 13.3 L3.2 13.3 Z M3.05 11.0 L9.4 11.0 A0.91 0.91 0 0 1 9.4 13.32 L3.05 13.32 A0.91 0.91 0 0 1 3.05 11.0 Z"/></svg>
+                    <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs"
+                          style="background: rgba(110,110,118,0.25); color: var(--wl-ink-muted);">
+                        <span class="w-1.5 h-1.5 rounded-full" style="background: var(--wl-badge-grey);"></span>
                         Pending
                     </span>
                     {% elif row.live_grant %}
                     {% if row.granted and row.perm == 'permanent' %}
-                    {% set badge_label, badge_style, next_state = 'WhiteList', 'wl-badge-whitelist', 'greylist' %}
+                    {% set badge_state, next_state = 'whitelist', 'greylist' %}
                     {% elif row.granted %}
-                    {% set badge_label, badge_style, next_state = 'GreyList', 'wl-badge-greylist', 'blocked' %}
+                    {% set badge_state, next_state = 'greylist', 'blocked' %}
                     {% else %}
-                    {% set badge_label, badge_style, next_state = 'BlackList', 'wl-badge-blocked', 'whitelist' %}
+                    {% set badge_state, next_state = 'blacklist', 'whitelist' %}
                     {% endif %}
                     <form method="POST" action="/owner/{{ token }}/badge">
                         <input type="hidden" name="grant_id" value="{{ row.live_grant.id }}">
                         <input type="hidden" name="state" value="{{ next_state }}">
-                        <button type="submit" title="Click to change access"
-                                class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs cursor-pointer {{ badge_style }}">
-                            <svg class="w-3 h-3" viewBox="0 0 16 16" fill="currentColor"><path d="M3.2 11.0 L3.2 2.7 A1.0 1.0 0 0 1 4.2 1.8 L12.9 1.8 A0.75 0.75 0 0 1 14.0 2.9 L14.0 3.2 A0.4 0.4 0 0 1 13.6 3.6 L12.55 3.6 Q12.4 3.1 12.55 2.65 L11.95 2.65 L11.95 12.3 A1.0 1.0 0 0 1 10.95 13.3 L3.2 13.3 Z M3.05 11.0 L9.4 11.0 A0.91 0.91 0 0 1 9.4 13.32 L3.05 13.32 A0.91 0.91 0 0 1 3.05 11.0 Z"/></svg>
-                            {{ badge_label }}
+                        <button type="submit" title="Click to change to {{ next_state|capitalize }}"
+                                class="wl-badge-scroll" data-state="{{ badge_state }}">
+                            <img src="/static/badge-{{ badge_state }}.png" alt="">
                         </button>
                     </form>
                     {% else %}
-                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs wl-badge-blocked">
-                        <svg class="w-3 h-3" viewBox="0 0 16 16" fill="#F87171"><path d="M3.2 11.0 L3.2 2.7 A1.0 1.0 0 0 1 4.2 1.8 L12.9 1.8 A0.75 0.75 0 0 1 14.0 2.9 L14.0 3.2 A0.4 0.4 0 0 1 13.6 3.6 L12.55 3.6 Q12.4 3.1 12.55 2.65 L11.95 2.65 L11.95 12.3 A1.0 1.0 0 0 1 10.95 13.3 L3.2 13.3 Z M3.05 11.0 L9.4 11.0 A0.91 0.91 0 0 1 9.4 13.32 L3.05 13.32 A0.91 0.91 0 0 1 3.05 11.0 Z"/></svg>
-                        BlackList
+                    <span class="wl-badge-scroll" data-state="blacklist" title="BlackList">
+                        <img src="/static/badge-blacklist.png" alt="">
                     </span>
                     {% endif %}
                 </div>
