@@ -23,7 +23,9 @@
                             {% if dd == 0 %}today{% elif dd == 1 %}1 day ago{% else %}{{ dd }} days ago{% endif %}
                         </p>
                     </div>
-                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium wl-badge-blocked">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
+                          style="background: var(--wl-badge-black); color: var(--wl-surface-light);"
+                          aria-label="BlackList">
                         BlackList
                     </span>
                 </div>
