@@ -173,7 +173,9 @@ class TestDashboardBadgeAndCenter:
         dash = client.get(f"/owner/{tok}", follow_redirects=True)
         assert dash.status_code == 200
         assert "/owner/" in dash.text and "notifications" in dash.text
-        assert ">1</span>" in dash.text, "unread badge must show the count"
+        # PR 16 re-rendered the bell as a text link: the unread count sits
+        # inline before the word ("1 Notifications").
+        assert "1 Notifications" in dash.text, "unread count must show on the dashboard link"
 
     def test_badge_clears_after_mark_read(self, world, mail_env, recorder):
         db, client, pid, tok = world
