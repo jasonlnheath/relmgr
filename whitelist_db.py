@@ -3408,7 +3408,8 @@ def list_contact_list_rows(
 
     Returns dicts with keys:
       contact_id, name, email, phone, org, granted, live_grant,
-      cards, perm, logo_state, refreshed_at, is_pending
+      cards, card_refs, perm, logo_state, refreshed_at, is_pending
+    (card_refs: [{id, name}] for the list's ONE-ROW-PER-CARD rendering.)
 
     Ordering: pending grants first, then A-Z by display name.
     Search filters by name or email substring (case-insensitive).
@@ -3473,13 +3474,18 @@ def list_contact_list_rows(
 
     # ── 6. Get card names for active grants ──
     grant_card_names: dict[str, list[str]] = {}
+    grant_card_refs: dict[str, list[dict]] = {}
     for g in active_grants:
         gd = dict(g)
         cards = conn.execute(
-            "SELECT c.name FROM grant_cards gc JOIN cards c ON gc.card_id = c.id WHERE gc.grant_id = ?",
+            "SELECT c.id, c.name FROM grant_cards gc JOIN cards c ON gc.card_id = c.id WHERE gc.grant_id = ?",
             (gd["id"],),
         ).fetchall()
         grant_card_names[gd["id"]] = [r["name"] for r in cards]
+        # UX pass ruling (2026-09-22): the list renders ONE ROW PER CARD,
+        # so each row needs the card id (to deep-link the detail view) —
+        # not just the name.
+        grant_card_refs[gd["id"]] = [{"id": r["id"], "name": r["name"]} for r in cards]
 
     # ── 7. Build rows ──
     rows: list[dict] = []
@@ -3552,6 +3558,7 @@ def list_contact_list_rows(
             "granted": granted,
             "live_grant": gd,
             "cards": card_names,
+            "card_refs": grant_card_refs.get(gd["id"], []),
             "perm": perm,
             "logo_state": logo_state,
             "refreshed_at": refreshed_at,

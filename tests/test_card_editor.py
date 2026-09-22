@@ -150,9 +150,11 @@ class TestEditorRendersAllFieldTypes:
         # …dedicated always-visible slots for both…
         assert 'name="new_text_number_value"' in html
         assert 'name="new_facetime_number_value"' in html
-        # …and the remove control is an explicitly labeled checkbox.
-        assert "> Remove" in html or ">Remove" in html, \
-            "remove checkbox must carry a visible 'Remove' label"
+        # …and each field row carries an immediate ✕ delete button
+        # (UX pass 2026-09-22: the old remove-checkbox pile-up is gone —
+        # the ✕ POSTs the field's delete right away).
+        assert ">✕</button>" in html, \
+            "each field row must carry an immediate ✕ delete button"
         assert "\u2705" not in html and "> \u2715" not in html, \
             "bare mystery ✕ checkbox must be gone"
 
@@ -676,8 +678,13 @@ class TestDeleteCard:
         assert f"/cards/{card_id}/delete" in html, "no delete action in the editor"
         assert "Yes, delete card" in html, "confirm step missing"
         assert "Keep card" in html, "confirm cancel missing"
-        assert "the fields stay on your profile" in html, \
+        # UX pass (2026-09-22, captain ruling): the confirm copy states the
+        # deletion semantics — holders keep the vCard (badge gone, becomes
+        # a normal vCard) — and that the fields stay on the profile.
+        assert "fields" in html and "stay on your profile" in html, \
             "confirm copy must say what happens to the data"
+        assert "normal vCard" in html, \
+            "confirm copy must say holders keep the vCard"
 
     def test_delete_removes_card_but_keeps_profile_fields(self, tmp_path):
         db = _make_db(tmp_path)

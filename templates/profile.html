@@ -3,6 +3,13 @@
 
 {% block content %}
 <div class="max-w-2xl mx-auto py-8 px-4">
+    {# UX pass (2026-09-22): when the OWNER views their own profile
+       (session or their own ?e= link), hand them the way back. #}
+    {% if viewer_is_owner and owner_token %}
+    <div class="mb-4">
+        <a href="/owner/{{ owner_token }}/profile" class="wl-link text-sm">← Back to My Profile</a>
+    </div>
+    {% endif %}
     <div class="wl-card p-6">
         {# Header: picture + name + title/company #}
         <div class="flex items-start gap-4 mb-6">
@@ -63,45 +70,65 @@
             <img src="/qr/{{ profile.handle }}" alt="QR code" class="w-32 h-32 rounded-lg" style="background: #fff; padding: 8px;">
         </div>
 
-        {# Communication icons — round call/text/facetime/email #}
+        {# Communication icons — UX pass (2026-09-22): ONE ROW PER CARD,
+           each row led by THAT card's picture (not just the work photo).
+           Cards with no reachable field render no row. #}
         {% if tier == 'granted' and cards %}
         <div class="mb-6 pb-4" style="border-bottom: 1px solid var(--wl-glass-border);">
             <p class="text-xs wl-text-faint mb-3">Reach me</p>
-            <div class="flex gap-3">
+            <div class="space-y-3">
                 {% for card in cards %}
-                {% for f in card.visible_fields %}
-                {% if f.field_type == 'phone' %}
-                <a href="tel:{{ f.field_value }}" title="Call"
-                   class="w-10 h-10 rounded-full flex items-center justify-center"
-                   style="background: var(--wl-btn-slate);">
-                    <svg class="w-5 h-5 wl-text" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
-                    </svg>
-                </a>
-                <a href="sms:{{ f.field_value }}" title="Text"
-                   class="w-10 h-10 rounded-full flex items-center justify-center"
-                   style="background: var(--wl-btn-slate);">
-                    <svg class="w-5 h-5 wl-text" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
-                    </svg>
-                </a>
-                <a href="tel:{{ f.field_value }}" title="Facetime"
-                   class="w-10 h-10 rounded-full flex items-center justify-center"
-                   style="background: var(--wl-btn-slate);">
-                    <svg class="w-5 h-5 wl-text" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
-                    </svg>
-                </a>
-                {% elif f.field_type == 'email' %}
-                <a href="mailto:{{ f.field_value }}" title="Email"
-                   class="w-10 h-10 rounded-full flex items-center justify-center"
-                   style="background: var(--wl-btn-slate);">
-                    <svg class="w-5 h-5 wl-text" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
-                    </svg>
-                </a>
+                {% set reach = namespace(has=false) %}
+                {% for f in card.visible_fields %}{% if f.field_type in ('phone', 'email') %}{% set reach.has = true %}{% endif %}{% endfor %}
+                {% if reach.has %}
+                <div class="flex items-center gap-3">
+                    {% if card.photo_path %}
+                    <img src="/photos/{{ profile.id }}/{{ card.id }}"
+                         alt="{{ card.name }} photo"
+                         class="w-8 h-8 rounded-full object-cover flex-shrink-0">
+                    {% else %}
+                    <div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+                         style="background: var(--wl-btn-slate);">
+                        <span class="text-xs wl-text-muted">{{ card.name[:2].upper() }}</span>
+                    </div>
+                    {% endif %}
+                    <div class="flex gap-2">
+                        {% for f in card.visible_fields %}
+                        {% if f.field_type == 'phone' %}
+                        <a href="tel:{{ f.field_value }}" title="Call ({{ card.name }})"
+                           class="w-10 h-10 rounded-full flex items-center justify-center"
+                           style="background: var(--wl-btn-slate);">
+                            <svg class="w-5 h-5 wl-text" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
+                            </svg>
+                        </a>
+                        <a href="sms:{{ f.field_value }}" title="Text ({{ card.name }})"
+                           class="w-10 h-10 rounded-full flex items-center justify-center"
+                           style="background: var(--wl-btn-slate);">
+                            <svg class="w-5 h-5 wl-text" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                            </svg>
+                        </a>
+                        <a href="tel:{{ f.field_value }}" title="Facetime ({{ card.name }})"
+                           class="w-10 h-10 rounded-full flex items-center justify-center"
+                           style="background: var(--wl-btn-slate);">
+                            <svg class="w-5 h-5 wl-text" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                            </svg>
+                        </a>
+                        {% elif f.field_type == 'email' %}
+                        <a href="mailto:{{ f.field_value }}" title="Email ({{ card.name }})"
+                           class="w-10 h-10 rounded-full flex items-center justify-center"
+                           style="background: var(--wl-btn-slate);">
+                            <svg class="w-5 h-5 wl-text" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                            </svg>
+                        </a>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
                 {% endif %}
-                {% endfor %}
                 {% endfor %}
             </div>
         </div>

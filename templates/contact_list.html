@@ -20,8 +20,9 @@
         </div>
     </div>
 
-    {# Search bar #}
+    {# Search bar — hidden letter field keeps the rail filter through searches #}
     <form method="GET" action="/owner/{{ token }}" class="mb-4">
+        {% if letter %}<input type="hidden" name="letter" value="{{ letter }}">{% endif %}
         <input type="text" name="q" value="{{ q or '' }}"
                placeholder="Search WhiteList"
                class="w-full px-3 py-2 border border-gray-600 rounded-lg text-sm bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
@@ -50,9 +51,12 @@
     </div>
     {% endif %}
 
-    {# Unified contact rows — no section headers, picture + name + badges #}
+    {# Unified contact rows + fast alphabetical filter rail (UX pass
+       2026-09-22): the rail on the right filters by name initial, one
+       click, letters with no entries dimmed. #}
     {% if all_rows %}
-    <div class="space-y-2">
+    <div class="flex gap-3">
+        <div class="flex-1 min-w-0 space-y-2">
         {% for row in all_rows %}
         <div class="wl-card p-3">
             <div class="flex items-center gap-3">
@@ -68,9 +72,22 @@
                 </div>
                 {% endif %}
 
-                {# Name only — ruling: rows are exactly picture, name, badges #}
+                {# Name — UX pass ruling (2026-09-22): ONE ROW PER CARD;
+                   clicking the row opens the contact's information with
+                   THAT card selected. #}
                 <div class="flex-1 min-w-0">
+                    {% if row.live_grant %}
+                    <a href="/owner/{{ token }}/contact/{{ row.live_grant.id }}{% if row.row_card %}?card={{ row.row_card.id }}{% endif %}"
+                       class="wl-heading wl-heading-sm wl-text block truncate hover:opacity-75">{{ row.name }}</a>
+                    {% else %}
                     <span class="wl-heading wl-heading-sm wl-text block truncate">{{ row.name }}</span>
+                    {% endif %}
+                    {% if row.row_card %}
+                    <div class="mt-0.5">
+                        <span class="text-[10px] px-1.5 py-0.5 rounded"
+                              style="background: var(--wl-glass-fill-alt); color: var(--wl-ink-muted);">{{ row.row_card.name }}</span>
+                    </div>
+                    {% endif %}
                 </div>
 
                 {# Access badges — scroll silhouette on colored button.
@@ -91,12 +108,19 @@
                     {% else %}
                     {% set badge_state, next_state = 'blacklist', 'whitelist' %}
                     {% endif %}
+                    {# State label ruling (2026-09-22): the confirm copy says
+                       the LIST name — WhiteList/GreyList/BlackList — never
+                       the internal 'blocked'. #}
+                    {% set state_label = {'whitelist': 'WhiteList',
+                                          'greylist': 'GreyList',
+                                          'blocked': 'BlackList'}[next_state] %}
                     <form method="POST" action="/owner/{{ token }}/badge">
                         <input type="hidden" name="grant_id" value="{{ row.live_grant.id }}">
                         <input type="hidden" name="state" value="{{ next_state }}">
-                        <button type="submit" title="Click to change to {{ next_state|capitalize }}"
-                                class="wl-badge-scroll" data-state="{{ badge_state }}"
-                                aria-label="Click to change to {{ next_state|capitalize }}">
+                        <button type="submit"
+                                title="Click to change to {{ state_label }}"
+                                aria-label="Click to change to {{ state_label }}"
+                                class="wl-badge-scroll" data-state="{{ badge_state }}">
                             <img src="/static/badge-{{ badge_state }}.png" alt="" aria-hidden="true">
                         </button>
                     </form>
@@ -124,7 +148,8 @@
                     {% endif %}
                 </div>
 
-                {# Actions — approve/deny for pending, View Contact for granted #}
+                {# Actions — approve/deny for pending; granted contacts open
+                   their card by clicking the name (UX pass 2026-09-22) #}
                 {% if row.is_pending %}
                 <form method="POST" action="/owner/{{ token }}/decision" class="mt-3 flex gap-2">
                     <input type="hidden" name="grant_id" value="{{ row.live_grant.id }}">
@@ -137,13 +162,48 @@
                         Deny
                     </button>
                 </form>
-                {% elif row.granted and row.contact_id %}
-                <a href="/owner/{{ token }}/contact/{{ row.live_grant.id }}"
-                   class="inline-block mt-3 text-xs wl-link">View Contact →</a>
                 {% endif %}
             </details>
         </div>
         {% endfor %}
+        </div>
+
+        {# Fast alphabetical filter rail (UX pass 2026-09-22): one click to
+           filter by initial; click the active letter to clear. #}
+        {% if available_letters %}
+        <nav class="flex flex-col items-center flex-shrink-0 py-1 pr-1" aria-label="Filter by first letter">
+            {% for L in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'|list %}
+            {% if L in available_letters %}
+            {% if letter == L %}
+            <a href="?{{ ('q=' ~ q ~ '&') if q else '' }}"
+               title="Clear letter filter" aria-label="Clear letter filter ({{ L }})"
+               class="text-[10px] leading-3 px-1 py-0.5 rounded wl-text font-bold"
+               style="background: var(--wl-btn-slate);">{{ L }}</a>
+            {% else %}
+            <a href="?{{ ('q=' ~ q ~ '&') if q else '' }}letter={{ L }}"
+               title="Show contacts starting with {{ L }}" aria-label="Filter by {{ L }}"
+               class="text-[10px] leading-3 px-1 py-0.5 rounded wl-text-sub hover:opacity-70">{{ L }}</a>
+            {% endif %}
+            {% else %}
+            <span class="text-[10px] leading-3 px-1 py-0.5 wl-text-faint opacity-40" aria-hidden="true">{{ L }}</span>
+            {% endif %}
+            {% endfor %}
+            {# F2 (pairing review): non-ASCII-foldable initials live in the
+               '#' bucket so every contact is reachable from the rail. #}
+            {% if '#' in available_letters %}
+            {% if letter == '#' %}
+            <a href="?{{ ('q=' ~ q ~ '&') if q else '' }}" title="Clear letter filter"
+               aria-label="Clear letter filter (non-alphabetic)"
+               class="text-[10px] leading-3 px-1 py-0.5 rounded wl-text font-bold"
+               style="background: var(--wl-btn-slate);">#</a>
+            {% else %}
+            <a href="?{{ ('q=' ~ q ~ '&') if q else '' }}letter=%23" title="Show contacts with non-alphabetic initials"
+               aria-label="Filter by non-alphabetic initials"
+               class="text-[10px] leading-3 px-1 py-0.5 rounded wl-text-sub hover:opacity-70">#</a>
+            {% endif %}
+            {% endif %}
+        </nav>
+        {% endif %}
     </div>
     {% else %}
     <div class="text-center py-8">
@@ -156,12 +216,13 @@
     <div class="flex items-center justify-between mt-4 pt-4" style="border-top: 1px solid var(--wl-glass-border);">
         <p class="text-xs wl-text-faint">Showing {{ (page * per_page) + 1 }}–{{ [page * per_page + per_page, total_rows]|min }} of {{ total_rows }}</p>
         <div class="flex gap-2">
+            {% set letter_qs = ('letter=' ~ letter ~ '&') if letter else '' %}
             {% if page > 0 %}
-            <a href="?page={{ page - 1 }}{{ '&q=' + q if q else '' }}"
+            <a href="?{{ letter_qs }}page={{ page - 1 }}{{ '&q=' + q if q else '' }}"
                class="wl-link text-sm">← Previous</a>
             {% endif %}
             {% if (page + 1) * per_page < total_rows %}
-            <a href="?page={{ page + 1 }}{{ '&q=' + q if q else '' }}"
+            <a href="?{{ letter_qs }}page={{ page + 1 }}{{ '&q=' + q if q else '' }}"
                class="wl-link text-sm">Next →</a>
             {% endif %}
         </div>

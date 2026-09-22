@@ -15,6 +15,9 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 - Access tiers: `effective_tier()` is the single tier oracle ('granted'/'anonymous'); public surfaces must filter fields through the `visible_fields` pattern in `cards_for_public_view` / `cards_for_share_bundle` (anonymous = public fields only; granted = public+granted+private). Revoked == blocked == blacklisted, one state.
 - Silence rule (captain ruling 2026-09-20): contacts are NEVER notified about badge moves, quarantine, or their own status; notifications (`notifications` table) are owner-only. Blacklisted senders' requests go to `quarantined_requests` with an indistinguishable success page.
 - Share bundles (`share_bundles`): one stable link `/s/{id}` per chosen card set; fields render live from card IDs; links expire 7 days after creation (`expires_at`).
+- Style ruling (captain 2026-09-22): NO green or red anywhere — `.wl-btn-approve`/`.wl-btn-deny` are aliases of the default slate gray (see `templates/base.html`), covering every Approve/Deny-style button; status color lives only in badges/text. Share icons use an ink `currentColor` SVG, never the red-rendering 📤 emoji. Badge toggle confirmations say the list names WhiteList/GreyList/BlackList, never the internal 'blocked'.
+- Card editor UX: removing a field is an immediate per-row ✕ POST (`/owner/{token}/cards/{id}/fields/{fid}/delete`) that unlinks card_fields only (profile_fields survive); photos are CIRCLE-cropped client-side (disc composited on the `#1A1A1C` backdrop, stored as square JPEG; every display surface clips with `rounded-full`).
+- Contact-list badge cycle White→Grey→Black is `whitelist_db.set_badge_state` — grey stamps `expires_at = quarter_end_iso()`, which feeds the existing quarterly prompt; treat it as the single state-cycle entry point.
 
 ## Maintaining this file
 
