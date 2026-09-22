@@ -188,6 +188,20 @@
             <span class="text-[10px] leading-3 px-1 py-0.5 wl-text-faint opacity-40" aria-hidden="true">{{ L }}</span>
             {% endif %}
             {% endfor %}
+            {# F2 (pairing review): non-ASCII-foldable initials live in the
+               '#' bucket so every contact is reachable from the rail. #}
+            {% if '#' in available_letters %}
+            {% if letter == '#' %}
+            <a href="?{{ ('q=' ~ q ~ '&') if q else '' }}" title="Clear letter filter"
+               aria-label="Clear letter filter (non-alphabetic)"
+               class="text-[10px] leading-3 px-1 py-0.5 rounded wl-text font-bold"
+               style="background: var(--wl-btn-slate);">#</a>
+            {% else %}
+            <a href="?{{ ('q=' ~ q ~ '&') if q else '' }}letter=%23" title="Show contacts with non-alphabetic initials"
+               aria-label="Filter by non-alphabetic initials"
+               class="text-[10px] leading-3 px-1 py-0.5 rounded wl-text-sub hover:opacity-70">#</a>
+            {% endif %}
+            {% endif %}
         </nav>
         {% endif %}
     </div>

@@ -72,6 +72,20 @@ def days_until(value: str) -> int:
 _STALE_AFTER_DAYS = 180
 
 
+def _rail_letter(name: str) -> str:
+    """Pairing-review F2 (2026-09-22): fold a name's initial onto the A–Z
+    rail. Accented Latin initials (É, Ü, …) group under their ASCII base
+    letter; anything non-alphabetic (digits, CJK, …) lands in the '#'
+    bucket so every contact stays reachable from the rail."""
+    import unicodedata
+    initial = (name or " ")[:1]
+    if not initial.isalpha():
+        return "#"
+    folded = unicodedata.normalize("NFKD", initial) \
+        .encode("ascii", "ignore").decode("ascii").upper()
+    return folded if folded else "#"
+
+
 def is_verified_stale(value) -> bool:
     """True when a profile's verified_at is more than 180 days old.
 
@@ -1359,12 +1373,12 @@ def create_app(db_path: Path = None) -> FastAPI:
             # UX pass (2026-09-22): the A–Z rail + prefix filter run on the
             # MERGED rows, whatever mode produced them; pagination slices
             # AFTER the filter so a letter's rows never fall off the page.
-            available_letters = sorted({(r.get("name") or " ")[:1].upper()
-                                        for r in all_rows
-                                        if (r.get("name") or " ")[:1].isalpha()})
+            # Keys are ASCII-folded (F2): É lands under E, others under '#'.
+            available_letters = sorted({_rail_letter(r.get("name") or "")
+                                        for r in all_rows})
             if letter:
                 all_rows = [r for r in all_rows
-                            if (r.get("name") or " ")[:1].upper() == letter]
+                            if _rail_letter(r.get("name") or "") == letter]
             total_rows = len(all_rows)
             start = page * per_page
             all_rows = all_rows[start:start + per_page]

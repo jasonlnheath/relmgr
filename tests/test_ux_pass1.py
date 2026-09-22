@@ -14,6 +14,7 @@ Covers:
   fallback (email/SMS) where the Web Share API is missing
 """
 import os
+from html.parser import HTMLParser
 from pathlib import Path
 
 os.environ["WHITELIST_SECRET"] = "test-secret"
@@ -47,6 +48,83 @@ def _owner_token():
 def _owner_session_client(client: TestClient):
     client.cookies.set("wl_session", _make_session_cookie(1, b"test-secret"))
     return client
+
+
+# ---------------------------------------------------------------
+# DOM-lite parser (pairing-review F4): structural assertions instead
+# of strings-anywhere. stdlib only — no bs4 in .venv.
+# ---------------------------------------------------------------
+
+class _DomLite(HTMLParser):
+    """Collects: nested-form violations, wl-card row blocks (anchors +
+    chip spans per row). Div-stack based; void tags ignored."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.form_depth = 0
+        self.nested_form_actions = []
+        self.div_stack = []          # class attr of each open div
+        self.row_idx = []            # indices into self.rows (open wl-cards)
+        self.rows = []               # {anchors: [{cls,href,text}], chips: [text]}
+        self._anchor = None
+        self._chip = None
+
+    def _in_row(self):
+        return self.row_idx[-1] if self.row_idx else None
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        cls = a.get("class") or ""
+        if tag == "form":
+            if self.form_depth:
+                self.nested_form_actions.append(a.get("action", ""))
+            self.form_depth += 1
+        elif tag == "div":
+            self.div_stack.append(cls)
+            if "wl-card" in cls and "p-3" in cls:
+                self.rows.append({"anchors": [], "chips": []})
+                self.row_idx.append(len(self.rows) - 1)
+        elif tag == "a":
+            self._anchor = {"cls": cls, "href": a.get("href", ""), "text": ""}
+        elif tag == "span" and "text-[10px]" in cls and self._in_row() is not None:
+            self._chip = ""
+
+    def handle_data(self, data):
+        if self._anchor is not None:
+            self._anchor["text"] += data
+        if self._chip is not None:
+            self._chip += data
+
+    def handle_endtag(self, tag):
+        if tag == "form":
+            self.form_depth = max(0, self.form_depth - 1)
+        elif tag == "a":
+            if self._anchor is not None and self._in_row() is not None:
+                self.rows[self._in_row()]["anchors"].append(self._anchor)
+            self._anchor = None
+        elif tag == "span":
+            if self._chip is not None and self._in_row() is not None:
+                self.rows[self._in_row()]["chips"].append(self._chip.strip())
+            self._chip = None
+        elif tag == "div" and self.div_stack:
+            cls = self.div_stack.pop()
+            if "wl-card" in cls and "p-3" in cls and self.row_idx:
+                self.row_idx.pop()
+
+
+def _parse_rows(html: str):
+    p = _DomLite()
+    p.feed(html)
+    return p
+
+
+def _assert_no_nested_forms(html: str, label: str):
+    p = _DomLite()
+    p.feed(html)
+    assert not p.nested_form_actions, (
+        f"{label}: nested <form> elements are invalid HTML and the browser "
+        f"re-targets the inner submit to the outer form: "
+        f"{p.nested_form_actions}")
 
 
 # ============================================================
@@ -192,26 +270,43 @@ class TestContactListClickAndChips:
         conn.commit()
         conn.close()
         html = client.get(f"/owner/{token}").text
+        dom = _parse_rows(html)
         name = "Alice Anderson"
-        # two rows for the two-card contact
-        assert html.count(f">{name}</a>") == 2, \
-            "one row per card: the contact appears once per card"
-        # each row deep-links the detail view with that card selected
-        assert f"/contact/{gid}?card={card_ids[0]}" in html
-        assert f"/contact/{gid}?card={card_ids[1]}" in html
+        # structural: exactly two ROW blocks carry an anchor with this name,
+        # each deep-linking its own card, each chipped with that card's name
+        name_rows = [r for r in dom.rows
+                     if any(a["text"].strip() == name for a in r["anchors"])]
+        assert len(name_rows) == 2, \
+            f"one row per card: expected 2 rows for {name}, got {len(name_rows)}"
+        linked_cards = set()
+        for row in name_rows:
+            card_qs = [a["href"] for a in row["anchors"] if "?card=" in a["href"]]
+            assert len(card_qs) == 1, "each per-card row deep-links one card"
+            linked_cards.add(card_qs[0].rsplit("card=", 1)[-1])
+            assert row["chips"], "each per-card row carries its card-name chip"
+        assert linked_cards == {str(c) for c in card_ids}, \
+            "the two rows deep-link the two different cards"
 
     def test_row_shows_its_card_chip(self, tmp_path):
         client, token, grant_ids = _granted_client(tmp_path)
         conn = whitelist_db.wl_connect(tmp_path / "test.db")
         gid = grant_ids[0]
-        card_id = conn.execute("SELECT id FROM cards ORDER BY id LIMIT 1").fetchone()[0]
+        card = conn.execute(
+            "SELECT id, name FROM cards ORDER BY id LIMIT 1").fetchone()
         conn.execute("INSERT INTO grant_cards (grant_id, card_id) VALUES (?, ?)",
-                     (gid, card_id))
+                     (gid, card["id"]))
         conn.commit()
         conn.close()
         html = client.get(f"/owner/{token}").text
-        # the per-card row carries that card's name chip
-        assert "Work" in html or "Contact" in html or "Identity" in html
+        dom = _parse_rows(html)
+        # the chip sits IN the row whose link deep-links this card — not
+        # merely 'somewhere on the page'
+        target = [r for r in dom.rows
+                  if any(a["href"].endswith(f"?card={card['id']}")
+                         for a in r["anchors"])]
+        assert len(target) == 1, "exactly one row deep-links this card"
+        assert card["name"] in target[0]["chips"], \
+            "that row's chip is the card's name"
 
 
 class TestBadgeToggleCopyRuling:
@@ -269,23 +364,48 @@ class TestAlphabeticalRail:
 class TestContactDetailOneCard:
     def test_detail_renders_switcher_and_selected_card(self, tmp_path):
         client, token, grant_ids = _granted_client(tmp_path)
+        conn = whitelist_db.wl_connect(tmp_path / "test.db")
+        card_ids = [r["id"] for r in conn.execute("SELECT id FROM cards ORDER BY id")]
+        conn.close()
         html = client.get(f"/owner/{token}/contact/{grant_ids[0]}").text
-        assert 'contact/{gid}?card='.replace("{gid}", grant_ids[0]) in html or "?card=" in html, \
-            "multi-card contacts need the chip switcher"
+        # every profile card has a switch link targeting THIS grant
+        for cid in card_ids:
+            assert f"/owner/{token}/contact/{grant_ids[0]}?card={cid}" in html, \
+                "multi-card contacts need a chip per card"
 
     def test_detail_card_query_param_selects_card(self, tmp_path):
         client, token, grant_ids = _granted_client(tmp_path)
         conn = whitelist_db.wl_connect(tmp_path / "test.db")
         card_ids = [r["id"] for r in conn.execute("SELECT id FROM cards ORDER BY id")]
         conn.close()
-        html = client.get(f"/owner/{token}/contact/{grant_ids[0]}?card={card_ids[-1]}").text
-        # the selected card's heading appears; route passes selected_card
-        assert "Identity" in html, "?card=<id> must select that card"
+        identity_id, contact_id = card_ids[-1], card_ids[1]
+        html = client.get(f"/owner/{token}/contact/{grant_ids[0]}?card={identity_id}").text
+        # the ACTIVE chip (slate fill) is the selected card — others are not
+        pos_sel = html.find(f'?card={identity_id}')
+        pos_other = html.find(f'?card={contact_id}')
+        assert pos_sel != -1 and pos_other != -1
+        sel_style = html[pos_sel:pos_sel + 400]
+        other_style = html[pos_other:pos_other + 400]
+        assert "--wl-btn-slate" in sel_style, "selected chip must wear the active fill"
+        assert "--wl-btn-slate" not in other_style, "non-selected chips must not"
+        # the selected card's own field renders (Identity carries title/company)
+        assert "Sales" in html and "Walther EMC" in html
 
-    def test_detail_photo_shows_in_card_block(self, tmp_path):
+    def test_detail_photo_block_belongs_to_selected_card(self, tmp_path):
         client, token, grant_ids = _granted_client(tmp_path)
-        html = client.get(f"/owner/{token}/contact/{grant_ids[0]}").text
-        assert "/photos/" in html or "initials" in html or "wl-btn-slate" in html
+        conn = whitelist_db.wl_connect(tmp_path / "test.db")
+        card_ids = [r["id"] for r in conn.execute("SELECT id FROM cards ORDER BY id")]
+        conn.close()
+        contact_id = card_ids[1]
+        html = client.get(f"/owner/{token}/contact/{grant_ids[0]}?card={contact_id}").text
+        # the selected card's picture block (initials circle for Contact —
+        # no photo in fixture) sits with the card heading and its fields
+        pos_initials = html.find(">CO</span>")
+        pos_heading = html.find("Contact</h2>")
+        pos_phone = html.find("555-1234")
+        assert -1 not in (pos_initials, pos_heading, pos_phone)
+        assert pos_initials < pos_heading < pos_phone, \
+            "picture block, card heading and that card's fields render together"
 
 
 # ============================================================
@@ -315,14 +435,27 @@ class TestProfileViewBackLink:
 
 class TestReachMeRowsPerCard:
     def test_reach_me_row_per_card_with_own_photo(self, tmp_path):
+        """One row per card, each led by THAT card's picture, that card's
+        icons following it — pinned by ordering, not substrings-anywhere."""
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
         html = client.get("/p/jasonheath?e=jason@waltheremc.com").text
         assert "Reach me" in html
-        # each row leads with that card's photo (or its initials circle)
-        # — count the reach rows: one per card that has a reachable field
-        assert html.count('alt="Work photo"') >= 1 or "WO" in html, \
-            "each card's picture shows in its own row's area"
+        pos_reach = html.find("Reach me")
+        # Work card row: its initials circle (no photo in fixture), then
+        # its email icon
+        pos_work_initials = html.find(">WO</span>", pos_reach)
+        pos_mailto = html.find("mailto:", pos_reach)
+        # Contact card row: its initials circle, then its phone icons
+        pos_contact_initials = html.find(">CO</span>", pos_reach)
+        pos_tel = html.find("tel:555-1234", pos_reach)
+        assert -1 not in (pos_work_initials, pos_mailto, pos_contact_initials, pos_tel), \
+            "both reachable cards render a row"
+        assert pos_reach < pos_work_initials < pos_mailto < pos_contact_initials < pos_tel, \
+            "each card's picture leads its own row; icons follow their picture"
+        # the Identity card (title/company only) renders NO row: no third
+        # initials circle between the Contact row and the next section
+        assert html.find(">ID</span>", pos_contact_initials) == -1
 
 
 # ============================================================
@@ -362,6 +495,37 @@ class TestMyProfilePass:
         client = TestClient(create_app(db))
         r = client.post(f"/owner/{_owner_token()}/bio", data={"bio": "x" * 2001})
         assert r.status_code == 400, "server-side limit stays (client maxlength is UX only)"
+
+
+# ============================================================
+# Pairing-review F1 guard: no nested <form> anywhere it renders
+# ============================================================
+
+class TestNoNestedForms:
+    def test_card_editor_renders_without_nested_forms(self, tmp_path):
+        """F1 regression guard: nested <form>s are invalid HTML — the
+        browser re-targets the inner submit to the outer form, which is
+        exactly how the ✕ silently became a card-save. Route-level POST
+        tests cannot catch this; this parse can."""
+        db = _make_db(tmp_path)
+        client = TestClient(create_app(db))
+        conn = whitelist_db.wl_connect(db)
+        card_id = conn.execute("SELECT id FROM cards LIMIT 1").fetchone()[0]
+        whitelist_db.save_card_editor(
+            conn, card_id, new_fields=[("phone", "+1-555-9999", "private")])
+        conn.close()
+        html = client.get(f"/owner/{_owner_token()}/cards/{card_id}/edit").text
+        _assert_no_nested_forms(html, "card editor")
+        # and the ✕ is a submit override ON the outer form, not a nested one
+        assert 'formaction="/owner/' in html and "fields/" in html
+
+    def test_other_pass_surfaces_render_without_nested_forms(self, tmp_path):
+        db = _make_db(tmp_path)
+        client = TestClient(create_app(db))
+        tok = _owner_token()
+        _assert_no_nested_forms(client.get(f"/owner/{tok}").text, "contact list")
+        _assert_no_nested_forms(client.get(f"/owner/{tok}/profile").text, "my profile")
+        _assert_no_nested_forms(client.get("/p/jasonheath").text, "public profile")
 
 
 # ============================================================

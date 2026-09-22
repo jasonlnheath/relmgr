@@ -65,13 +65,19 @@
     </div>
     <div class="flex items-center gap-2 flex-shrink-0">
         {{ vis_select('field_' ~ f.id ~ '_visibility', f.visibility) }}
-        <form method="POST" action="/owner/{{ token }}/cards/{{ card.id }}/fields/{{ f.id }}/delete"
-              class="inline">
-            <button type="submit"
-                    title="Remove this {{ labels[t]|lower }} from the card"
-                    aria-label="Remove this {{ labels[t]|lower }} from the card"
-                    class="w-6 h-6 rounded-full wl-btn-ink text-xs leading-none inline-flex items-center justify-center">✕</button>
-        </form>
+        {# Pairing-review F1 (2026-09-22): this button lives INSIDE the main
+           editor form — a nested <form> is invalid HTML and the browser
+           silently retargeted the click to the card-save POST. The
+           formaction/formmethod overrides fire the delete route for this
+           one button without nesting anything (the delete route ignores
+           the body, so the editor's other fields riding along are
+           harmless). #}
+        <button type="submit"
+                formmethod="post"
+                formaction="/owner/{{ token }}/cards/{{ card.id }}/fields/{{ f.id }}/delete"
+                title="Remove this {{ labels[t]|lower }} from the card"
+                aria-label="Remove this {{ labels[t]|lower }} from the card"
+                class="w-6 h-6 rounded-full wl-btn-ink text-xs leading-none inline-flex items-center justify-center">✕</button>
     </div>
 </div>
 {% endmacro %}
@@ -292,7 +298,7 @@ function hideDeleteCard() {
         oy = Math.min(my, Math.max(-my, oy));
     }
 
-    function draw() {
+    function draw(showGuide = true) {
         if (!img) return;
         clampOffset();
         // Circle crop: the photo shows through the disc only; the corners
@@ -307,12 +313,15 @@ function hideDeleteCard() {
         const dw = img.width * zoom, dh = img.height * zoom;
         ctx.drawImage(img, (SIZE - dw) / 2 + ox, (SIZE - dh) / 2 + oy, dw, dh);
         ctx.restore();
-        // Circle edge guide
-        ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(SIZE / 2, SIZE / 2, SIZE / 2 - 2, 0, Math.PI * 2);
-        ctx.stroke();
+        // Circle edge guide — EDITOR ONLY. Pairing-review F3: never bake
+        // the ring into the export (the photo travels via vCard).
+        if (showGuide) {
+            ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(SIZE / 2, SIZE / 2, SIZE / 2 - 2, 0, Math.PI * 2);
+            ctx.stroke();
+        }
     }
 
     // Shared editor-open path for both a freshly chosen file and a click
@@ -389,7 +398,7 @@ function hideDeleteCard() {
     // disabled until an image is in the editor.
     saveBtn.addEventListener('click', () => {
         if (!img) return;
-        draw();
+        draw(false);  // F3: export without the editor's guide ring
         photoData.value = canvas.toDataURL('image/jpeg', 0.92);
     });
 })();
