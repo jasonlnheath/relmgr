@@ -1,0 +1,4292 @@
+{
+  "version": "2.18",
+  "children": [
+    {
+      "type": "frame",
+      "id": "DSqaM",
+      "x": 0,
+      "y": 0,
+      "name": "Logo Mark",
+      "reusable": true,
+      "width": 512,
+      "height": 512,
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "path",
+          "id": "Xy1FF",
+          "name": "Mark",
+          "geometry": "M395.6 506c-1.3-0.2-5.2-0.6-8.8-0.9-3.6-0.4-8.1-0.8-9.9-1-1.9-0.2-6-0.6-9.2-0.9-11.5-1.1-21.6-2.1-27.1-2.6-3-0.4-9.9-1-15.3-1.5-5.3-0.5-11.4-1.1-13.4-1.3-5.1-0.5-15.2-1.5-18-1.7-1.2-0.1-3.8-0.4-5.8-0.6-4.3-0.4-17.4-1.7-22.9-2.2-2.3-0.2-5.9-0.5-8.1-0.8-2.1-0.2-5.7-0.5-7.8-0.7-2.2-0.2-5.7-0.5-7.9-0.8-2.1-0.2-8.4-0.8-13.8-1.3-5.4-0.5-11.6-1.1-13.6-1.3-2.1-0.2-8.2-0.7-13.7-1.2-10.8-1.1-16-1.5-22-2.1-2.2-0.2-6.6-0.7-9.9-1-3.3-0.3-7.7-0.7-9.7-0.9-4-0.4-14.2-1.3-30.1-2.8-9.8-1-11.2-1.1-22.5-2.2-3.1-0.3-7.6-0.8-9.9-1-2.2-0.2-5.8-0.5-8-0.7-2.1-0.2-8.5-0.8-14.2-1.3-25.6-2.4-32.9-3.3-37.9-4.8-12.9-3.8-22.5-15.2-24.9-29.8-0.7-4.2-0.7-19.3 0-24.7 2.6-20.4 8.8-41.5 22.8-77.1 5.8-15 16.6-40.5 22.6-53.7 0.5-1.1 3-6.8 5.7-12.7 2.6-5.8 5.3-11.9 6-13.4 0.7-1.6 2.4-5.2 3.6-8 1.3-2.9 2.8-6.2 3.3-7.3 2.8-6.1 11.1-24.8 11.1-24.9 0-0.1 0.4-1 0.9-2.1 0.5-1.1 1.4-3.1 1.9-4.4 0.6-1.4 1.4-3.1 1.7-3.9 1.2-2.6 9.2-21.5 10.7-25.1 0.7-1.8 1.6-3.9 1.9-4.5 3-6.8 12.9-32.5 16.8-43.9 6-17.9 12.4-41.5 12.8-47.9l0.2-3.2-3.4-0.2c-1.8-0.1-9.8-0.4-17.9-0.6-54.6-1.5-51.3-1.3-55.3-3.9-3.5-2.4-6.8-8.2-8.6-15.4-0.9-3.5-1-4.8-1-9.7 0-7.4 0.8-11.6 3.5-18.3 6.5-16.3 22.4-27 43.9-29.3 2.7-0.3 9.7-0.3 25 0 11.7 0.2 31.4 0.5 43.7 0.7 25.1 0.4 53.8 1 83.4 1.5 10.9 0.2 28.8 0.6 39.8 0.8 11 0.2 23.8 0.4 28.6 0.5 4.7 0.1 14.5 0.3 21.8 0.4 7.3 0.1 22 0.4 32.7 0.6 10.7 0.2 30.6 0.5 44.3 0.7 34.6 0.5 49.6 1 53.1 1.7 10 2.1 20.1 9.1 26.4 18.4 6 8.8 8.5 18.4 8.5 32.8 0 13-2.2 25.7-7.4 43.1-3 9.9-4.7 15.1-9 26.4-3 8-9.6 23.9-13.5 32.3-0.9 1.9-1.7 3.5-1.7 3.6 0 0.1-1.2 2.8-2.8 6-1.5 3.2-2.8 5.9-2.8 6 0 0-3 6.3-6.7 13.8-3.7 7.6-8.9 18.1-11.5 23.5-2.6 5.3-12 24.2-20.8 41.8-23.7 47.5-29.7 60.2-39.1 82.1-5.3 12.3-13.8 34.3-13.8 35.6 0 0.3-0.8 2.3-1.7 4.6-1.2 2.9-1.7 4.6-1.8 6 0 1.1 0.1 2 0.2 2.1 0.2 0.2 13.3 1.3 26.1 2.1 3.2 0.2 9.4 0.6 13.8 0.9 4.4 0.3 11.4 0.8 15.5 1 10 0.5 15.2 1.3 20.2 3 10.4 3.7 18.7 12.2 22.4 23.2 1.5 4.6 2.1 9.2 2.1 15.6 0 27.8-18.8 54.5-45.7 64.9-8.7 3.4-20.1 5-28.1 3.9z m-28.6-14.1c0-0.5-2.3-3.5-4.5-5.9-6.6-7.3-11.2-18.1-13.1-31-0.7-4.4-0.7-21.4 0-26.9 1.2-10.6 3.1-20.1 6-31 1.7-6.5 5.3-17.8 7.6-23.9 3.7-10.2 10.8-28.4 12.6-32.2 0.6-1.3 1.1-2.5 1.1-2.6 0-0.1 0.7-1.6 1.5-3.4 0.9-1.8 2-4.3 2.4-5.4 0.5-1.1 1.5-3.3 2.2-4.8 0.7-1.6 1.7-3.8 2.2-4.9 9.2-20.1 13.6-29 37.6-77.2 21.5-43 21.9-43.8 30.1-61.1 13.9-29.5 21.7-48 27.8-65.7 2.3-6.9 5.2-16.9 6.6-23.1 0.6-2.2 1.2-4.7 1.3-5.5 0.4-1.6 0.8-3.7 1.8-10.1 0.9-5.9 0.9-19.2 0-24.3-1.6-8.5-4.1-13.4-10-19.3-5.1-5-11.4-8.5-18.2-9.9-2.4-0.5-3.2-0.5-4.9-0.1-3.3 0.7-6.7 2.1-10 4.2-3.9 2.6-8.9 7-8.4 7.4 0.2 0.2 4.8 0.5 10.5 0.6l10.2 0.3 2.6 2.7c2.6 2.9 5.9 7.5 7.5 10.9 3.8 7.4 5 18.1 2.9 24.1-3 8.5-11 14.7-21.1 16.5-3 0.5-5.7 0.6-20.6 0.4-9.5-0.1-23.6-0.4-31.4-0.6-14.2-0.4-31.5-0.8-59.6-1.5-8.3-0.2-21.6-0.6-29.5-0.8-7.9-0.2-21.5-0.5-30.3-0.7-8.7-0.2-22.5-0.5-30.6-0.7-8.1-0.3-21.9-0.6-30.7-0.8-8.7-0.2-21.8-0.6-29.1-0.8-7.3-0.2-20.4-0.4-29-0.6l-15.7-0.2-1.3 6.3c-1.5 7.7-2.8 13.7-3.7 17.2-0.4 1.4-1.3 4.3-1.9 6.5-3.3 11.9-8.3 27-13.8 41.7-4.8 12.6-9.8 24.9-17.6 43.1-5.9 13.8-28.1 64.2-32.9 74.7-0.6 1.3-1.1 2.4-1.1 2.5 0 0-0.6 1.5-1.4 3.2-1.2 2.6-3.5 7.6-9 20.3-7.8 17.8-14.2 32.9-19.6 46.7-9.8 25.2-15.8 44-18.7 58.5-1.8 8.9-2.3 13.8-2.2 23.8 0 11.4 0.3 13.5 2.9 18.6 3.8 7.6 10.9 12.9 18.8 14 1.4 0.2 4.3 0.6 6.4 0.8 2.2 0.2 6.6 0.6 9.7 0.9 3.2 0.3 7.5 0.8 9.6 1 2 0.2 5.5 0.5 7.6 0.7 2.2 0.2 8.2 0.8 13.5 1.3 5.2 0.5 13 1.3 17.2 1.7 4.2 0.4 12 1.2 17.3 1.7 12.3 1.2 16.6 1.6 21.5 2.1 2.2 0.2 6.6 0.6 9.9 0.9 3.3 0.3 7.8 0.7 9.9 0.9 2.2 0.2 8.4 0.8 13.9 1.3 13.2 1.3 16.3 1.6 25.6 2.5 4.3 0.4 9.5 0.9 11.5 1.1 6.8 0.6 16 1.5 20 1.8 9.6 1 12.2 1.2 17.8 1.7 3.3 0.3 7.7 0.7 9.9 1 4.5 0.4 8.3 0.7 21.7 2 19.8 1.9 41.6 4 49.1 4.7 5.4 0.5 10 1 17.6 1.7 10.7 1 13 1.2 13.5 1.2 0.3 0 0.5-0.1 0.5-0.2z m61.6-4.5c3.8-1.8 6.9-4.1 11.1-8.2 9.2-8.9 15.3-19.7 18-31.7 0.5-2.4 0.6-4.6 0.6-11.2 0-7.9 0-8.3-0.9-10.9-3.3-8.9-10.1-15.4-18.3-17.4-7.7-1.9-18.9-0.7-24.4 2.5-4.1 2.4-7.1 6.2-8.5 10.6-2.8 9.2-1.1 19.3 4.5 27.2 2.6 3.6 3.7 5.8 3.7 7.1l0 1-6.2-0.2c-3.5-0.2-8.2-0.5-10.6-0.7-34.4-2.8-36.7-3-37.3-2.4-0.4 0.4-0.4 1.1 0.5 4.6 2.8 10.9 5.5 16.4 9.9 20.1 2 1.7 8.8 3.3 31.8 7.5 4.2 0.7 10.2 1.9 13.3 2.6 7.1 1.6 8.6 1.6 12.8-0.5z m-32.8-44.2c0-0.6-0.5-3.2-1-5.6-0.8-4.2-0.9-4.8-0.5-9.9 0.4-5.9 1.2-9.8 2.9-13.5 1.2-2.5 3.7-6.5 5.2-8 0.8-1 0.9-1 0.2-1.2-1.1-0.4-10.4-1-29.2-2.2-7.2-0.4-7.6-0.4-8.1 0.2-0.4 0.5-1.9 6.3-3 11.4-1.9 8.7-3.4 25.8-2.3 26.8 0.2 0.2 8.9 1.1 16.3 1.6 9.4 0.7 15.5 1.2 16.5 1.3 2.8 0.3 3 0.3 3-0.9z m25-363.8c1-0.9 1-0.9-0.6-4.5-3.4-7.9-3.8-18.7-1.1-27.8 1.5-5.2 6.2-14.1 8-15.3 1.8-1.1 4.6-4.3 5.3-5.9 0.8-1.6 0.7-2.6-0.3-2.9-0.4-0.1-9.2-0.3-19.7-0.5-10.5-0.2-22.9-0.5-27.7-0.6-4.7-0.1-13.6-0.3-19.8-0.4-11.9-0.2-37.6-0.7-70.2-1.3-10.9-0.2-28.8-0.5-39.8-0.8-11-0.2-30.4-0.5-43-0.7-25.1-0.4-49-0.9-83.3-1.5-23.4-0.5-31.7-0.3-37.1 0.6-11.9 1.9-20.2 6.2-25.8 13.1-6.8 8.5-9.5 19.5-7.4 30.1 0.9 4.1 2 6.7 3.6 8.2 2.1 2-1.8 1.7 47.6 2.9 8.3 0.2 22.5 0.6 31.4 0.8 8.9 0.2 22.7 0.5 30.6 0.7 8 0.2 21.5 0.6 30.1 0.8 8.7 0.2 22.5 0.5 30.9 0.7 8.3 0.2 26.1 0.7 39.6 1 13.4 0.3 31.3 0.7 39.6 0.9 29 0.7 45.9 1.1 73.2 1.7 15.1 0.4 27.6 0.8 27.7 0.9 0.6 1 7.1 0.8 8.2-0.2z m30.8-0.3c7.8-2.6 11.5-7.5 10.9-14.8-0.5-6.9-4.2-14.4-8.2-16.6-1.4-0.7-2.1-0.8-10.1-0.9-10.3-0.1-11.4 0-13.1 1.5-1.6 1.3-2.3 3.4-2.8 8.1-0.7 6.1 0.7 12.6 3.7 17.2 2.2 3.2 4.1 4.8 6.6 5.5 1.2 0.3 2.4 0.6 2.6 0.7 0.2 0.1 2 0.1 3.9 0.2 2.9 0 4.2-0.2 6.5-0.9z m-277.45 191.4a83.25 83.25 0 1 0 166.5 0 83.25 83.25 0 1 0-166.5 0z m6.5 0a76.75 76.75 0 1 0 153.5 0 76.75 76.75 0 1 0-153.5 0z m49.85-29.4a26.9 26.9 0 1 0 53.8 0 26.9 26.9 0 1 0-53.8 0z m-38.4 75.6c0.9-9.7 33.1-21.7 65.3-21.7 32.2 0 64.4 12 65.3 21.7a80 80 0 0 1-130.6 0z",
+          "fillRule": "evenodd",
+          "viewBox": [
+            0,
+            0,
+            512,
+            512
+          ],
+          "fill": "$list-white",
+          "width": "fill_container",
+          "height": "fill_container"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "pKEfC",
+      "x": 632,
+      "y": 0,
+      "name": "List Badge",
+      "reusable": true,
+      "width": 64,
+      "height": 64,
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "path",
+          "id": "NLwnr",
+          "name": "Badge Ink",
+          "geometry": "M395.6 506c-1.3-0.2-5.2-0.6-8.8-0.9-3.6-0.4-8.1-0.8-9.9-1-1.9-0.2-6-0.6-9.2-0.9-11.5-1.1-21.6-2.1-27.1-2.6-3-0.4-9.9-1-15.3-1.5-5.3-0.5-11.4-1.1-13.4-1.3-5.1-0.5-15.2-1.5-18-1.7-1.2-0.1-3.8-0.4-5.8-0.6-4.3-0.4-17.4-1.7-22.9-2.2-2.3-0.2-5.9-0.5-8.1-0.8-2.1-0.2-5.7-0.5-7.8-0.7-2.2-0.2-5.7-0.5-7.9-0.8-2.1-0.2-8.4-0.8-13.8-1.3-5.4-0.5-11.6-1.1-13.6-1.3-2.1-0.2-8.2-0.7-13.7-1.2-10.8-1.1-16-1.5-22-2.1-2.2-0.2-6.6-0.7-9.9-1-3.3-0.3-7.7-0.7-9.7-0.9-4-0.4-14.2-1.3-30.1-2.8-9.8-1-11.2-1.1-22.5-2.2-3.1-0.3-7.6-0.8-9.9-1-2.2-0.2-5.8-0.5-8-0.7-2.1-0.2-8.5-0.8-14.2-1.3-25.6-2.4-32.9-3.3-37.9-4.8-12.9-3.8-22.5-15.2-24.9-29.8-0.7-4.2-0.7-19.3 0-24.7 2.6-20.4 8.8-41.5 22.8-77.1 5.8-15 16.6-40.5 22.6-53.7 0.5-1.1 3-6.8 5.7-12.7 2.6-5.8 5.3-11.9 6-13.4 0.7-1.6 2.4-5.2 3.6-8 1.3-2.9 2.8-6.2 3.3-7.3 2.8-6.1 11.1-24.8 11.1-24.9 0-0.1 0.4-1 0.9-2.1 0.5-1.1 1.4-3.1 1.9-4.4 0.6-1.4 1.4-3.1 1.7-3.9 1.2-2.6 9.2-21.5 10.7-25.1 0.7-1.8 1.6-3.9 1.9-4.5 3-6.8 12.9-32.5 16.8-43.9 6-17.9 12.4-41.5 12.8-47.9l0.2-3.2-3.4-0.2c-1.8-0.1-9.8-0.4-17.9-0.6-54.6-1.5-51.3-1.3-55.3-3.9-3.5-2.4-6.8-8.2-8.6-15.4-0.9-3.5-1-4.8-1-9.7 0-7.4 0.8-11.6 3.5-18.3 6.5-16.3 22.4-27 43.9-29.3 2.7-0.3 9.7-0.3 25 0 11.7 0.2 31.4 0.5 43.7 0.7 25.1 0.4 53.8 1 83.4 1.5 10.9 0.2 28.8 0.6 39.8 0.8 11 0.2 23.8 0.4 28.6 0.5 4.7 0.1 14.5 0.3 21.8 0.4 7.3 0.1 22 0.4 32.7 0.6 10.7 0.2 30.6 0.5 44.3 0.7 34.6 0.5 49.6 1 53.1 1.7 10 2.1 20.1 9.1 26.4 18.4 6 8.8 8.5 18.4 8.5 32.8 0 13-2.2 25.7-7.4 43.1-3 9.9-4.7 15.1-9 26.4-3 8-9.6 23.9-13.5 32.3-0.9 1.9-1.7 3.5-1.7 3.6 0 0.1-1.2 2.8-2.8 6-1.5 3.2-2.8 5.9-2.8 6 0 0-3 6.3-6.7 13.8-3.7 7.6-8.9 18.1-11.5 23.5-2.6 5.3-12 24.2-20.8 41.8-23.7 47.5-29.7 60.2-39.1 82.1-5.3 12.3-13.8 34.3-13.8 35.6 0 0.3-0.8 2.3-1.7 4.6-1.2 2.9-1.7 4.6-1.8 6 0 1.1 0.1 2 0.2 2.1 0.2 0.2 13.3 1.3 26.1 2.1 3.2 0.2 9.4 0.6 13.8 0.9 4.4 0.3 11.4 0.8 15.5 1 10 0.5 15.2 1.3 20.2 3 10.4 3.7 18.7 12.2 22.4 23.2 1.5 4.6 2.1 9.2 2.1 15.6 0 27.8-18.8 54.5-45.7 64.9-8.7 3.4-20.1 5-28.1 3.9z m-28.6-14.1c0-0.5-2.3-3.5-4.5-5.9-6.6-7.3-11.2-18.1-13.1-31-0.7-4.4-0.7-21.4 0-26.9 1.2-10.6 3.1-20.1 6-31 1.7-6.5 5.3-17.8 7.6-23.9 3.7-10.2 10.8-28.4 12.6-32.2 0.6-1.3 1.1-2.5 1.1-2.6 0-0.1 0.7-1.6 1.5-3.4 0.9-1.8 2-4.3 2.4-5.4 0.5-1.1 1.5-3.3 2.2-4.8 0.7-1.6 1.7-3.8 2.2-4.9 9.2-20.1 13.6-29 37.6-77.2 21.5-43 21.9-43.8 30.1-61.1 13.9-29.5 21.7-48 27.8-65.7 2.3-6.9 5.2-16.9 6.6-23.1 0.6-2.2 1.2-4.7 1.3-5.5 0.4-1.6 0.8-3.7 1.8-10.1 0.9-5.9 0.9-19.2 0-24.3-1.6-8.5-4.1-13.4-10-19.3-5.1-5-11.4-8.5-18.2-9.9-2.4-0.5-3.2-0.5-4.9-0.1-3.3 0.7-6.7 2.1-10 4.2-3.9 2.6-8.9 7-8.4 7.4 0.2 0.2 4.8 0.5 10.5 0.6l10.2 0.3 2.6 2.7c2.6 2.9 5.9 7.5 7.5 10.9 3.8 7.4 5 18.1 2.9 24.1-3 8.5-11 14.7-21.1 16.5-3 0.5-5.7 0.6-20.6 0.4-9.5-0.1-23.6-0.4-31.4-0.6-14.2-0.4-31.5-0.8-59.6-1.5-8.3-0.2-21.6-0.6-29.5-0.8-7.9-0.2-21.5-0.5-30.3-0.7-8.7-0.2-22.5-0.5-30.6-0.7-8.1-0.3-21.9-0.6-30.7-0.8-8.7-0.2-21.8-0.6-29.1-0.8-7.3-0.2-20.4-0.4-29-0.6l-15.7-0.2-1.3 6.3c-1.5 7.7-2.8 13.7-3.7 17.2-0.4 1.4-1.3 4.3-1.9 6.5-3.3 11.9-8.3 27-13.8 41.7-4.8 12.6-9.8 24.9-17.6 43.1-5.9 13.8-28.1 64.2-32.9 74.7-0.6 1.3-1.1 2.4-1.1 2.5 0 0-0.6 1.5-1.4 3.2-1.2 2.6-3.5 7.6-9 20.3-7.8 17.8-14.2 32.9-19.6 46.7-9.8 25.2-15.8 44-18.7 58.5-1.8 8.9-2.3 13.8-2.2 23.8 0 11.4 0.3 13.5 2.9 18.6 3.8 7.6 10.9 12.9 18.8 14 1.4 0.2 4.3 0.6 6.4 0.8 2.2 0.2 6.6 0.6 9.7 0.9 3.2 0.3 7.5 0.8 9.6 1 2 0.2 5.5 0.5 7.6 0.7 2.2 0.2 8.2 0.8 13.5 1.3 5.2 0.5 13 1.3 17.2 1.7 4.2 0.4 12 1.2 17.3 1.7 12.3 1.2 16.6 1.6 21.5 2.1 2.2 0.2 6.6 0.6 9.9 0.9 3.3 0.3 7.8 0.7 9.9 0.9 2.2 0.2 8.4 0.8 13.9 1.3 13.2 1.3 16.3 1.6 25.6 2.5 4.3 0.4 9.5 0.9 11.5 1.1 6.8 0.6 16 1.5 20 1.8 9.6 1 12.2 1.2 17.8 1.7 3.3 0.3 7.7 0.7 9.9 1 4.5 0.4 8.3 0.7 21.7 2 19.8 1.9 41.6 4 49.1 4.7 5.4 0.5 10 1 17.6 1.7 10.7 1 13 1.2 13.5 1.2 0.3 0 0.5-0.1 0.5-0.2z m61.6-4.5c3.8-1.8 6.9-4.1 11.1-8.2 9.2-8.9 15.3-19.7 18-31.7 0.5-2.4 0.6-4.6 0.6-11.2 0-7.9 0-8.3-0.9-10.9-3.3-8.9-10.1-15.4-18.3-17.4-7.7-1.9-18.9-0.7-24.4 2.5-4.1 2.4-7.1 6.2-8.5 10.6-2.8 9.2-1.1 19.3 4.5 27.2 2.6 3.6 3.7 5.8 3.7 7.1l0 1-6.2-0.2c-3.5-0.2-8.2-0.5-10.6-0.7-34.4-2.8-36.7-3-37.3-2.4-0.4 0.4-0.4 1.1 0.5 4.6 2.8 10.9 5.5 16.4 9.9 20.1 2 1.7 8.8 3.3 31.8 7.5 4.2 0.7 10.2 1.9 13.3 2.6 7.1 1.6 8.6 1.6 12.8-0.5z m-32.8-44.2c0-0.6-0.5-3.2-1-5.6-0.8-4.2-0.9-4.8-0.5-9.9 0.4-5.9 1.2-9.8 2.9-13.5 1.2-2.5 3.7-6.5 5.2-8 0.8-1 0.9-1 0.2-1.2-1.1-0.4-10.4-1-29.2-2.2-7.2-0.4-7.6-0.4-8.1 0.2-0.4 0.5-1.9 6.3-3 11.4-1.9 8.7-3.4 25.8-2.3 26.8 0.2 0.2 8.9 1.1 16.3 1.6 9.4 0.7 15.5 1.2 16.5 1.3 2.8 0.3 3 0.3 3-0.9z m25-363.8c1-0.9 1-0.9-0.6-4.5-3.4-7.9-3.8-18.7-1.1-27.8 1.5-5.2 6.2-14.1 8-15.3 1.8-1.1 4.6-4.3 5.3-5.9 0.8-1.6 0.7-2.6-0.3-2.9-0.4-0.1-9.2-0.3-19.7-0.5-10.5-0.2-22.9-0.5-27.7-0.6-4.7-0.1-13.6-0.3-19.8-0.4-11.9-0.2-37.6-0.7-70.2-1.3-10.9-0.2-28.8-0.5-39.8-0.8-11-0.2-30.4-0.5-43-0.7-25.1-0.4-49-0.9-83.3-1.5-23.4-0.5-31.7-0.3-37.1 0.6-11.9 1.9-20.2 6.2-25.8 13.1-6.8 8.5-9.5 19.5-7.4 30.1 0.9 4.1 2 6.7 3.6 8.2 2.1 2-1.8 1.7 47.6 2.9 8.3 0.2 22.5 0.6 31.4 0.8 8.9 0.2 22.7 0.5 30.6 0.7 8 0.2 21.5 0.6 30.1 0.8 8.7 0.2 22.5 0.5 30.9 0.7 8.3 0.2 26.1 0.7 39.6 1 13.4 0.3 31.3 0.7 39.6 0.9 29 0.7 45.9 1.1 73.2 1.7 15.1 0.4 27.6 0.8 27.7 0.9 0.6 1 7.1 0.8 8.2-0.2z m30.8-0.3c7.8-2.6 11.5-7.5 10.9-14.8-0.5-6.9-4.2-14.4-8.2-16.6-1.4-0.7-2.1-0.8-10.1-0.9-10.3-0.1-11.4 0-13.1 1.5-1.6 1.3-2.3 3.4-2.8 8.1-0.7 6.1 0.7 12.6 3.7 17.2 2.2 3.2 4.1 4.8 6.6 5.5 1.2 0.3 2.4 0.6 2.6 0.7 0.2 0.1 2 0.1 3.9 0.2 2.9 0 4.2-0.2 6.5-0.9z",
+          "fillRule": "evenodd",
+          "viewBox": [
+            0,
+            0,
+            512,
+            512
+          ],
+          "fill": "$list-grey",
+          "width": "fill_container",
+          "height": "fill_container",
+          "stroke": "$list-grey",
+          "strokeWidth": 5.6,
+          "strokeLinejoin": "round",
+          "strokeLinecap": "round"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "Yrblr",
+      "x": 816,
+      "y": 0,
+      "name": "Section Header",
+      "reusable": true,
+      "width": 760,
+      "layout": "vertical",
+      "gap": 10,
+      "children": [
+        {
+          "type": "text",
+          "id": "seskw",
+          "name": "Eyebrow",
+          "fill": "$ink-muted",
+          "content": "01 — SECTION",
+          "fontFamily": "$font-mono",
+          "fontSize": 11,
+          "fontWeight": "normal",
+          "letterSpacing": 1.2
+        },
+        {
+          "type": "text",
+          "id": "LvfzD",
+          "name": "Title",
+          "fill": "$ink-primary",
+          "content": "Section title",
+          "lineHeight": 1.1,
+          "fontFamily": "$font-heading",
+          "fontSize": 44,
+          "fontWeight": "normal"
+        },
+        {
+          "type": "text",
+          "id": "By96K",
+          "name": "Description",
+          "fill": "$ink-secondary",
+          "textGrowth": "fixed-width",
+          "width": "fill_container",
+          "content": "Supporting description for this section of the sheet.",
+          "lineHeight": 1.55,
+          "fontFamily": "$font-ui",
+          "fontSize": 15,
+          "fontWeight": "normal"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "vNbyq",
+      "x": 1696,
+      "y": 0,
+      "name": "Swatch",
+      "reusable": true,
+      "width": 300,
+      "fill": "$glass-01",
+      "cornerRadius": "$radius-md",
+      "stroke": "$glass-edge",
+      "strokeWidth": 1,
+      "gap": 14,
+      "padding": 14,
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "rectangle",
+          "cornerRadius": 10,
+          "id": "R1DNA",
+          "name": "Chip",
+          "fill": "$ink-primary",
+          "width": 44,
+          "height": 44,
+          "stroke": "$glass-edge",
+          "strokeWidth": 1
+        },
+        {
+          "type": "frame",
+          "id": "z3hSD",
+          "name": "Labels",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 4,
+          "children": [
+            {
+              "type": "text",
+              "id": "YLuNi",
+              "name": "Token",
+              "fill": "$ink-primary",
+              "content": "token-name",
+              "fontFamily": "$font-mono",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "s47xU",
+              "name": "Value",
+              "fill": "$ink-muted",
+              "content": "#FFFFFF",
+              "fontFamily": "$font-mono",
+              "fontSize": 11,
+              "fontWeight": "normal",
+              "letterSpacing": 0.6
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "xbK9L",
+      "x": 2116,
+      "y": 0,
+      "name": "Contact Row",
+      "reusable": true,
+      "width": 560,
+      "fill": "$glass-01",
+      "cornerRadius": "$radius-md",
+      "stroke": "$glass-edge",
+      "strokeWidth": 1,
+      "gap": 16,
+      "padding": [
+        14,
+        18
+      ],
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "ellipse",
+          "id": "BIoas",
+          "name": "Avatar",
+          "fill": "$glass-03",
+          "width": 38,
+          "height": 38,
+          "stroke": "$glass-edge",
+          "strokeWidth": 1
+        },
+        {
+          "type": "frame",
+          "id": "yRULU",
+          "name": "Identity",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 3,
+          "children": [
+            {
+              "type": "text",
+              "id": "Bp3gl",
+              "name": "Name",
+              "fill": "$ink-primary",
+              "content": "Contact name",
+              "fontFamily": "$font-ui",
+              "fontSize": 15,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "XioMj",
+              "name": "Handle",
+              "fill": "$ink-muted",
+              "content": "@handle",
+              "fontFamily": "$font-mono",
+              "fontSize": 11,
+              "fontWeight": "normal",
+              "letterSpacing": 0.4
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "Q7sta8",
+          "name": "State",
+          "fill": "$ink-muted",
+          "content": "WHITELIST",
+          "fontFamily": "$font-mono",
+          "fontSize": 11,
+          "fontWeight": "normal",
+          "letterSpacing": 1.2
+        },
+        {
+          "type": "frame",
+          "id": "ADLvF",
+          "name": "Badge Chip",
+          "fill": "#FFFFFF00",
+          "cornerRadius": 8,
+          "layout": "vertical",
+          "padding": 5,
+          "children": [
+            {
+              "id": "LbRj6",
+              "type": "ref",
+              "ref": "pKEfC",
+              "name": "Badge",
+              "width": 16,
+              "height": 16,
+              "descendants": {
+                "NLwnr": {
+                  "fill": "$list-white",
+                  "stroke": "$list-white",
+                  "strokeWidth": 1.41
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "XCYhv",
+      "x": 0,
+      "y": 672,
+      "name": "WhiteList Components",
+      "clip": true,
+      "width": 2160,
+      "fill": "$surface-base",
+      "layout": "vertical",
+      "gap": 88,
+      "padding": [
+        88,
+        96
+      ],
+      "children": [
+        {
+          "type": "frame",
+          "id": "Cnzbz",
+          "name": "Header",
+          "width": "fill_container",
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "u4UK7",
+              "name": "Lockup",
+              "gap": 28,
+              "alignItems": "center",
+              "children": [
+                {
+                  "id": "KPJ6h",
+                  "type": "ref",
+                  "ref": "DSqaM",
+                  "name": "Mark",
+                  "width": 92,
+                  "height": 92
+                },
+                {
+                  "type": "frame",
+                  "id": "kqqZY",
+                  "name": "Wordmark",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "M2eEk",
+                      "name": "Name",
+                      "fill": "$ink-primary",
+                      "content": "Whitelist",
+                      "lineHeight": 1,
+                      "fontFamily": "$font-heading",
+                      "fontSize": 64,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "kjPcA",
+                      "name": "Kicker",
+                      "fill": "$ink-muted",
+                      "content": "VISUAL IDENTITY — COMPONENT SHEET",
+                      "fontFamily": "$font-mono",
+                      "fontSize": 11,
+                      "fontWeight": "normal",
+                      "letterSpacing": 1.4
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "h1EYnW",
+              "name": "Meta",
+              "layout": "vertical",
+              "gap": 8,
+              "alignItems": "end",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "mkPyr",
+                  "name": "Site",
+                  "fill": "$ink-muted",
+                  "content": "mywhitelist.app",
+                  "fontFamily": "$font-mono",
+                  "fontSize": 11,
+                  "fontWeight": "normal",
+                  "letterSpacing": 1.4
+                },
+                {
+                  "type": "text",
+                  "id": "UB2DU",
+                  "name": "Version",
+                  "fill": "$ink-muted",
+                  "content": "v1.0 — 2026-09-22",
+                  "fontFamily": "$font-mono",
+                  "fontSize": 11,
+                  "fontWeight": "normal",
+                  "letterSpacing": 1.4
+                },
+                {
+                  "type": "text",
+                  "id": "cLbC6",
+                  "name": "Format",
+                  "fill": "$ink-muted",
+                  "content": "PURE SVG MASTERS · NEUTRAL RAMP ONLY",
+                  "fontFamily": "$font-mono",
+                  "fontSize": 11,
+                  "fontWeight": "normal",
+                  "letterSpacing": 1.4
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "rectangle",
+          "id": "a3Utpb",
+          "name": "Header Rule",
+          "fill": "$glass-edge",
+          "width": "fill_container",
+          "height": 1
+        },
+        {
+          "type": "frame",
+          "id": "NVvtJ",
+          "name": "01 The Mark",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 36,
+          "children": [
+            {
+              "id": "I4xdN",
+              "type": "ref",
+              "ref": "Yrblr",
+              "name": "Header",
+              "width": 900,
+              "descendants": {
+                "seskw": {
+                  "content": "01 — PRIMARY MARK"
+                },
+                "LvfzD": {
+                  "content": "The scroll"
+                },
+                "By96K": {
+                  "content": "A Santa-style curled parchment list carrying one bubble person — the universal contact silhouette — centered on the sheet. The scroll is the hero: it must read as physical curled paper at a glance, and as a single even-odd path it flattens to solid white or solid black without losing its holes."
+                }
+              }
+            },
+            {
+              "type": "frame",
+              "id": "xeka3",
+              "name": "Mark Panels",
+              "width": "fill_container",
+              "gap": 32,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "gqWFY",
+                  "name": "On Dark",
+                  "width": "fill_container",
+                  "height": 560,
+                  "fill": "$glass-01",
+                  "cornerRadius": "$radius-lg",
+                  "stroke": "$glass-edge",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 40,
+                  "padding": 40,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "id": "V4kNR0",
+                      "type": "ref",
+                      "ref": "DSqaM",
+                      "name": "Mark",
+                      "width": 280,
+                      "height": 280
+                    },
+                    {
+                      "type": "text",
+                      "id": "uRAvT",
+                      "name": "Caption",
+                      "fill": "$ink-muted",
+                      "content": "PRIMARY · WHITE ON CHARCOAL",
+                      "fontFamily": "$font-mono",
+                      "fontSize": 11,
+                      "fontWeight": "normal",
+                      "letterSpacing": 1.4
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "X7u6kf",
+                  "name": "On Light",
+                  "width": "fill_container",
+                  "height": 560,
+                  "fill": "$surface-light",
+                  "cornerRadius": "$radius-lg",
+                  "stroke": "#00000014",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 40,
+                  "padding": 40,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "id": "Ngwqa",
+                      "type": "ref",
+                      "ref": "DSqaM",
+                      "name": "Mark",
+                      "width": 280,
+                      "height": 280,
+                      "descendants": {
+                        "Xy1FF": {
+                          "fill": "$ink-on-light"
+                        }
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "id": "R24CmH",
+                      "name": "Caption",
+                      "fill": "#1A1A1C99",
+                      "content": "INVERSE · CHARCOAL ON PAPER",
+                      "fontFamily": "$font-mono",
+                      "fontSize": 11,
+                      "fontWeight": "normal",
+                      "letterSpacing": 1.4
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "lDI7A",
+                  "name": "Construction",
+                  "width": "fill_container",
+                  "height": 560,
+                  "fill": "$glass-01",
+                  "cornerRadius": "$radius-lg",
+                  "stroke": "$glass-edge",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 20,
+                  "padding": 40,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "jRDop",
+                      "name": "Label",
+                      "fill": "$ink-muted",
+                      "content": "CONSTRUCTION",
+                      "fontFamily": "$font-mono",
+                      "fontSize": 11,
+                      "fontWeight": "normal",
+                      "letterSpacing": 1.4
+                    },
+                    {
+                      "type": "frame",
+                      "id": "K087Z",
+                      "name": "Canvas",
+                      "width": "fill_container",
+                      "gap": 16,
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "ieQL3",
+                          "name": "Key",
+                          "fill": "$ink-muted",
+                          "content": "Canvas",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.8
+                        },
+                        {
+                          "type": "text",
+                          "id": "JsCIZ",
+                          "name": "Value",
+                          "fill": "$ink-primary",
+                          "content": "512 × 512",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.8
+                        }
+                      ]
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "W43wxU",
+                      "name": "Canvas Rule",
+                      "fill": "$glass-edge",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "frame",
+                      "id": "kNgG2",
+                      "name": "Bubble ø",
+                      "width": "fill_container",
+                      "gap": 16,
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Dbyxh",
+                          "name": "Key",
+                          "fill": "$ink-muted",
+                          "content": "Bubble ø",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.8
+                        },
+                        {
+                          "type": "text",
+                          "id": "luCWB",
+                          "name": "Value",
+                          "fill": "$ink-primary",
+                          "content": "160 — 31% of canvas",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.8
+                        }
+                      ]
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "h1ahPK",
+                      "name": "Bubble ø Rule",
+                      "fill": "$glass-edge",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "frame",
+                      "id": "wDtPp",
+                      "name": "Bubble center",
+                      "width": "fill_container",
+                      "gap": 16,
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "uD4KB",
+                          "name": "Key",
+                          "fill": "$ink-muted",
+                          "content": "Bubble center",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.8
+                        },
+                        {
+                          "type": "text",
+                          "id": "L2OuL",
+                          "name": "Value",
+                          "fill": "$ink-primary",
+                          "content": "257.4 / 270.5",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.8
+                        }
+                      ]
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "t9TStA",
+                      "name": "Bubble center Rule",
+                      "fill": "$glass-edge",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "frame",
+                      "id": "YACis",
+                      "name": "Ring weight",
+                      "width": "fill_container",
+                      "gap": 16,
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "v9uzcP",
+                          "name": "Key",
+                          "fill": "$ink-muted",
+                          "content": "Ring weight",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.8
+                        },
+                        {
+                          "type": "text",
+                          "id": "gP93Y",
+                          "name": "Value",
+                          "fill": "$ink-primary",
+                          "content": "6.5 @ 512",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.8
+                        }
+                      ]
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "U32pXt",
+                      "name": "Ring weight Rule",
+                      "fill": "$glass-edge",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "frame",
+                      "id": "E43yj",
+                      "name": "Fill rule",
+                      "width": "fill_container",
+                      "gap": 16,
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "R1I5o",
+                          "name": "Key",
+                          "fill": "$ink-muted",
+                          "content": "Fill rule",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.8
+                        },
+                        {
+                          "type": "text",
+                          "id": "xyYWQ",
+                          "name": "Value",
+                          "fill": "$ink-primary",
+                          "content": "even-odd, single path",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.8
+                        }
+                      ]
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "TVZA3",
+                      "name": "Fill rule Rule",
+                      "fill": "$glass-edge",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "frame",
+                      "id": "dap7h",
+                      "name": "Ink",
+                      "width": "fill_container",
+                      "gap": 16,
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "u0MvC",
+                          "name": "Key",
+                          "fill": "$ink-muted",
+                          "content": "Ink",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.8
+                        },
+                        {
+                          "type": "text",
+                          "id": "ZbCaT",
+                          "name": "Value",
+                          "fill": "$ink-primary",
+                          "content": "#FFFFFF — no hues",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.8
+                        }
+                      ]
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "APywC",
+                      "name": "Ink Rule",
+                      "fill": "$glass-edge",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "frame",
+                      "id": "E1vQO",
+                      "name": "Master",
+                      "width": "fill_container",
+                      "gap": 16,
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Sbg3m",
+                          "name": "Key",
+                          "fill": "$ink-muted",
+                          "content": "Master",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.8
+                        },
+                        {
+                          "type": "text",
+                          "id": "pY2m9",
+                          "name": "Value",
+                          "fill": "$ink-primary",
+                          "content": "wl-list-01-classic.svg",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.8
+                        }
+                      ]
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "i3SeV",
+                      "name": "Master Rule",
+                      "fill": "$glass-edge",
+                      "width": "fill_container",
+                      "height": 1
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "W0IGo",
+          "name": "02 List States",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 36,
+          "children": [
+            {
+              "id": "iwqkQ",
+              "type": "ref",
+              "ref": "Yrblr",
+              "name": "Header",
+              "width": 900,
+              "descendants": {
+                "seskw": {
+                  "content": "02 — LIST STATES"
+                },
+                "LvfzD": {
+                  "content": "White, grey, black"
+                },
+                "By96K": {
+                  "content": "One silhouette, three fills. The badge drops the bubble person and keeps the scroll alone, stroked so it survives at 12px. Colour is the only differentiator — never shape, never hue."
+                }
+              }
+            },
+            {
+              "type": "frame",
+              "id": "AaX96",
+              "name": "State Cards",
+              "width": "fill_container",
+              "gap": 32,
+              "children": [
+                {
+                  "id": "tx68x",
+                  "type": "ref",
+                  "ref": "HFxGk",
+                  "name": "WhiteList Card",
+                  "width": "fill_container",
+                  "fill": "$glass-01",
+                  "descendants": {
+                    "D5yUZR": {
+                      "fill": "#FFFFFF00"
+                    },
+                    "hJMmJ/NLwnr": {
+                      "fill": "$list-white",
+                      "stroke": "$list-white",
+                      "strokeWidth": 5.63
+                    },
+                    "NdEUx": {
+                      "content": "WhiteList"
+                    },
+                    "or8rl": {
+                      "content": "PERMANENT CONNECTION"
+                    },
+                    "W2vSG": {
+                      "content": "A confirmed, mutual connection. The card stays live: details keep syncing both ways until one side revokes it."
+                    },
+                    "Y2T2nO": {
+                      "content": "list-white"
+                    },
+                    "n0U8Gg": {
+                      "content": "#FFFFFF"
+                    },
+                    "UBo4Z": {
+                      "fill": "#FFFFFF00"
+                    },
+                    "OoaFF/NLwnr": {
+                      "fill": "$list-white",
+                      "stroke": "$list-white",
+                      "strokeWidth": 2.11
+                    },
+                    "DHqhT": {
+                      "fill": "#FFFFFF00"
+                    },
+                    "IfhcC/NLwnr": {
+                      "fill": "$list-white",
+                      "stroke": "$list-white",
+                      "strokeWidth": 1.76
+                    },
+                    "tKkvc": {
+                      "fill": "#FFFFFF00"
+                    },
+                    "FxZMA/NLwnr": {
+                      "fill": "$list-white",
+                      "stroke": "$list-white",
+                      "strokeWidth": 1.41
+                    },
+                    "gUJaX": {
+                      "fill": "#FFFFFF00"
+                    },
+                    "mUAJX/NLwnr": {
+                      "fill": "$list-white",
+                      "stroke": "$list-white",
+                      "strokeWidth": 1.23
+                    },
+                    "eT0mz": {
+                      "fill": "#FFFFFF00"
+                    },
+                    "VpbHY/NLwnr": {
+                      "fill": "$list-white",
+                      "stroke": "$list-white",
+                      "strokeWidth": 1.06
+                    }
+                  }
+                },
+                {
+                  "id": "MPx3U",
+                  "type": "ref",
+                  "ref": "HFxGk",
+                  "name": "GreyList Card",
+                  "width": "fill_container",
+                  "fill": "$glass-01",
+                  "descendants": {
+                    "D5yUZR": {
+                      "fill": "#5A5A62"
+                    },
+                    "hJMmJ/NLwnr": {
+                      "fill": "$list-grey",
+                      "stroke": "$list-grey",
+                      "strokeWidth": 5.63
+                    },
+                    "NdEUx": {
+                      "content": "GreyList"
+                    },
+                    "or8rl": {
+                      "content": "PENDING — UNCONFIRMED QUARTERLY"
+                    },
+                    "W2vSG": {
+                      "content": "Shared, not yet confirmed. Quietly waits for the quarterly check-in; if nobody confirms, it decays out of the list."
+                    },
+                    "Y2T2nO": {
+                      "content": "list-grey"
+                    },
+                    "n0U8Gg": {
+                      "content": "#6E6E76"
+                    },
+                    "UBo4Z": {
+                      "fill": "#FFFFFF00"
+                    },
+                    "OoaFF/NLwnr": {
+                      "fill": "$list-grey",
+                      "stroke": "$list-grey",
+                      "strokeWidth": 2.11
+                    },
+                    "DHqhT": {
+                      "fill": "#FFFFFF00"
+                    },
+                    "IfhcC/NLwnr": {
+                      "fill": "$list-grey",
+                      "stroke": "$list-grey",
+                      "strokeWidth": 1.76
+                    },
+                    "tKkvc": {
+                      "fill": "#FFFFFF00"
+                    },
+                    "FxZMA/NLwnr": {
+                      "fill": "$list-grey",
+                      "stroke": "$list-grey",
+                      "strokeWidth": 1.41
+                    },
+                    "gUJaX": {
+                      "fill": "#FFFFFF00"
+                    },
+                    "mUAJX/NLwnr": {
+                      "fill": "$list-grey",
+                      "stroke": "$list-grey",
+                      "strokeWidth": 1.23
+                    },
+                    "eT0mz": {
+                      "fill": "#FFFFFF00"
+                    },
+                    "VpbHY/NLwnr": {
+                      "fill": "$list-grey",
+                      "stroke": "$list-grey",
+                      "strokeWidth": 1.06
+                    }
+                  }
+                },
+                {
+                  "id": "ENgzW",
+                  "type": "ref",
+                  "ref": "HFxGk",
+                  "name": "BlackList Card",
+                  "width": "fill_container",
+                  "fill": "$glass-01",
+                  "descendants": {
+                    "D5yUZR": {
+                      "fill": "$surface-light"
+                    },
+                    "hJMmJ/NLwnr": {
+                      "fill": "$list-black",
+                      "stroke": "$list-black",
+                      "strokeWidth": 5.63
+                    },
+                    "NdEUx": {
+                      "content": "BlackList"
+                    },
+                    "or8rl": {
+                      "content": "DISCONNECTED"
+                    },
+                    "W2vSG": {
+                      "content": "Revoked. The contact keeps nothing live — the scroll goes dark and no further updates leave your device."
+                    },
+                    "Y2T2nO": {
+                      "content": "list-black"
+                    },
+                    "n0U8Gg": {
+                      "content": "#0B0B0C"
+                    },
+                    "UBo4Z": {
+                      "fill": "$surface-light"
+                    },
+                    "OoaFF/NLwnr": {
+                      "fill": "$list-black",
+                      "stroke": "$list-black",
+                      "strokeWidth": 2.11
+                    },
+                    "DHqhT": {
+                      "fill": "$surface-light"
+                    },
+                    "IfhcC/NLwnr": {
+                      "fill": "$list-black",
+                      "stroke": "$list-black",
+                      "strokeWidth": 1.76
+                    },
+                    "tKkvc": {
+                      "fill": "$surface-light"
+                    },
+                    "FxZMA/NLwnr": {
+                      "fill": "$list-black",
+                      "stroke": "$list-black",
+                      "strokeWidth": 1.41
+                    },
+                    "gUJaX": {
+                      "fill": "$surface-light"
+                    },
+                    "mUAJX/NLwnr": {
+                      "fill": "$list-black",
+                      "stroke": "$list-black",
+                      "strokeWidth": 1.23
+                    },
+                    "eT0mz": {
+                      "fill": "$surface-light"
+                    },
+                    "VpbHY/NLwnr": {
+                      "fill": "$list-black",
+                      "stroke": "$list-black",
+                      "strokeWidth": 1.06
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "p4YkGw",
+          "name": "03 In Context",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 36,
+          "children": [
+            {
+              "id": "CT8wy",
+              "type": "ref",
+              "ref": "Yrblr",
+              "name": "Header",
+              "width": 900,
+              "descendants": {
+                "seskw": {
+                  "content": "03 — IN CONTEXT"
+                },
+                "LvfzD": {
+                  "content": "Beside a contact"
+                },
+                "By96K": {
+                  "content": "The badge earns its size next to a name, not on a pedestal. At 16px against a glass row it still reads as curled paper — and the black state gets a light chip so it never dissolves into the surface."
+                }
+              }
+            },
+            {
+              "type": "frame",
+              "id": "Swy0u",
+              "name": "Context",
+              "width": "fill_container",
+              "gap": 32,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "z7JQX",
+                  "name": "Contact List",
+                  "width": "fill_container",
+                  "fill": "$glass-01",
+                  "cornerRadius": "$radius-lg",
+                  "stroke": "$glass-edge",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 14,
+                  "padding": 32,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "ybbYg",
+                      "name": "List Header",
+                      "width": "fill_container",
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "U8zaD",
+                          "name": "Title",
+                          "fill": "$ink-primary",
+                          "content": "Your list",
+                          "lineHeight": 1,
+                          "fontFamily": "$font-heading",
+                          "fontSize": 30,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "RwEWb",
+                          "name": "Count",
+                          "fill": "$ink-muted",
+                          "content": "5 OF 12 SHOWN",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 1.4
+                        }
+                      ]
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "HQABO",
+                      "name": "Rule",
+                      "fill": "$glass-edge",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "id": "QrnIy",
+                      "type": "ref",
+                      "ref": "xbK9L",
+                      "name": "Mara Ellis",
+                      "width": "fill_container",
+                      "descendants": {
+                        "Bp3gl": {
+                          "content": "Mara Ellis"
+                        },
+                        "XioMj": {
+                          "content": "@mara.e"
+                        },
+                        "Q7sta8": {
+                          "content": "WHITELIST",
+                          "fill": "$ink-muted"
+                        },
+                        "ADLvF": {
+                          "fill": "#FFFFFF00"
+                        },
+                        "LbRj6/NLwnr": {
+                          "fill": "$list-white",
+                          "stroke": "$list-white",
+                          "strokeWidth": 1.41
+                        }
+                      }
+                    },
+                    {
+                      "id": "yj4mP",
+                      "type": "ref",
+                      "ref": "xbK9L",
+                      "name": "Devon Park",
+                      "width": "fill_container",
+                      "descendants": {
+                        "Bp3gl": {
+                          "content": "Devon Park"
+                        },
+                        "XioMj": {
+                          "content": "@dpark"
+                        },
+                        "Q7sta8": {
+                          "content": "WHITELIST",
+                          "fill": "$ink-muted"
+                        },
+                        "ADLvF": {
+                          "fill": "#FFFFFF00"
+                        },
+                        "LbRj6/NLwnr": {
+                          "fill": "$list-white",
+                          "stroke": "$list-white",
+                          "strokeWidth": 1.41
+                        }
+                      }
+                    },
+                    {
+                      "id": "z40wY",
+                      "type": "ref",
+                      "ref": "xbK9L",
+                      "name": "Ines Oyelaran",
+                      "width": "fill_container",
+                      "descendants": {
+                        "Bp3gl": {
+                          "content": "Ines Oyelaran"
+                        },
+                        "XioMj": {
+                          "content": "@ines.o"
+                        },
+                        "Q7sta8": {
+                          "content": "GREYLIST",
+                          "fill": "$ink-muted"
+                        },
+                        "ADLvF": {
+                          "fill": "#FFFFFF00"
+                        },
+                        "LbRj6/NLwnr": {
+                          "fill": "$list-grey",
+                          "stroke": "$list-grey",
+                          "strokeWidth": 1.41
+                        }
+                      }
+                    },
+                    {
+                      "id": "Og57J",
+                      "type": "ref",
+                      "ref": "xbK9L",
+                      "name": "Sam Whitfield",
+                      "width": "fill_container",
+                      "descendants": {
+                        "Bp3gl": {
+                          "content": "Sam Whitfield"
+                        },
+                        "XioMj": {
+                          "content": "@swhit"
+                        },
+                        "Q7sta8": {
+                          "content": "GREYLIST",
+                          "fill": "$ink-muted"
+                        },
+                        "ADLvF": {
+                          "fill": "#FFFFFF00"
+                        },
+                        "LbRj6/NLwnr": {
+                          "fill": "$list-grey",
+                          "stroke": "$list-grey",
+                          "strokeWidth": 1.41
+                        }
+                      }
+                    },
+                    {
+                      "id": "ZBY1i",
+                      "type": "ref",
+                      "ref": "xbK9L",
+                      "name": "Colin Reyes",
+                      "width": "fill_container",
+                      "descendants": {
+                        "Bp3gl": {
+                          "content": "Colin Reyes"
+                        },
+                        "XioMj": {
+                          "content": "@creyes"
+                        },
+                        "Q7sta8": {
+                          "content": "BLACKLIST",
+                          "fill": "$ink-faint"
+                        },
+                        "ADLvF": {
+                          "fill": "$surface-light"
+                        },
+                        "LbRj6/NLwnr": {
+                          "fill": "$list-black",
+                          "stroke": "$list-black",
+                          "strokeWidth": 1.41
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "X2CDz",
+                  "name": "Placement Rules",
+                  "width": 640,
+                  "fill": "$glass-01",
+                  "cornerRadius": "$radius-lg",
+                  "stroke": "$glass-edge",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 20,
+                  "padding": 32,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "vrqVG",
+                      "name": "Label",
+                      "fill": "$ink-muted",
+                      "content": "PLACEMENT RULES",
+                      "fontFamily": "$font-mono",
+                      "fontSize": 11,
+                      "fontWeight": "normal",
+                      "letterSpacing": 1.4
+                    },
+                    {
+                      "type": "frame",
+                      "id": "a2s6NS",
+                      "name": "Row badge",
+                      "width": "fill_container",
+                      "gap": 16,
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "h3cdM",
+                          "name": "Key",
+                          "fill": "$ink-muted",
+                          "content": "Row badge",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.8
+                        },
+                        {
+                          "type": "text",
+                          "id": "a4Axh",
+                          "name": "Value",
+                          "fill": "$ink-primary",
+                          "content": "16 px — 14 px minimum",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.8
+                        }
+                      ]
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "hF02k",
+                      "name": "Row badge Rule",
+                      "fill": "$glass-edge",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "frame",
+                      "id": "cXYGR",
+                      "name": "Optical gap",
+                      "width": "fill_container",
+                      "gap": 16,
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "y6suiS",
+                          "name": "Key",
+                          "fill": "$ink-muted",
+                          "content": "Optical gap",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.8
+                        },
+                        {
+                          "type": "text",
+                          "id": "qFIOB",
+                          "name": "Value",
+                          "fill": "$ink-primary",
+                          "content": "12 px to the state label",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.8
+                        }
+                      ]
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "zIDO9",
+                      "name": "Optical gap Rule",
+                      "fill": "$glass-edge",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "frame",
+                      "id": "yQgSe",
+                      "name": "Black on dark",
+                      "width": "fill_container",
+                      "gap": 16,
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "DXMHF",
+                          "name": "Key",
+                          "fill": "$ink-muted",
+                          "content": "Black on dark",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.8
+                        },
+                        {
+                          "type": "text",
+                          "id": "RiDhv",
+                          "name": "Value",
+                          "fill": "$ink-primary",
+                          "content": "always on a light chip",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.8
+                        }
+                      ]
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "quOPd",
+                      "name": "Black on dark Rule",
+                      "fill": "$glass-edge",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "frame",
+                      "id": "dB2xQ",
+                      "name": "Grey contrast",
+                      "width": "fill_container",
+                      "gap": 16,
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "lL9VA",
+                          "name": "Key",
+                          "fill": "$ink-muted",
+                          "content": "Grey contrast",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.8
+                        },
+                        {
+                          "type": "text",
+                          "id": "X1NBNp",
+                          "name": "Value",
+                          "fill": "$ink-primary",
+                          "content": "3:1 minimum vs. surface",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.8
+                        }
+                      ]
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "A3Zb3h",
+                      "name": "Grey contrast Rule",
+                      "fill": "$glass-edge",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "frame",
+                      "id": "bev2N",
+                      "name": "Rotation",
+                      "width": "fill_container",
+                      "gap": 16,
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "HKdzL",
+                          "name": "Key",
+                          "fill": "$ink-muted",
+                          "content": "Rotation",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.8
+                        },
+                        {
+                          "type": "text",
+                          "id": "obXB0",
+                          "name": "Value",
+                          "fill": "$ink-primary",
+                          "content": "never — the curl sets the axis",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.8
+                        }
+                      ]
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "yr1ol",
+                      "name": "Rotation Rule",
+                      "fill": "$glass-edge",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "frame",
+                      "id": "iiVFV",
+                      "name": "Recolour",
+                      "width": "fill_container",
+                      "gap": 16,
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "u6kFH",
+                          "name": "Key",
+                          "fill": "$ink-muted",
+                          "content": "Recolour",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.8
+                        },
+                        {
+                          "type": "text",
+                          "id": "T5eCum",
+                          "name": "Value",
+                          "fill": "$ink-primary",
+                          "content": "neutral ramp only, no hues",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.8
+                        }
+                      ]
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "K5R7X",
+                      "name": "Recolour Rule",
+                      "fill": "$glass-edge",
+                      "width": "fill_container",
+                      "height": 1
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "Kqekd",
+          "name": "04 Application",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 36,
+          "children": [
+            {
+              "id": "k0dTVF",
+              "type": "ref",
+              "ref": "Yrblr",
+              "name": "Header",
+              "width": 900,
+              "descendants": {
+                "seskw": {
+                  "content": "04 — APPLICATION"
+                },
+                "LvfzD": {
+                  "content": "Tiles and favicons"
+                },
+                "By96K": {
+                  "content": "The mark holds its shape down to 24px. Below that the bubble person closes up, so the icon switches to the badge — scroll alone, stroked — and stays favicon-proof at 16px."
+                }
+              }
+            },
+            {
+              "type": "frame",
+              "id": "SeB0A",
+              "name": "Application",
+              "width": "fill_container",
+              "gap": 32,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "q92bgI",
+                  "name": "App Tiles",
+                  "width": "fill_container",
+                  "fill": "$glass-01",
+                  "cornerRadius": "$radius-lg",
+                  "stroke": "$glass-edge",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 24,
+                  "padding": 40,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "fCUIk",
+                      "name": "Label",
+                      "fill": "$ink-muted",
+                      "content": "APP TILE — 1024 MASTER, SHOWN AT 200",
+                      "fontFamily": "$font-mono",
+                      "fontSize": 11,
+                      "fontWeight": "normal",
+                      "letterSpacing": 1.4
+                    },
+                    {
+                      "type": "frame",
+                      "id": "H1zyn7",
+                      "name": "Tiles",
+                      "width": "fill_container",
+                      "gap": 28,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "fETD4",
+                          "name": "Charcoal",
+                          "layout": "vertical",
+                          "gap": 12,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "UIAzS",
+                              "name": "Charcoal Tile",
+                              "width": 200,
+                              "height": 200,
+                              "fill": "$surface-base",
+                              "cornerRadius": 46,
+                              "stroke": "$glass-edge",
+                              "strokeWidth": 1,
+                              "layout": "vertical",
+                              "justifyContent": "center",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "id": "lUNiq",
+                                  "type": "ref",
+                                  "ref": "DSqaM",
+                                  "name": "Mark",
+                                  "width": 124,
+                                  "height": 124,
+                                  "descendants": {
+                                    "Xy1FF": {
+                                      "fill": "$list-white"
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            {
+                              "type": "text",
+                              "id": "tqciZ",
+                              "name": "Caption",
+                              "fill": "$ink-muted",
+                              "content": "CHARCOAL",
+                              "fontFamily": "$font-mono",
+                              "fontSize": 10,
+                              "fontWeight": "normal",
+                              "letterSpacing": 0.8
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "xviyK",
+                          "name": "True black",
+                          "layout": "vertical",
+                          "gap": 12,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "tNbdy",
+                              "name": "True black Tile",
+                              "width": 200,
+                              "height": 200,
+                              "fill": "$surface-true-black",
+                              "cornerRadius": 46,
+                              "stroke": "#FFFFFF1A",
+                              "strokeWidth": 1,
+                              "layout": "vertical",
+                              "justifyContent": "center",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "id": "SrRlT",
+                                  "type": "ref",
+                                  "ref": "DSqaM",
+                                  "name": "Mark",
+                                  "width": 124,
+                                  "height": 124,
+                                  "descendants": {
+                                    "Xy1FF": {
+                                      "fill": "$list-white"
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            {
+                              "type": "text",
+                              "id": "n1l4B",
+                              "name": "Caption",
+                              "fill": "$ink-muted",
+                              "content": "TRUE BLACK",
+                              "fontFamily": "$font-mono",
+                              "fontSize": 10,
+                              "fontWeight": "normal",
+                              "letterSpacing": 0.8
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "DpooI",
+                          "name": "Paper",
+                          "layout": "vertical",
+                          "gap": 12,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "i266OT",
+                              "name": "Paper Tile",
+                              "width": 200,
+                              "height": 200,
+                              "fill": "$surface-light",
+                              "cornerRadius": 46,
+                              "stroke": "#00000014",
+                              "strokeWidth": 1,
+                              "layout": "vertical",
+                              "justifyContent": "center",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "id": "l9yhQ",
+                                  "type": "ref",
+                                  "ref": "DSqaM",
+                                  "name": "Mark",
+                                  "width": 124,
+                                  "height": 124,
+                                  "descendants": {
+                                    "Xy1FF": {
+                                      "fill": "$ink-on-light"
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            {
+                              "type": "text",
+                              "id": "h0Gn8",
+                              "name": "Caption",
+                              "fill": "$ink-muted",
+                              "content": "PAPER",
+                              "fontFamily": "$font-mono",
+                              "fontSize": 10,
+                              "fontWeight": "normal",
+                              "letterSpacing": 0.8
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "U7kLr",
+                          "name": "Glass",
+                          "layout": "vertical",
+                          "gap": 12,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "XaJQJ",
+                              "name": "Glass Tile",
+                              "width": 200,
+                              "height": 200,
+                              "fill": "$glass-02",
+                              "cornerRadius": 46,
+                              "stroke": "$glass-edge",
+                              "strokeWidth": 1,
+                              "layout": "vertical",
+                              "justifyContent": "center",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "id": "zgn6I",
+                                  "type": "ref",
+                                  "ref": "DSqaM",
+                                  "name": "Mark",
+                                  "width": 124,
+                                  "height": 124,
+                                  "descendants": {
+                                    "Xy1FF": {
+                                      "fill": "$list-white"
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            {
+                              "type": "text",
+                              "id": "jCc2J",
+                              "name": "Caption",
+                              "fill": "$ink-muted",
+                              "content": "GLASS",
+                              "fontFamily": "$font-mono",
+                              "fontSize": 10,
+                              "fontWeight": "normal",
+                              "letterSpacing": 0.8
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "EFU9q",
+                  "name": "Favicon Proof",
+                  "width": 640,
+                  "fill": "$glass-01",
+                  "cornerRadius": "$radius-lg",
+                  "stroke": "$glass-edge",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 24,
+                  "padding": 40,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "YnQ44",
+                      "name": "Label",
+                      "fill": "$ink-muted",
+                      "content": "SMALL SIZES",
+                      "fontFamily": "$font-mono",
+                      "fontSize": 11,
+                      "fontWeight": "normal",
+                      "letterSpacing": 1.4
+                    },
+                    {
+                      "type": "frame",
+                      "id": "abjhI",
+                      "name": "Sizes",
+                      "gap": 34,
+                      "alignItems": "end",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "k9v5Ll",
+                          "name": "Mark 64",
+                          "layout": "vertical",
+                          "gap": 10,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "id": "tUMCg",
+                              "type": "ref",
+                              "ref": "DSqaM",
+                              "name": "Mark",
+                              "width": 64,
+                              "height": 64
+                            },
+                            {
+                              "type": "text",
+                              "id": "l85tmI",
+                              "name": "Label",
+                              "fill": "$ink-muted",
+                              "content": "64 MARK",
+                              "fontFamily": "$font-mono",
+                              "fontSize": 10,
+                              "fontWeight": "normal",
+                              "letterSpacing": 0.6
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "JGh22",
+                          "name": "Mark 32",
+                          "layout": "vertical",
+                          "gap": 10,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "id": "ZAhnU",
+                              "type": "ref",
+                              "ref": "DSqaM",
+                              "name": "Mark",
+                              "width": 32,
+                              "height": 32
+                            },
+                            {
+                              "type": "text",
+                              "id": "KrKct",
+                              "name": "Label",
+                              "fill": "$ink-muted",
+                              "content": "32 MARK",
+                              "fontFamily": "$font-mono",
+                              "fontSize": 10,
+                              "fontWeight": "normal",
+                              "letterSpacing": 0.6
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "X04CvS",
+                          "name": "Mark 24",
+                          "layout": "vertical",
+                          "gap": 10,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "id": "uL6xi",
+                              "type": "ref",
+                              "ref": "DSqaM",
+                              "name": "Mark",
+                              "width": 24,
+                              "height": 24
+                            },
+                            {
+                              "type": "text",
+                              "id": "j9CF4G",
+                              "name": "Label",
+                              "fill": "$ink-muted",
+                              "content": "24 MARK",
+                              "fontFamily": "$font-mono",
+                              "fontSize": 10,
+                              "fontWeight": "normal",
+                              "letterSpacing": 0.6
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "Boi5P",
+                          "name": "Badge 20",
+                          "layout": "vertical",
+                          "gap": 10,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "id": "l0r0Ce",
+                              "type": "ref",
+                              "ref": "pKEfC",
+                              "name": "Badge 20",
+                              "width": 20,
+                              "height": 20,
+                              "descendants": {
+                                "NLwnr": {
+                                  "fill": "$list-white",
+                                  "stroke": "$list-white",
+                                  "strokeWidth": 1.76
+                                }
+                              }
+                            },
+                            {
+                              "type": "text",
+                              "id": "vLkSG",
+                              "name": "Label",
+                              "fill": "$ink-secondary",
+                              "content": "20 BADGE",
+                              "fontFamily": "$font-mono",
+                              "fontSize": 10,
+                              "fontWeight": "normal",
+                              "letterSpacing": 0.6
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "Ml2ft",
+                          "name": "Badge 16",
+                          "layout": "vertical",
+                          "gap": 10,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "id": "oXDSe",
+                              "type": "ref",
+                              "ref": "pKEfC",
+                              "name": "Badge 16",
+                              "width": 16,
+                              "height": 16,
+                              "descendants": {
+                                "NLwnr": {
+                                  "fill": "$list-white",
+                                  "stroke": "$list-white",
+                                  "strokeWidth": 1.41
+                                }
+                              }
+                            },
+                            {
+                              "type": "text",
+                              "id": "CZ09h",
+                              "name": "Label",
+                              "fill": "$ink-secondary",
+                              "content": "16 BADGE",
+                              "fontFamily": "$font-mono",
+                              "fontSize": 10,
+                              "fontWeight": "normal",
+                              "letterSpacing": 0.6
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "KjyJb",
+                          "name": "Badge 12",
+                          "layout": "vertical",
+                          "gap": 10,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "id": "tOygb",
+                              "type": "ref",
+                              "ref": "pKEfC",
+                              "name": "Badge 12",
+                              "width": 12,
+                              "height": 12,
+                              "descendants": {
+                                "NLwnr": {
+                                  "fill": "$list-white",
+                                  "stroke": "$list-white",
+                                  "strokeWidth": 1.06
+                                }
+                              }
+                            },
+                            {
+                              "type": "text",
+                              "id": "LHOoM",
+                              "name": "Label",
+                              "fill": "$ink-secondary",
+                              "content": "12 BADGE",
+                              "fontFamily": "$font-mono",
+                              "fontSize": 10,
+                              "fontWeight": "normal",
+                              "letterSpacing": 0.6
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "jSPqx",
+                      "name": "Rule",
+                      "fill": "$glass-edge",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "text",
+                      "id": "nGmh2",
+                      "name": "Switch Note",
+                      "fill": "$ink-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Switch point: 24px. Above it, ship the full mark with the bubble person. Below it, ship the badge — the person would close into a dot and the scroll would lose its curl.",
+                      "lineHeight": 1.55,
+                      "fontFamily": "$font-ui",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "o7xvv",
+          "name": "05 Tokens",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 36,
+          "children": [
+            {
+              "id": "g5LDL",
+              "type": "ref",
+              "ref": "Yrblr",
+              "name": "Header",
+              "width": 900,
+              "descendants": {
+                "seskw": {
+                  "content": "05 — DESIGN TOKENS"
+                },
+                "LvfzD": {
+                  "content": "A neutral ramp, nothing else"
+                },
+                "By96K": {
+                  "content": "Charcoal and true black carry the world; white is the only colour. Depth comes from layered translucency and a one-pixel edge highlight, never from hue."
+                }
+              }
+            },
+            {
+              "type": "frame",
+              "id": "KW1yK",
+              "name": "Colour",
+              "width": "fill_container",
+              "gap": 32,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "INFuD",
+                  "name": "SURFACES",
+                  "width": "fill_container",
+                  "fill": "$glass-01",
+                  "cornerRadius": "$radius-lg",
+                  "stroke": "$glass-edge",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 16,
+                  "padding": 32,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "f7KQj",
+                      "name": "Label",
+                      "fill": "$ink-muted",
+                      "content": "SURFACES",
+                      "fontFamily": "$font-mono",
+                      "fontSize": 11,
+                      "fontWeight": "normal",
+                      "letterSpacing": 1.4
+                    },
+                    {
+                      "id": "fSlsp",
+                      "type": "ref",
+                      "ref": "vNbyq",
+                      "name": "surface-base",
+                      "width": "fill_container",
+                      "descendants": {
+                        "R1DNA": {
+                          "fill": "$surface-base"
+                        },
+                        "YLuNi": {
+                          "content": "surface-base"
+                        },
+                        "s47xU": {
+                          "content": "#1A1A1C"
+                        }
+                      }
+                    },
+                    {
+                      "id": "FTHkK",
+                      "type": "ref",
+                      "ref": "vNbyq",
+                      "name": "surface-deep",
+                      "width": "fill_container",
+                      "descendants": {
+                        "R1DNA": {
+                          "fill": "$surface-deep"
+                        },
+                        "YLuNi": {
+                          "content": "surface-deep"
+                        },
+                        "s47xU": {
+                          "content": "#0B0B0C"
+                        }
+                      }
+                    },
+                    {
+                      "id": "PQvAu",
+                      "type": "ref",
+                      "ref": "vNbyq",
+                      "name": "surface-true-black",
+                      "width": "fill_container",
+                      "descendants": {
+                        "R1DNA": {
+                          "fill": "$surface-true-black"
+                        },
+                        "YLuNi": {
+                          "content": "surface-true-black"
+                        },
+                        "s47xU": {
+                          "content": "#000000"
+                        }
+                      }
+                    },
+                    {
+                      "id": "fcBOU",
+                      "type": "ref",
+                      "ref": "vNbyq",
+                      "name": "surface-light",
+                      "width": "fill_container",
+                      "descendants": {
+                        "R1DNA": {
+                          "fill": "$surface-light"
+                        },
+                        "YLuNi": {
+                          "content": "surface-light"
+                        },
+                        "s47xU": {
+                          "content": "#F4F4F5"
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "F2sVO",
+                  "name": "GLASS",
+                  "width": "fill_container",
+                  "fill": "$glass-01",
+                  "cornerRadius": "$radius-lg",
+                  "stroke": "$glass-edge",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 16,
+                  "padding": 32,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "WoZIl",
+                      "name": "Label",
+                      "fill": "$ink-muted",
+                      "content": "GLASS",
+                      "fontFamily": "$font-mono",
+                      "fontSize": 11,
+                      "fontWeight": "normal",
+                      "letterSpacing": 1.4
+                    },
+                    {
+                      "id": "wc6a6",
+                      "type": "ref",
+                      "ref": "vNbyq",
+                      "name": "glass-01",
+                      "width": "fill_container",
+                      "descendants": {
+                        "R1DNA": {
+                          "fill": "$glass-01"
+                        },
+                        "YLuNi": {
+                          "content": "glass-01"
+                        },
+                        "s47xU": {
+                          "content": "#FFFFFF0A"
+                        }
+                      }
+                    },
+                    {
+                      "id": "PsAgW",
+                      "type": "ref",
+                      "ref": "vNbyq",
+                      "name": "glass-02",
+                      "width": "fill_container",
+                      "descendants": {
+                        "R1DNA": {
+                          "fill": "$glass-02"
+                        },
+                        "YLuNi": {
+                          "content": "glass-02"
+                        },
+                        "s47xU": {
+                          "content": "#FFFFFF14"
+                        }
+                      }
+                    },
+                    {
+                      "id": "LTXLv",
+                      "type": "ref",
+                      "ref": "vNbyq",
+                      "name": "glass-03",
+                      "width": "fill_container",
+                      "descendants": {
+                        "R1DNA": {
+                          "fill": "$glass-03"
+                        },
+                        "YLuNi": {
+                          "content": "glass-03"
+                        },
+                        "s47xU": {
+                          "content": "#FFFFFF1F"
+                        }
+                      }
+                    },
+                    {
+                      "id": "pwT6J",
+                      "type": "ref",
+                      "ref": "vNbyq",
+                      "name": "glass-edge",
+                      "width": "fill_container",
+                      "descendants": {
+                        "R1DNA": {
+                          "fill": "$glass-edge"
+                        },
+                        "YLuNi": {
+                          "content": "glass-edge"
+                        },
+                        "s47xU": {
+                          "content": "#FFFFFF2E"
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "c46akE",
+                  "name": "INK",
+                  "width": "fill_container",
+                  "fill": "$glass-01",
+                  "cornerRadius": "$radius-lg",
+                  "stroke": "$glass-edge",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 16,
+                  "padding": 32,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "pGBl8",
+                      "name": "Label",
+                      "fill": "$ink-muted",
+                      "content": "INK",
+                      "fontFamily": "$font-mono",
+                      "fontSize": 11,
+                      "fontWeight": "normal",
+                      "letterSpacing": 1.4
+                    },
+                    {
+                      "id": "cjnkV",
+                      "type": "ref",
+                      "ref": "vNbyq",
+                      "name": "ink-primary",
+                      "width": "fill_container",
+                      "descendants": {
+                        "R1DNA": {
+                          "fill": "$ink-primary"
+                        },
+                        "YLuNi": {
+                          "content": "ink-primary"
+                        },
+                        "s47xU": {
+                          "content": "#FFFFFF"
+                        }
+                      }
+                    },
+                    {
+                      "id": "zEPVt",
+                      "type": "ref",
+                      "ref": "vNbyq",
+                      "name": "ink-secondary",
+                      "width": "fill_container",
+                      "descendants": {
+                        "R1DNA": {
+                          "fill": "$ink-secondary"
+                        },
+                        "YLuNi": {
+                          "content": "ink-secondary"
+                        },
+                        "s47xU": {
+                          "content": "#FFFFFFB8"
+                        }
+                      }
+                    },
+                    {
+                      "id": "jOtHm",
+                      "type": "ref",
+                      "ref": "vNbyq",
+                      "name": "ink-muted",
+                      "width": "fill_container",
+                      "descendants": {
+                        "R1DNA": {
+                          "fill": "$ink-muted"
+                        },
+                        "YLuNi": {
+                          "content": "ink-muted"
+                        },
+                        "s47xU": {
+                          "content": "#FFFFFF75"
+                        }
+                      }
+                    },
+                    {
+                      "id": "LHMRc",
+                      "type": "ref",
+                      "ref": "vNbyq",
+                      "name": "ink-faint",
+                      "width": "fill_container",
+                      "descendants": {
+                        "R1DNA": {
+                          "fill": "$ink-faint"
+                        },
+                        "YLuNi": {
+                          "content": "ink-faint"
+                        },
+                        "s47xU": {
+                          "content": "#FFFFFF42"
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "nPe9T",
+                  "name": "LIST STATES",
+                  "width": "fill_container",
+                  "fill": "$glass-01",
+                  "cornerRadius": "$radius-lg",
+                  "stroke": "$glass-edge",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 16,
+                  "padding": 32,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "XkpYc",
+                      "name": "Label",
+                      "fill": "$ink-muted",
+                      "content": "LIST STATES",
+                      "fontFamily": "$font-mono",
+                      "fontSize": 11,
+                      "fontWeight": "normal",
+                      "letterSpacing": 1.4
+                    },
+                    {
+                      "id": "aCWez",
+                      "type": "ref",
+                      "ref": "vNbyq",
+                      "name": "list-white",
+                      "width": "fill_container",
+                      "descendants": {
+                        "R1DNA": {
+                          "fill": "$list-white"
+                        },
+                        "YLuNi": {
+                          "content": "list-white"
+                        },
+                        "s47xU": {
+                          "content": "#FFFFFF"
+                        }
+                      }
+                    },
+                    {
+                      "id": "rlVtK",
+                      "type": "ref",
+                      "ref": "vNbyq",
+                      "name": "list-grey",
+                      "width": "fill_container",
+                      "descendants": {
+                        "R1DNA": {
+                          "fill": "$list-grey"
+                        },
+                        "YLuNi": {
+                          "content": "list-grey"
+                        },
+                        "s47xU": {
+                          "content": "#6E6E76"
+                        }
+                      }
+                    },
+                    {
+                      "id": "w46Lg",
+                      "type": "ref",
+                      "ref": "vNbyq",
+                      "name": "list-black",
+                      "width": "fill_container",
+                      "descendants": {
+                        "R1DNA": {
+                          "fill": "$list-black"
+                        },
+                        "YLuNi": {
+                          "content": "list-black"
+                        },
+                        "s47xU": {
+                          "content": "#0B0B0C"
+                        }
+                      }
+                    },
+                    {
+                      "id": "NQHlK",
+                      "type": "ref",
+                      "ref": "vNbyq",
+                      "name": "ink-on-light",
+                      "width": "fill_container",
+                      "descendants": {
+                        "R1DNA": {
+                          "fill": "$ink-on-light"
+                        },
+                        "YLuNi": {
+                          "content": "ink-on-light"
+                        },
+                        "s47xU": {
+                          "content": "#1A1A1C"
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "wz7uT",
+              "name": "Type And Space",
+              "width": "fill_container",
+              "gap": 32,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "qu9WF",
+                  "name": "Typography",
+                  "width": "fill_container",
+                  "fill": "$glass-01",
+                  "cornerRadius": "$radius-lg",
+                  "stroke": "$glass-edge",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 26,
+                  "padding": 40,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "W7IVLC",
+                      "name": "Label",
+                      "fill": "$ink-muted",
+                      "content": "TYPOGRAPHY",
+                      "fontFamily": "$font-mono",
+                      "fontSize": 11,
+                      "fontWeight": "normal",
+                      "letterSpacing": 1.4
+                    },
+                    {
+                      "type": "frame",
+                      "id": "AqW8x",
+                      "name": "ARAPEY — DISPLAY 56 / 1.0",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 10,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "VGgos",
+                          "name": "Sample",
+                          "fill": "$ink-primary",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "Whitelist",
+                          "lineHeight": 1,
+                          "fontFamily": "$font-heading",
+                          "fontSize": 56,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "upjRj",
+                          "name": "Spec",
+                          "fill": "$ink-faint",
+                          "content": "ARAPEY — DISPLAY 56 / 1.0",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 10,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.8
+                        }
+                      ]
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "obuAT",
+                      "name": "Rule",
+                      "fill": "$glass-edge",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "frame",
+                      "id": "hbAFo",
+                      "name": "ARAPEY — HEADING 34 / 1.1",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 10,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "L29Fe",
+                          "name": "Sample",
+                          "fill": "$ink-primary",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "Your list is yours",
+                          "lineHeight": 1.1,
+                          "fontFamily": "$font-heading",
+                          "fontSize": 34,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "Q8NLj",
+                          "name": "Spec",
+                          "fill": "$ink-faint",
+                          "content": "ARAPEY — HEADING 34 / 1.1",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 10,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.8
+                        }
+                      ]
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "HQcot",
+                      "name": "Rule",
+                      "fill": "$glass-edge",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "frame",
+                      "id": "bgxWm",
+                      "name": "INTER — BODY 16 / 1.55",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 10,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "DDUnD",
+                          "name": "Sample",
+                          "fill": "$ink-secondary",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "Share a card, keep the list. Nothing leaves your device until you say so.",
+                          "lineHeight": 1.55,
+                          "fontFamily": "$font-ui",
+                          "fontSize": 16,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "EulzQ",
+                          "name": "Spec",
+                          "fill": "$ink-faint",
+                          "content": "INTER — BODY 16 / 1.55",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 10,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.8
+                        }
+                      ]
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "x2FBX",
+                      "name": "Rule",
+                      "fill": "$glass-edge",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "frame",
+                      "id": "tzzZN",
+                      "name": "JETBRAINS MONO — LABEL 12 / 1.4 · +1.4 TRACKING",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 10,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "lyssI",
+                          "name": "Sample",
+                          "fill": "$ink-muted",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "WHITELIST · GREYLIST · BLACKLIST",
+                          "lineHeight": 1.4,
+                          "fontFamily": "$font-mono",
+                          "fontSize": 12,
+                          "fontWeight": "normal",
+                          "letterSpacing": 1.4
+                        },
+                        {
+                          "type": "text",
+                          "id": "weq9r",
+                          "name": "Spec",
+                          "fill": "$ink-faint",
+                          "content": "JETBRAINS MONO — LABEL 12 / 1.4 · +1.4 TRACKING",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 10,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.8
+                        }
+                      ]
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "MnRo3",
+                      "name": "Rule",
+                      "fill": "$glass-edge",
+                      "width": "fill_container",
+                      "height": 1
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "PNFi3",
+                  "name": "Space And Radius",
+                  "width": 760,
+                  "fill": "$glass-01",
+                  "cornerRadius": "$radius-lg",
+                  "stroke": "$glass-edge",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 26,
+                  "padding": 40,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "iFLor",
+                      "name": "Label",
+                      "fill": "$ink-muted",
+                      "content": "SPACING SCALE",
+                      "fontFamily": "$font-mono",
+                      "fontSize": 11,
+                      "fontWeight": "normal",
+                      "letterSpacing": 1.4
+                    },
+                    {
+                      "type": "frame",
+                      "id": "f3W1FR",
+                      "name": "space-1",
+                      "width": "fill_container",
+                      "gap": 16,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "tbbcF",
+                          "name": "Token",
+                          "fill": "$ink-primary",
+                          "textGrowth": "fixed-width",
+                          "width": 110,
+                          "content": "space-1",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 12,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.6
+                        },
+                        {
+                          "type": "rectangle",
+                          "cornerRadius": 2,
+                          "id": "Vh0Gi",
+                          "name": "Bar",
+                          "fill": "$glass-03",
+                          "width": 16,
+                          "height": 10
+                        },
+                        {
+                          "type": "text",
+                          "id": "ZOCUs",
+                          "name": "Value",
+                          "fill": "$ink-muted",
+                          "content": "4 px",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.6
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "OU1cK",
+                      "name": "space-2",
+                      "width": "fill_container",
+                      "gap": 16,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Yg0Za",
+                          "name": "Token",
+                          "fill": "$ink-primary",
+                          "textGrowth": "fixed-width",
+                          "width": 110,
+                          "content": "space-2",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 12,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.6
+                        },
+                        {
+                          "type": "rectangle",
+                          "cornerRadius": 2,
+                          "id": "YQuIU",
+                          "name": "Bar",
+                          "fill": "$glass-03",
+                          "width": 32,
+                          "height": 10
+                        },
+                        {
+                          "type": "text",
+                          "id": "ccB9R",
+                          "name": "Value",
+                          "fill": "$ink-muted",
+                          "content": "8 px",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.6
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "igZDL",
+                      "name": "space-3",
+                      "width": "fill_container",
+                      "gap": 16,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "BY559",
+                          "name": "Token",
+                          "fill": "$ink-primary",
+                          "textGrowth": "fixed-width",
+                          "width": 110,
+                          "content": "space-3",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 12,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.6
+                        },
+                        {
+                          "type": "rectangle",
+                          "cornerRadius": 2,
+                          "id": "nAUYX",
+                          "name": "Bar",
+                          "fill": "$glass-03",
+                          "width": 64,
+                          "height": 10
+                        },
+                        {
+                          "type": "text",
+                          "id": "z7P9mR",
+                          "name": "Value",
+                          "fill": "$ink-muted",
+                          "content": "16 px",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.6
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "QRiL3",
+                      "name": "space-4",
+                      "width": "fill_container",
+                      "gap": 16,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "jwaU0",
+                          "name": "Token",
+                          "fill": "$ink-primary",
+                          "textGrowth": "fixed-width",
+                          "width": 110,
+                          "content": "space-4",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 12,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.6
+                        },
+                        {
+                          "type": "rectangle",
+                          "cornerRadius": 2,
+                          "id": "SITKI",
+                          "name": "Bar",
+                          "fill": "$glass-03",
+                          "width": 96,
+                          "height": 10
+                        },
+                        {
+                          "type": "text",
+                          "id": "IXwIe",
+                          "name": "Value",
+                          "fill": "$ink-muted",
+                          "content": "24 px",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.6
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "h8ayUy",
+                      "name": "space-5",
+                      "width": "fill_container",
+                      "gap": 16,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "yZzSe",
+                          "name": "Token",
+                          "fill": "$ink-primary",
+                          "textGrowth": "fixed-width",
+                          "width": 110,
+                          "content": "space-5",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 12,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.6
+                        },
+                        {
+                          "type": "rectangle",
+                          "cornerRadius": 2,
+                          "id": "tmM9n",
+                          "name": "Bar",
+                          "fill": "$glass-03",
+                          "width": 160,
+                          "height": 10
+                        },
+                        {
+                          "type": "text",
+                          "id": "tkePw",
+                          "name": "Value",
+                          "fill": "$ink-muted",
+                          "content": "40 px",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.6
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "ytGWA",
+                      "name": "space-6",
+                      "width": "fill_container",
+                      "gap": 16,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "YkFXL",
+                          "name": "Token",
+                          "fill": "$ink-primary",
+                          "textGrowth": "fixed-width",
+                          "width": 110,
+                          "content": "space-6",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 12,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.6
+                        },
+                        {
+                          "type": "rectangle",
+                          "cornerRadius": 2,
+                          "id": "gbUQD",
+                          "name": "Bar",
+                          "fill": "$glass-03",
+                          "width": 256,
+                          "height": 10
+                        },
+                        {
+                          "type": "text",
+                          "id": "qWoFP",
+                          "name": "Value",
+                          "fill": "$ink-muted",
+                          "content": "64 px",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.6
+                        }
+                      ]
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "pFIHi",
+                      "name": "Rule",
+                      "fill": "$glass-edge",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "text",
+                      "id": "M6QArh",
+                      "name": "Radius Label",
+                      "fill": "$ink-muted",
+                      "content": "CORNER RADIUS",
+                      "fontFamily": "$font-mono",
+                      "fontSize": 11,
+                      "fontWeight": "normal",
+                      "letterSpacing": 1.4
+                    },
+                    {
+                      "type": "frame",
+                      "id": "PWykS",
+                      "name": "Radii",
+                      "gap": 24,
+                      "alignItems": "end",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "dXRX2",
+                          "name": "radius-sm",
+                          "layout": "vertical",
+                          "gap": 10,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "rectangle",
+                              "cornerRadius": 8,
+                              "id": "BspXQ",
+                              "name": "Sample",
+                              "fill": "$glass-02",
+                              "width": 96,
+                              "height": 72,
+                              "stroke": "$glass-edge",
+                              "strokeWidth": 1
+                            },
+                            {
+                              "type": "text",
+                              "id": "btLpd",
+                              "name": "Label",
+                              "fill": "$ink-muted",
+                              "content": "radius-sm · 8",
+                              "fontFamily": "$font-mono",
+                              "fontSize": 10,
+                              "fontWeight": "normal",
+                              "letterSpacing": 0.6
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "bXVne",
+                          "name": "radius-md",
+                          "layout": "vertical",
+                          "gap": 10,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "rectangle",
+                              "cornerRadius": 16,
+                              "id": "EFfai",
+                              "name": "Sample",
+                              "fill": "$glass-02",
+                              "width": 96,
+                              "height": 72,
+                              "stroke": "$glass-edge",
+                              "strokeWidth": 1
+                            },
+                            {
+                              "type": "text",
+                              "id": "ir7ui",
+                              "name": "Label",
+                              "fill": "$ink-muted",
+                              "content": "radius-md · 16",
+                              "fontFamily": "$font-mono",
+                              "fontSize": 10,
+                              "fontWeight": "normal",
+                              "letterSpacing": 0.6
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "SXlBL",
+                          "name": "radius-lg",
+                          "layout": "vertical",
+                          "gap": 10,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "rectangle",
+                              "cornerRadius": 28,
+                              "id": "phQvT",
+                              "name": "Sample",
+                              "fill": "$glass-02",
+                              "width": 96,
+                              "height": 72,
+                              "stroke": "$glass-edge",
+                              "strokeWidth": 1
+                            },
+                            {
+                              "type": "text",
+                              "id": "ND9sz",
+                              "name": "Label",
+                              "fill": "$ink-muted",
+                              "content": "radius-lg · 28",
+                              "fontFamily": "$font-mono",
+                              "fontSize": 10,
+                              "fontWeight": "normal",
+                              "letterSpacing": 0.6
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "N5FwF",
+                          "name": "tile",
+                          "layout": "vertical",
+                          "gap": 10,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "rectangle",
+                              "cornerRadius": 46,
+                              "id": "ggVBk",
+                              "name": "Sample",
+                              "fill": "$glass-02",
+                              "width": 96,
+                              "height": 72,
+                              "stroke": "$glass-edge",
+                              "strokeWidth": 1
+                            },
+                            {
+                              "type": "text",
+                              "id": "s8nr69",
+                              "name": "Label",
+                              "fill": "$ink-muted",
+                              "content": "tile · 46",
+                              "fontFamily": "$font-mono",
+                              "fontSize": 10,
+                              "fontWeight": "normal",
+                              "letterSpacing": 0.6
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "fQhti",
+          "name": "06 Constraints",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 36,
+          "children": [
+            {
+              "id": "X838H",
+              "type": "ref",
+              "ref": "Yrblr",
+              "name": "Header",
+              "width": 900,
+              "descendants": {
+                "seskw": {
+                  "content": "06 — CONSTRAINTS"
+                },
+                "LvfzD": {
+                  "content": "What holds the identity together"
+                },
+                "By96K": {
+                  "content": "Five rules the mark, the badges and every surface built from them have to keep."
+                }
+              }
+            },
+            {
+              "type": "frame",
+              "id": "iwnm7",
+              "name": "Constraints",
+              "width": "fill_container",
+              "gap": 32,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "VYHCl",
+                  "name": "Principles",
+                  "width": "fill_container",
+                  "fill": "$glass-01",
+                  "cornerRadius": "$radius-lg",
+                  "stroke": "$glass-edge",
+                  "strokeWidth": 1,
+                  "gap": 36,
+                  "padding": 40,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "Iy3YO",
+                      "name": "01 Pure SVG masters",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 12,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "IigXR",
+                          "name": "Number",
+                          "fill": "$ink-faint",
+                          "content": "01",
+                          "lineHeight": 1,
+                          "fontFamily": "$font-heading",
+                          "fontSize": 44,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "revOD",
+                          "name": "Title",
+                          "fill": "$ink-primary",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "Pure SVG masters",
+                          "lineHeight": 1.3,
+                          "fontFamily": "$font-ui",
+                          "fontSize": 16,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "RLn2l",
+                          "name": "Body",
+                          "fill": "$ink-secondary",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "Vectors stay vectors. Raster exports are deliverables, never the source of truth.",
+                          "lineHeight": 1.55,
+                          "fontFamily": "$font-ui",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "uyguR",
+                      "name": "02 Depth that flattens",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 12,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "eNsUv",
+                          "name": "Number",
+                          "fill": "$ink-faint",
+                          "content": "02",
+                          "lineHeight": 1,
+                          "fontFamily": "$font-heading",
+                          "fontSize": 44,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "aPinY",
+                          "name": "Title",
+                          "fill": "$ink-primary",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "Depth that flattens",
+                          "lineHeight": 1.3,
+                          "fontFamily": "$font-ui",
+                          "fontSize": 16,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "x4IQG",
+                          "name": "Body",
+                          "fill": "$ink-secondary",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "Glass layering and a 1px edge highlight carry the depth — pull them away and the mark still works in solid black or solid white.",
+                          "lineHeight": 1.55,
+                          "fontFamily": "$font-ui",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "VJLpG",
+                      "name": "03 No hues",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 12,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "X98i2",
+                          "name": "Number",
+                          "fill": "$ink-faint",
+                          "content": "03",
+                          "lineHeight": 1,
+                          "fontFamily": "$font-heading",
+                          "fontSize": 44,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "PDgMS",
+                          "name": "Title",
+                          "fill": "$ink-primary",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "No hues",
+                          "lineHeight": 1.3,
+                          "fontFamily": "$font-ui",
+                          "fontSize": 16,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "qnKCS",
+                          "name": "Body",
+                          "fill": "$ink-secondary",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "The neutral ramp is the whole palette. Colour never carries meaning here; fill does.",
+                          "lineHeight": 1.55,
+                          "fontFamily": "$font-ui",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "jv57x",
+                      "name": "04 Tiny and large",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 12,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "CT6uF",
+                          "name": "Number",
+                          "fill": "$ink-faint",
+                          "content": "04",
+                          "lineHeight": 1,
+                          "fontFamily": "$font-heading",
+                          "fontSize": 44,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "T2Yywf",
+                          "name": "Title",
+                          "fill": "$ink-primary",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "Tiny and large",
+                          "lineHeight": 1.3,
+                          "fontFamily": "$font-ui",
+                          "fontSize": 16,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "N5A9F",
+                          "name": "Body",
+                          "fill": "$ink-secondary",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "Favicon-proof at 16px, billboard-clean at 1024. The switch from mark to badge happens at 24.",
+                          "lineHeight": 1.55,
+                          "fontFamily": "$font-ui",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "iuSxi",
+                      "name": "05 No type in the mark",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 12,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "U8R2VK",
+                          "name": "Number",
+                          "fill": "$ink-faint",
+                          "content": "05",
+                          "lineHeight": 1,
+                          "fontFamily": "$font-heading",
+                          "fontSize": 44,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "rrOur",
+                          "name": "Title",
+                          "fill": "$ink-primary",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "No type in the mark",
+                          "lineHeight": 1.3,
+                          "fontFamily": "$font-ui",
+                          "fontSize": 16,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "D4Ztp9",
+                          "name": "Body",
+                          "fill": "$ink-secondary",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "The scroll never carries lettering. Wordmark contexts set Arapey beside it on a glass surface.",
+                          "lineHeight": 1.55,
+                          "fontFamily": "$font-ui",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "G2qDEX",
+                  "name": "Source Files",
+                  "width": 600,
+                  "fill": "$glass-01",
+                  "cornerRadius": "$radius-lg",
+                  "stroke": "$glass-edge",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 18,
+                  "padding": 40,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "X5qHQy",
+                      "name": "Label",
+                      "fill": "$ink-muted",
+                      "content": "MASTERS",
+                      "fontFamily": "$font-mono",
+                      "fontSize": 11,
+                      "fontWeight": "normal",
+                      "letterSpacing": 1.4
+                    },
+                    {
+                      "type": "frame",
+                      "id": "NEHWG",
+                      "name": "wl-list-01-classic.svg",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 5,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Q2Tnqs",
+                          "name": "File",
+                          "fill": "$ink-primary",
+                          "content": "wl-list-01-classic.svg",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 12,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.6
+                        },
+                        {
+                          "type": "text",
+                          "id": "hOfGG",
+                          "name": "Role",
+                          "fill": "$ink-muted",
+                          "content": "primary mark — scroll + bubble person",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.4
+                        }
+                      ]
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "nbufy",
+                      "name": "Rule",
+                      "fill": "$glass-edge",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "frame",
+                      "id": "k1Fl4r",
+                      "name": "wl-badge-whitelist.svg",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 5,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "uJmS9",
+                          "name": "File",
+                          "fill": "$ink-primary",
+                          "content": "wl-badge-whitelist.svg",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 12,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.6
+                        },
+                        {
+                          "type": "text",
+                          "id": "c7hPx",
+                          "name": "Role",
+                          "fill": "$ink-muted",
+                          "content": "badge — white state",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.4
+                        }
+                      ]
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "czzOg",
+                      "name": "Rule",
+                      "fill": "$glass-edge",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "frame",
+                      "id": "P0DAB",
+                      "name": "wl-badge-greylist.svg",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 5,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "euXKD",
+                          "name": "File",
+                          "fill": "$ink-primary",
+                          "content": "wl-badge-greylist.svg",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 12,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.6
+                        },
+                        {
+                          "type": "text",
+                          "id": "j3896X",
+                          "name": "Role",
+                          "fill": "$ink-muted",
+                          "content": "badge — grey state",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.4
+                        }
+                      ]
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "Maajj",
+                      "name": "Rule",
+                      "fill": "$glass-edge",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "frame",
+                      "id": "uoKjE",
+                      "name": "wl-badge-blacklist.svg",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 5,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "L020v",
+                          "name": "File",
+                          "fill": "$ink-primary",
+                          "content": "wl-badge-blacklist.svg",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 12,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.6
+                        },
+                        {
+                          "type": "text",
+                          "id": "Xon1m",
+                          "name": "Role",
+                          "fill": "$ink-muted",
+                          "content": "badge — black state",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.4
+                        }
+                      ]
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "Zf2i0",
+                      "name": "Rule",
+                      "fill": "$glass-edge",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Y07dm2",
+                      "name": "design-guide.txt",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 5,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "F5Jvdj",
+                          "name": "File",
+                          "fill": "$ink-primary",
+                          "content": "design-guide.txt",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 12,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.6
+                        },
+                        {
+                          "type": "text",
+                          "id": "W5v2WZ",
+                          "name": "Role",
+                          "fill": "$ink-muted",
+                          "content": "written identity brief",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.4
+                        }
+                      ]
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "KJqO9",
+                      "name": "Rule",
+                      "fill": "$glass-edge",
+                      "width": "fill_container",
+                      "height": 1
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "rectangle",
+          "id": "qcWLD",
+          "name": "Footer Rule",
+          "fill": "$glass-edge",
+          "width": "fill_container",
+          "height": 1
+        },
+        {
+          "type": "frame",
+          "id": "o0mbw8",
+          "name": "Footer",
+          "width": "fill_container",
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "K5Ww1",
+              "name": "Left",
+              "fill": "$ink-muted",
+              "content": "WHITELIST — MYWHITELIST.APP",
+              "fontFamily": "$font-mono",
+              "fontSize": 11,
+              "fontWeight": "normal",
+              "letterSpacing": 1.4
+            },
+            {
+              "type": "text",
+              "id": "lu4uK",
+              "name": "Right",
+              "fill": "$ink-muted",
+              "content": "COMPONENT SHEET v1.0 — PRIVACY-FIRST CONTACT SHARING",
+              "fontFamily": "$font-mono",
+              "fontSize": 11,
+              "fontWeight": "normal",
+              "letterSpacing": 1.4
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "HFxGk",
+      "x": 2796,
+      "y": 0,
+      "name": "State Card",
+      "reusable": true,
+      "width": 620,
+      "fill": "$glass-01",
+      "cornerRadius": "$radius-lg",
+      "stroke": "$glass-edge",
+      "strokeWidth": 1,
+      "layout": "vertical",
+      "gap": 26,
+      "padding": 40,
+      "children": [
+        {
+          "type": "frame",
+          "id": "Z7ePab",
+          "name": "Head",
+          "width": "fill_container",
+          "gap": 24,
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "D5yUZR",
+              "name": "Chip",
+              "fill": "#FFFFFF00",
+              "cornerRadius": 18,
+              "layout": "vertical",
+              "padding": 14,
+              "children": [
+                {
+                  "id": "hJMmJ",
+                  "type": "ref",
+                  "ref": "pKEfC",
+                  "name": "Badge",
+                  "width": 64,
+                  "height": 64,
+                  "descendants": {
+                    "NLwnr": {
+                      "fill": "$list-white",
+                      "stroke": "$list-white",
+                      "strokeWidth": 5.63
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "xv3Gi",
+              "name": "Titles",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "NdEUx",
+                  "name": "State Name",
+                  "fill": "$ink-primary",
+                  "content": "WhiteList",
+                  "lineHeight": 1,
+                  "fontFamily": "$font-heading",
+                  "fontSize": 38,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "or8rl",
+                  "name": "Role",
+                  "fill": "$ink-muted",
+                  "content": "PERMANENT CONNECTION",
+                  "fontFamily": "$font-mono",
+                  "fontSize": 11,
+                  "fontWeight": "normal",
+                  "letterSpacing": 1.4
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "W2vSG",
+          "name": "Meaning",
+          "fill": "$ink-secondary",
+          "textGrowth": "fixed-width",
+          "width": "fill_container",
+          "content": "Meaning of this state.",
+          "lineHeight": 1.55,
+          "fontFamily": "$font-ui",
+          "fontSize": 15,
+          "fontWeight": "normal"
+        },
+        {
+          "type": "rectangle",
+          "id": "C6EFqc",
+          "name": "Rule",
+          "fill": "$glass-edge",
+          "width": "fill_container",
+          "height": 1
+        },
+        {
+          "type": "frame",
+          "id": "K4Ed3",
+          "name": "Token Meta",
+          "width": "fill_container",
+          "gap": 40,
+          "children": [
+            {
+              "type": "frame",
+              "id": "F7xgkH",
+              "name": "Token",
+              "layout": "vertical",
+              "gap": 6,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "Z9xkGm",
+                  "name": "Key",
+                  "fill": "$ink-muted",
+                  "content": "TOKEN",
+                  "fontFamily": "$font-mono",
+                  "fontSize": 11,
+                  "fontWeight": "normal",
+                  "letterSpacing": 1.4
+                },
+                {
+                  "type": "text",
+                  "id": "Y2T2nO",
+                  "name": "Value",
+                  "fill": "$ink-primary",
+                  "content": "list-white",
+                  "fontFamily": "$font-mono",
+                  "fontSize": 12,
+                  "fontWeight": "normal",
+                  "letterSpacing": 0.6
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "ZBgVC",
+              "name": "Hex",
+              "layout": "vertical",
+              "gap": 6,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "HmlUw",
+                  "name": "Key",
+                  "fill": "$ink-muted",
+                  "content": "HEX",
+                  "fontFamily": "$font-mono",
+                  "fontSize": 11,
+                  "fontWeight": "normal",
+                  "letterSpacing": 1.4
+                },
+                {
+                  "type": "text",
+                  "id": "n0U8Gg",
+                  "name": "Value",
+                  "fill": "$ink-primary",
+                  "content": "#FFFFFF",
+                  "fontFamily": "$font-mono",
+                  "fontSize": 12,
+                  "fontWeight": "normal",
+                  "letterSpacing": 0.6
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "Ou76V",
+          "name": "Size Proof",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 14,
+          "children": [
+            {
+              "type": "text",
+              "id": "XEcal",
+              "name": "Label",
+              "fill": "$ink-muted",
+              "content": "LEGIBLE AT BADGE SIZE",
+              "fontFamily": "$font-mono",
+              "fontSize": 11,
+              "fontWeight": "normal",
+              "letterSpacing": 1.4
+            },
+            {
+              "type": "frame",
+              "id": "ilOeD",
+              "name": "Ramp",
+              "gap": 30,
+              "alignItems": "end",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "A9ESQ",
+                  "name": "Size 24",
+                  "layout": "vertical",
+                  "gap": 10,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "UBo4Z",
+                      "name": "Chip 24",
+                      "fill": "#FFFFFF00",
+                      "cornerRadius": 8,
+                      "layout": "vertical",
+                      "padding": 6,
+                      "children": [
+                        {
+                          "id": "OoaFF",
+                          "type": "ref",
+                          "ref": "pKEfC",
+                          "name": "Badge 24",
+                          "width": 24,
+                          "height": 24,
+                          "descendants": {
+                            "NLwnr": {
+                              "fill": "$list-white",
+                              "stroke": "$list-white",
+                              "strokeWidth": 2.11
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "kx3uv",
+                      "name": "Label 24",
+                      "fill": "$ink-muted",
+                      "content": "24",
+                      "fontFamily": "$font-mono",
+                      "fontSize": 10,
+                      "fontWeight": "normal",
+                      "letterSpacing": 0.6
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "WOY06",
+                  "name": "Size 20",
+                  "layout": "vertical",
+                  "gap": 10,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "DHqhT",
+                      "name": "Chip 20",
+                      "fill": "#FFFFFF00",
+                      "cornerRadius": 8,
+                      "layout": "vertical",
+                      "padding": 6,
+                      "children": [
+                        {
+                          "id": "IfhcC",
+                          "type": "ref",
+                          "ref": "pKEfC",
+                          "name": "Badge 20",
+                          "width": 20,
+                          "height": 20,
+                          "descendants": {
+                            "NLwnr": {
+                              "fill": "$list-white",
+                              "stroke": "$list-white",
+                              "strokeWidth": 1.76
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "uXEIG",
+                      "name": "Label 20",
+                      "fill": "$ink-muted",
+                      "content": "20",
+                      "fontFamily": "$font-mono",
+                      "fontSize": 10,
+                      "fontWeight": "normal",
+                      "letterSpacing": 0.6
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "P2vU0a",
+                  "name": "Size 16",
+                  "layout": "vertical",
+                  "gap": 10,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "tKkvc",
+                      "name": "Chip 16",
+                      "fill": "#FFFFFF00",
+                      "cornerRadius": 8,
+                      "layout": "vertical",
+                      "padding": 6,
+                      "children": [
+                        {
+                          "id": "FxZMA",
+                          "type": "ref",
+                          "ref": "pKEfC",
+                          "name": "Badge 16",
+                          "width": 16,
+                          "height": 16,
+                          "descendants": {
+                            "NLwnr": {
+                              "fill": "$list-white",
+                              "stroke": "$list-white",
+                              "strokeWidth": 1.41
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "olfy0",
+                      "name": "Label 16",
+                      "fill": "$ink-muted",
+                      "content": "16",
+                      "fontFamily": "$font-mono",
+                      "fontSize": 10,
+                      "fontWeight": "normal",
+                      "letterSpacing": 0.6
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "APKG4",
+                  "name": "Size 14",
+                  "layout": "vertical",
+                  "gap": 10,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "gUJaX",
+                      "name": "Chip 14",
+                      "fill": "#FFFFFF00",
+                      "cornerRadius": 8,
+                      "layout": "vertical",
+                      "padding": 6,
+                      "children": [
+                        {
+                          "id": "mUAJX",
+                          "type": "ref",
+                          "ref": "pKEfC",
+                          "name": "Badge 14",
+                          "width": 14,
+                          "height": 14,
+                          "descendants": {
+                            "NLwnr": {
+                              "fill": "$list-white",
+                              "stroke": "$list-white",
+                              "strokeWidth": 1.23
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "o0mHPF",
+                      "name": "Label 14",
+                      "fill": "$ink-muted",
+                      "content": "14",
+                      "fontFamily": "$font-mono",
+                      "fontSize": 10,
+                      "fontWeight": "normal",
+                      "letterSpacing": 0.6
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "Sm99B",
+                  "name": "Size 12",
+                  "layout": "vertical",
+                  "gap": 10,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "eT0mz",
+                      "name": "Chip 12",
+                      "fill": "#FFFFFF00",
+                      "cornerRadius": 8,
+                      "layout": "vertical",
+                      "padding": 6,
+                      "children": [
+                        {
+                          "id": "VpbHY",
+                          "type": "ref",
+                          "ref": "pKEfC",
+                          "name": "Badge 12",
+                          "width": 12,
+                          "height": 12,
+                          "descendants": {
+                            "NLwnr": {
+                              "fill": "$list-white",
+                              "stroke": "$list-white",
+                              "strokeWidth": 1.06
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "Ee9SJ",
+                      "name": "Label 12",
+                      "fill": "$ink-muted",
+                      "content": "12",
+                      "fontFamily": "$font-mono",
+                      "fontSize": 10,
+                      "fontWeight": "normal",
+                      "letterSpacing": 0.6
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variables": {
+    "surface-base": {
+      "type": "color",
+      "value": "#1A1A1C"
+    },
+    "surface-deep": {
+      "type": "color",
+      "value": "#0B0B0C"
+    },
+    "surface-true-black": {
+      "type": "color",
+      "value": "#000000"
+    },
+    "surface-light": {
+      "type": "color",
+      "value": "#F4F4F5"
+    },
+    "glass-01": {
+      "type": "color",
+      "value": "#FFFFFF0A"
+    },
+    "glass-02": {
+      "type": "color",
+      "value": "#FFFFFF14"
+    },
+    "glass-03": {
+      "type": "color",
+      "value": "#FFFFFF1F"
+    },
+    "glass-edge": {
+      "type": "color",
+      "value": "#FFFFFF2E"
+    },
+    "ink-primary": {
+      "type": "color",
+      "value": "#FFFFFF"
+    },
+    "ink-secondary": {
+      "type": "color",
+      "value": "#FFFFFFB8"
+    },
+    "ink-muted": {
+      "type": "color",
+      "value": "#FFFFFF75"
+    },
+    "ink-faint": {
+      "type": "color",
+      "value": "#FFFFFF42"
+    },
+    "ink-on-light": {
+      "type": "color",
+      "value": "#1A1A1C"
+    },
+    "list-white": {
+      "type": "color",
+      "value": "#FFFFFF"
+    },
+    "list-grey": {
+      "type": "color",
+      "value": "#6E6E76"
+    },
+    "list-black": {
+      "type": "color",
+      "value": "#0B0B0C"
+    },
+    "radius-sm": {
+      "type": "number",
+      "value": 8
+    },
+    "radius-md": {
+      "type": "number",
+      "value": 16
+    },
+    "radius-lg": {
+      "type": "number",
+      "value": 28
+    },
+    "space-1": {
+      "type": "number",
+      "value": 4
+    },
+    "space-2": {
+      "type": "number",
+      "value": 8
+    },
+    "space-3": {
+      "type": "number",
+      "value": 16
+    },
+    "space-4": {
+      "type": "number",
+      "value": 24
+    },
+    "space-5": {
+      "type": "number",
+      "value": 40
+    },
+    "space-6": {
+      "type": "number",
+      "value": 64
+    },
+    "font-heading": {
+      "type": "string",
+      "value": "Arapey"
+    },
+    "font-ui": {
+      "type": "string",
+      "value": "Inter"
+    },
+    "font-mono": {
+      "type": "string",
+      "value": "JetBrains Mono"
+    }
+  },
+  "fileToken": "79474f94-9ead-4865-832c-d47485781110"
+}
