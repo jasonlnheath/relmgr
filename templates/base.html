@@ -8,36 +8,54 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Arapey:ital@0;1&display=swap" rel="stylesheet">
+    {# Scroll mark favicon — approved identity mark #}
+    <link rel="icon" type="image/svg+xml" href="/static/scroll-mark.svg">
     <style>
-        /* === RelMgr theme tokens (captain rulings 2026-09-18; pairing-review fixes §6; round-2 black liquid-glass) === */
+        /* === Whitelist identity tokens (captain approved 2026-09-22) ===
+           Source: ~/Downloads/whitelist-identity/design-guide.txt
+           Tokens: list-grey=#5A5A62(deep), list-white=#FFFFFF, list-black=#0B0B0C
+           surface-base=#1A1A1C, surface-deep=#0B0B0C, glass-01=#FFFFFF0A
+           glass-edge=#FFFFFF2E, ink-primary=#FFFFFF, ink-muted=#FFFFFF75
+           ink-faint=#FFFFFF42, ink-secondary=#FFFFFFB8
+        */
         :root {
-            /* Black liquid-glass background */
-            --wl-bg: #0A0A0A;
-            --wl-ink: #E8E8E8;
-            --wl-paper: rgba(255,255,255,0.06);
-            --wl-charcoal: #999999;
-            --wl-charcoal-deep: #8A8A8A;
+            /* Surfaces */
+            --wl-surface-base: #1A1A1C;
+            --wl-surface-deep: #0B0B0C;
+            --wl-surface-true-black: #000000;
+            --wl-surface-light: #F4F4F5;
 
-            /* Slate-grey liquid-glass buttons */
-            --wl-btn-slate: rgba(120,120,125,0.35);
-            --wl-btn-slate-hover: rgba(140,140,145,0.50);
+            /* Ink */
+            --wl-ink: #FFFFFF;
+            --wl-ink-muted: #FFFFFF75;
+            --wl-ink-faint: #FFFFFF42;
+            --wl-ink-secondary: #FFFFFFB8;
 
-            /* Access badges (text-only, no icons) */
-            --wl-badge-whitelist: #4ADE80;
-            --wl-badge-greylist: #FBBF24;
-            --wl-badge-blocked: #F87171;
+            /* Glass */
+            --wl-glass-fill: #FFFFFF0A;
+            --wl-glass-fill-alt: #FFFFFF14;
+            --wl-glass-edge: #FFFFFF2E;
+            --wl-glass-blur: 12px;
 
-            /* Amber / danger / success (kept for forms) */
+            /* Badge trio (scroll silhouette) */
+            --wl-badge-white: #FFFFFF;
+            --wl-badge-grey: #5A5A62;
+            --wl-badge-black: #0B0B0C;
+
+            /* Slate-grey buttons (list-grey family) */
+            --wl-btn-slate: rgba(110,110,118,0.35);
+            --wl-btn-slate-hover: rgba(110,110,118,0.50);
+
+            /* Action colors (kept for forms) */
             --wl-amber: #F59E0B;
             --wl-amber-field: rgba(245,158,11,0.12);
             --wl-danger: #EF4444;
-            --wl-info: #3B82F6;
             --wl-success: #22C55E;
 
-            /* Glass */
-            --wl-glass-fill: rgba(255,255,255,0.06);
-            --wl-glass-blur: 12px;
-            --wl-glass-border: rgba(255,255,255,0.08);
+            /* Legacy aliases */
+            --wl-bg: var(--wl-surface-base);
+            --wl-charcoal: var(--wl-ink-muted);
+            --wl-charcoal-deep: var(--wl-ink-faint);
         }
 
         /* Semantic utility classes */
@@ -46,24 +64,18 @@
             background: var(--wl-glass-fill);
             backdrop-filter: blur(var(--wl-glass-blur));
             -webkit-backdrop-filter: blur(var(--wl-glass-blur));
-            border: 1px solid var(--wl-glass-border);
+            border: 1px solid var(--wl-glass-edge);
             border-radius: 12px;
         }
         .wl-text { color: var(--wl-ink); }
-        .wl-text-sub { color: var(--wl-charcoal); }
-        .wl-text-muted { color: var(--wl-charcoal-deep); }
-        .wl-text-faint { color: var(--wl-charcoal-deep); }
-        .wl-border { border-color: var(--wl-glass-border); }
+        .wl-text-sub { color: var(--wl-ink-muted); }
+        .wl-text-muted { color: var(--wl-ink-faint); }
+        .wl-text-faint { color: var(--wl-ink-faint); }
+        .wl-border { border-color: var(--wl-glass-edge); }
         .wl-link { color: var(--wl-ink); text-decoration: underline; }
         .wl-link:hover { opacity: 0.75; }
 
-        /* Dropdowns: every <select> keeps the dark glass background. With
-           bg-transparent the native option popup renders the light ink
-           (#E8E8E8) on the OS's white menu — unreadable white-on-white
-           (bio-visibility dropdown, captain ruling 2026-09-20). The
-           explicit dark fill + color-scheme: dark forces a dark popup
-           everywhere; option colors are pinned for engines that ignore
-           color-scheme. */
+        /* Dropdowns: every <select> keeps the dark glass background. */
         .wl-select {
             background: rgba(20, 20, 20, 0.92);
             color: var(--wl-ink);
@@ -76,7 +88,7 @@
             color: var(--wl-ink);
         }
 
-        /* Buttons — slate-grey liquid-glass */
+        /* Buttons */
         .wl-btn-approve { background: var(--wl-success); color: #000; }
         .wl-btn-approve:hover { opacity: 0.85; }
         .wl-btn-deny { background: var(--wl-danger); color: #000; }
@@ -85,28 +97,43 @@
         .wl-btn-revoke:hover { opacity: 0.85; }
         .wl-btn-punt { background: var(--wl-amber); color: #000; }
         .wl-btn-punt:hover { opacity: 0.85; }
-        .wl-btn-submit { background: var(--wl-btn-slate); color: var(--wl-ink); border: 1px solid var(--wl-glass-border); }
+        .wl-btn-submit { background: var(--wl-btn-slate); color: var(--wl-ink); border: 1px solid var(--wl-glass-edge); }
         .wl-btn-submit:hover { background: var(--wl-btn-slate-hover); }
-        .wl-btn-ink { background: var(--wl-btn-slate); color: var(--wl-ink); border: 1px solid var(--wl-glass-border); }
+        .wl-btn-ink { background: var(--wl-btn-slate); color: var(--wl-ink); border: 1px solid var(--wl-glass-edge); }
         .wl-btn-ink:hover { background: var(--wl-btn-slate-hover); }
-        .wl-btn-gray { background: var(--wl-btn-slate); color: var(--wl-ink); border: 1px solid var(--wl-glass-border); }
+        .wl-btn-gray { background: var(--wl-btn-slate); color: var(--wl-ink); border: 1px solid var(--wl-glass-edge); }
         .wl-btn-gray:hover { background: var(--wl-btn-slate-hover); }
 
-        /* Badges — text-only (captain round-2) */
-        .wl-badge-amber { background: var(--wl-amber-field); color: var(--wl-amber); }
-        .wl-badge-approved { background: rgba(74,222,128,0.15); color: var(--wl-badge-whitelist); }
-        .wl-badge-charcoal { background: rgba(153,153,153,0.15); color: var(--wl-charcoal); }
-        .wl-badge-danger { background: rgba(239,68,68,0.15); color: var(--wl-badge-blocked); }
-        .wl-badge-whitelist { background: rgba(74,222,128,0.15); color: var(--wl-badge-whitelist); }
-        .wl-badge-greylist { background: rgba(251,191,36,0.15); color: var(--wl-badge-greylist); }
-        .wl-badge-blocked { background: rgba(248,113,113,0.15); color: var(--wl-badge-blocked); }
+        /* Badge trio — scroll silhouette on colored button background */
+        .wl-badge-scroll {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            border: 1px solid var(--wl-glass-edge);
+            cursor: pointer;
+            transition: opacity 0.15s;
+        }
+        .wl-badge-scroll:hover { opacity: 0.8; }
+        .wl-badge-scroll svg { width: 12px; height: 12px; }
+        .wl-badge-scroll[data-state="whitelist"] { background: var(--wl-badge-white); }
+        .wl-badge-scroll[data-state="whitelist"] svg { color: var(--wl-surface-base); }
+        .wl-badge-scroll[data-state="greylist"] { background: var(--wl-badge-grey); }
+        .wl-badge-scroll[data-state="greylist"] svg { color: var(--wl-surface-base); }
+        .wl-badge-scroll[data-state="blacklist"] { background: var(--wl-badge-black); }
+        .wl-badge-scroll[data-state="blacklist"] svg { color: var(--wl-surface-light); }
 
-        /* Glass effect (generic, no tabs rail) */
+        /* Legacy badge classes (kept for non-scroll badges like notifications) */
+        .wl-badge-amber { background: var(--wl-amber-field); color: var(--wl-amber); }
+
+        /* Glass effect */
         .wl-glass-rail {
             background: var(--wl-glass-fill);
             backdrop-filter: blur(var(--wl-glass-blur));
             -webkit-backdrop-filter: blur(var(--wl-glass-blur));
-            border-bottom: 1px solid var(--wl-glass-border);
+            border-bottom: 1px solid var(--wl-glass-edge);
         }
 
         /* Heading scale — all Arapey 400 weight */
