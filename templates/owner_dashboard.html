@@ -118,23 +118,23 @@
                             <input type="checkbox" name="grant_ids" value="{{ grant.id }}" form="bulkform"
                                    class="rounded border-gray-600" title="select for bulk action">
                             {% if grant.expires_at is none %}
-                            <span class="wl-badge-scroll" data-state="whitelist" title="WhiteList">
-                                <img src="/static/badge-whitelist.png" alt="">
+                            <span class="wl-badge-scroll" data-state="whitelist" title="WhiteList" aria-label="WhiteList">
+                                <img src="/static/badge-whitelist.png" alt="" aria-hidden="true">
                             </span>
                             {% elif grant.expires_at and grant.expires_at is string %}
                             {% set exp = days_until(grant.expires_at) %}
                             {% if exp <= 0 %}
-                            <span class="wl-badge-scroll" data-state="greylist" title="GreyList">
-                                <img src="/static/badge-greylist.png" alt="">
+                            <span class="wl-badge-scroll" data-state="greylist" title="GreyList" aria-label="GreyList">
+                                <img src="/static/badge-greylist.png" alt="" aria-hidden="true">
                             </span>
                             {% else %}
-                            <span class="wl-badge-scroll" data-state="whitelist" title="WhiteList">
-                                <img src="/static/badge-whitelist.png" alt="">
+                            <span class="wl-badge-scroll" data-state="whitelist" title="WhiteList" aria-label="WhiteList">
+                                <img src="/static/badge-whitelist.png" alt="" aria-hidden="true">
                             </span>
                             {% endif %}
                             {% else %}
-                            <span class="wl-badge-scroll" data-state="greylist" title="GreyList">
-                                <img src="/static/badge-greylist.png" alt="">
+                            <span class="wl-badge-scroll" data-state="greylist" title="GreyList" aria-label="GreyList">
+                                <img src="/static/badge-greylist.png" alt="" aria-hidden="true">
                             </span>
                             {% endif %}
                             <form method="POST" action="/owner/{{ token }}/revoke" class="inline-flex items-center gap-1 mt-1">
@@ -147,14 +147,14 @@
                         </div>
                         {% elif grant.status == 'revoked' %}
                         <div class="ml-4">
-                            <span class="wl-badge-scroll" data-state="blacklist" title="BlackList">
-                                <img src="/static/badge-blacklist.png" alt="">
+                            <span class="wl-badge-scroll" data-state="blacklist" title="BlackList" aria-label="BlackList">
+                                <img src="/static/badge-blacklist.png" alt="" aria-hidden="true">
                             </span>
                         </div>
                         {% elif grant.status == 'denied' %}
                         <div class="ml-4">
-                            <span class="wl-badge-scroll" data-state="blacklist" title="BlackList">
-                                <img src="/static/badge-blacklist.png" alt="">
+                            <span class="wl-badge-scroll" data-state="blacklist" title="BlackList" aria-label="BlackList">
+                                <img src="/static/badge-blacklist.png" alt="" aria-hidden="true">
                             </span>
                         </div>
                         {% endif %}

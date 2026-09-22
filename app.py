@@ -17,6 +17,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import FastAPI, Request, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 from PIL import Image
 from io import BytesIO
@@ -424,6 +425,11 @@ def create_app(db_path: Path = None) -> FastAPI:
                 or Path(__file__).parent / "contacts.db")
     jinja = _make_jinja()
     application = FastAPI(title="WhiteList")
+
+    # ============================================================
+    # Static files (scroll-mark favicon, badge PNGs)
+    # ============================================================
+    application.mount("/static", StaticFiles(directory="static"), name="static")
 
     # Retired pre-migration owner magic links (captain ruling, option A):
     # one app-wide handler so every /owner/… route sends legacy-link holders

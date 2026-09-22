@@ -11,13 +11,8 @@
         </div>
         <div class="flex items-center gap-2">
             {# Notification center (2026-09-20): unread badge on the dashboard #}
-            <a href="/owner/{{ token }}/notifications"
-               class="wl-btn-ink text-xs py-1 px-3 rounded-lg relative" title="Notifications">
-                <svg class="w-3.5 h-3.5 inline" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a5 5 0 0 0-5 5v2.5L2.5 10.5a.5.5 0 0 0 .45.8h10.1a.5.5 0 0 0 .45-.8L13 8.5V6a5 5 0 0 0-5-5Zm-7 5a7 7 0 0 1 14 0v2.29l1.21 1.21a1.5 1.5 0 0 1-1.06 2.56H1.85A1.5 1.5 0 0 1 .79 10.5L2 9.29V6Z"/></svg>
-                {% if unread_notifications %}
-                <span class="absolute -top-0.5 -right-3 px-1.5 py-0.5 rounded-full text-[10px] font-medium"
-                      style="background: var(--wl-amber-field); color: var(--wl-amber);">{{ unread_notifications }}</span>
-                {% endif %}
+            <a href="/owner/{{ token }}/notifications" class="wl-btn-ink text-xs py-1 px-3 rounded-lg">
+                {% if unread_notifications %}{{ unread_notifications }} {% endif %}Notifications
             </a>
             <form method="POST" action="/signout">
                 <button type="submit" class="wl-btn-ink text-xs py-1 px-3 rounded-lg">Sign out</button>
@@ -100,13 +95,14 @@
                         <input type="hidden" name="grant_id" value="{{ row.live_grant.id }}">
                         <input type="hidden" name="state" value="{{ next_state }}">
                         <button type="submit" title="Click to change to {{ next_state|capitalize }}"
-                                class="wl-badge-scroll" data-state="{{ badge_state }}">
-                            <img src="/static/badge-{{ badge_state }}.png" alt="">
+                                class="wl-badge-scroll" data-state="{{ badge_state }}"
+                                aria-label="Click to change to {{ next_state|capitalize }}">
+                            <img src="/static/badge-{{ badge_state }}.png" alt="" aria-hidden="true">
                         </button>
                     </form>
                     {% else %}
-                    <span class="wl-badge-scroll" data-state="blacklist" title="BlackList">
-                        <img src="/static/badge-blacklist.png" alt="">
+                    <span class="wl-badge-scroll" data-state="blacklist" title="BlackList" aria-label="BlackList">
+                        <img src="/static/badge-blacklist.png" alt="" aria-hidden="true">
                     </span>
                     {% endif %}
                 </div>

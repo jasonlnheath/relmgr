@@ -39,8 +39,10 @@
                 {% if profile.verified_at %}
                 <div class="mt-1">
                     {% set days = days_since(profile.verified_at) %}
-                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs
-                        {% if stale %}wl-badge-greylist{% else %}wl-badge-approved{% endif %}">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs"
+                          style="background: {% if stale %}var(--wl-btn-slate){% else %}var(--wl-success-field){% endif %};
+                          color: {% if stale %}var(--wl-ink-muted){% else %}var(--wl-success){% endif %};"
+                          aria-label="{% if stale %}Stale{% else %}Verified{% endif %}">
                         {% if stale %}⚠ Stale ({{ days }}d){% else %}✓ Verified ({{ days }}d){% endif %}
                     </span>
                 </div>

@@ -51,11 +51,13 @@
             --wl-amber-field: rgba(245,158,11,0.12);
             --wl-danger: #EF4444;
             --wl-success: #22C55E;
+            --wl-success-field: rgba(34,197,94,0.15);
 
             /* Legacy aliases */
             --wl-bg: var(--wl-surface-base);
             --wl-charcoal: var(--wl-ink-muted);
             --wl-charcoal-deep: var(--wl-ink-faint);
+            --wl-glass-border: var(--wl-glass-edge);
         }
 
         /* Semantic utility classes */
@@ -113,10 +115,10 @@
             height: 20px;
             border-radius: 4px;
             border: 1px solid var(--wl-glass-edge);
-            cursor: pointer;
             transition: opacity 0.15s;
         }
-        .wl-badge-scroll:hover { opacity: 0.8; }
+        button.wl-badge-scroll { cursor: pointer; }
+        button.wl-badge-scroll:hover { opacity: 0.8; }
         .wl-badge-scroll img { width: 12px; height: 12px; object-fit: contain; }
         .wl-badge-scroll[data-state="whitelist"] { background: var(--wl-badge-white); }
         .wl-badge-scroll[data-state="whitelist"] svg { color: var(--wl-surface-base); }
