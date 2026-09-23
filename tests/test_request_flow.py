@@ -132,10 +132,11 @@ def test_deny_leaves_anonymous(tmp_path: Path):
     assert grant["status"] == "denied"
     conn.close()
 
-    # Denier should see only public fields
+    # Denier should see only public-facing content (F3 heal: legacy public
+    # emails are 'granted' now; the public view pins on the company line).
     resp = client.get("/p/testuser?e=denier@example.com")
     assert resp.status_code == 200
     html = resp.text
     assert "private@testco.com" not in html
     assert "+15551234567" not in html
-    assert "test@testco.com" in html
+    assert "TestCo" in html

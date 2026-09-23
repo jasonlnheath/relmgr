@@ -56,6 +56,13 @@ Field           — NOT records. Each field is a contact attribute attached to a
       'granted' EXCEPT title, company, website — and the bio — which default
       to 'public'.** Applies to card-editor add rows, absent-visibility
       saves, the /fields/new route, and the legacy title/company seed.
+    - **F3 heal (2026-09-23): the pass-2 defaults were BACKFILLED onto all
+      pre-existing field data** (one-time, marker-gated via `whitelist_meta`:
+      title/company/website → public, everything else → granted). Rows at
+      'private' were left untouched — explicitly user-set, never
+      auto-exposed; the bio toggle works the same way. The heal runs exactly
+      once, so later explicit visibility edits are never reverted by a
+      reboot (`ensure_pass2_visibility_heal`).
 
 Standard contact field set (v3, 2026-09-18):
   The field_type enum covers the standard contact attributes used across iOS Contacts,
@@ -242,7 +249,8 @@ The following rulings were established during development and are preserved as b
 | Photo originals | **Kept** — originals are kept after the 512-square encode. Spec-level ruling; code follow-up pending (current implementation discards them). |
 | Contact list shows all live contacts | The contact list view shows all contacts from `contacts.db` (1,920+), not just WhiteList-approved ones. |
 | Bio cap | **500** (UX pass 2, 2026-09-22 — supersedes the earlier 2,000). |
-| Field visibility defaults | **All fields default 'granted'; title, company, website, and bio default 'public'** (UX pass 2, 2026-09-22). |
+| Field visibility defaults | **All fields default 'granted'; title, company, website, and bio default 'public'** (UX pass 2, 2026-09-22) — **backfilled onto all existing data** (F3, 2026-09-23; explicitly-private rows exempt, one-time heal). |
+| Share links are public-facing | **Share links ALWAYS deliver the PUBLIC-facing page** (F4 ruling change, 2026-09-23) — no granted-tier links; the owner preview shows exactly that public reality; recipients who want more use the Connect request flow, and the owner grants from there. |
 | Profile QR removed | The public profile shows ONE Connect button instead of a QR; the owner is notified in-app/email when a stranger connects (UX pass 2, 2026-09-22). |
 | Grey/black never expire | Quarterly review confirms/updates contact info and reviews grey/black contacts; it never deletes them (UX pass 2, 2026-09-22). |
 

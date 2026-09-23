@@ -2690,6 +2690,52 @@ def ensure_profile_field_labels(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def ensure_pass2_visibility_heal(conn: sqlite3.Connection) -> None:
+    """F3 (captain ruling, UX pass 2, 2026-09-23): backfill the new
+    visibility defaults onto ALL EXISTING field data — ONE TIME.
+
+    The pass-2 defaults ruling ('granted' everywhere; title/company/website
+    public) originally applied to new data only, so pre-pass-2 rows kept
+    stale defaults. This heal converges existing rows:
+
+    - title, company, website  -> 'public'   (unless 'private': explicit)
+    - every other field_type   -> 'granted'  (from 'public'/'granted')
+    - any row at 'private'     -> UNTOUCHED  (explicitly user-set: hidden on
+      purpose; a heal must never auto-expose hidden data)
+
+    The bio is a profiles column, not a field row: 'public' already IS its
+    default and 'private' was an explicit toggle — no write, same exemption.
+
+    Marker-gated via the whitelist_meta table: runs exactly once, so later
+    EXPLICIT visibility edits are never reverted by a reboot. Rows already
+    matching the new defaults are never written.
+    """
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS whitelist_meta (
+               key TEXT PRIMARY KEY,
+               value TEXT NOT NULL
+           )"""
+    )
+    done = conn.execute(
+        "SELECT value FROM whitelist_meta WHERE key = 'pass2_visibility_heal'"
+    ).fetchone()
+    if done:
+        return  # heal already applied — explicit edits are safe from here on
+
+    conn.execute(
+        """UPDATE profile_fields SET visibility = 'public', updated_at = datetime('now')
+           WHERE field_type IN ('title', 'company', 'website')
+             AND visibility IN ('granted', 'public')""")
+    conn.execute(
+        """UPDATE profile_fields SET visibility = 'granted', updated_at = datetime('now')
+           WHERE field_type NOT IN ('title', 'company', 'website')
+             AND visibility = 'public'""")
+    conn.execute(
+        "INSERT OR REPLACE INTO whitelist_meta (key, value) VALUES ('pass2_visibility_heal', 'done')"
+    )
+    conn.commit()
+
+
 # Built-in phone label vocabulary (everything else in the label column is a
 # CUSTOM label typed by the owner, stored verbatim).
 PHONE_LABEL_CHOICES = ("mobile", "home", "work")
@@ -3084,6 +3130,7 @@ def ensure_whitelist_schema(conn: sqlite3.Connection) -> None:
     ensure_quarantine_schema(conn)              # blacklist silence: quarantine store
     ensure_vcard_fields_schema(conn)      # VCard field expansion (field_type + visibility)
     ensure_vcard_fields_v3_schema(conn)   # Round-2 types: 'address'→'address1' + apps (AFTER v2)
+    ensure_pass2_visibility_heal(conn)    # UX pass 2 F3: one-time visibility defaults backfill
     ensure_profile_field_labels(conn)     # UX pass 2: phone label support (additive column)
     ensure_profile_bio_column(conn)       # Phase A1: profiles.bio
     ensure_card_photo_column(conn)              # Phase A1: cards.photo_path

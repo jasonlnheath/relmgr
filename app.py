@@ -966,12 +966,11 @@ def create_app(db_path: Path = None) -> FastAPI:
             # filter to the owner's own cards before resolving.
             card_ids = whitelist_db.filter_owned_cards(
                 conn, profile_id, card_ids)
-            # UX pass 2 (2026-09-22): the chooser preview renders the
-            # GRANTED tier — with granted as the default field visibility,
-            # a public-tier render showed 'Nothing shared yet' for almost
-            # every real bundle.
+            # F4 ruling (2026-09-23): the chooser preview shows EXACTLY what
+            # recipients get — the PUBLIC-facing page. Share links deliver
+            # public data only; more access goes through Connect.
             cards = whitelist_db.cards_for_share_bundle(
-                conn, {"card_ids": card_ids}, "granted")
+                conn, {"card_ids": card_ids}, "anonymous")
             return HTMLResponse(jinja.get_template(
                 "share_cards_fragment.html").render(
                 request=request, cards=cards, preview_mode=True))
@@ -1034,11 +1033,11 @@ def create_app(db_path: Path = None) -> FastAPI:
                 if card:
                     card_names.append(card["name"])
             # UX pass (2026-09-22): show the ACTUAL card being shared below
-            # the QR + link — same recipient rendering as /s/{bundle_id}
-            # (share_cards_fragment). Rendered at the GRANTED tier per the
-            # UX pass 2 defaults ruling (granted is the default visibility).
+            # the QR + link — same recipient rendering as /s/{bundle_id}.
+            # F4 ruling: links deliver the PUBLIC-facing page, so this is
+            # the anonymous-tier render — exactly what recipients get.
             bundle_cards = whitelist_db.cards_for_share_bundle(
-                conn, {"card_ids": bundle["card_ids"]}, "granted")
+                conn, {"card_ids": bundle["card_ids"]}, "anonymous")
         finally:
             conn.close()
 
@@ -1081,8 +1080,12 @@ def create_app(db_path: Path = None) -> FastAPI:
     @application.get("/s/{bundle_id}/card.vcf")
     async def share_bundle_vcf(request: Request, bundle_id: str,
                                e: str = Query(None, alias="e")):
-        """'Save to contacts' — vCard from EXACTLY the fields this viewer
-        may see (same tier filter as the shared view page)."""
+        """'Save to contacts' — vCard from EXACTLY the PUBLIC fields.
+
+        F4 ruling (UX pass 2, 2026-09-23): share links ALWAYS deliver the
+        PUBLIC-facing page — no granted-tier links. Recipients who want
+        more use the request-access flow; the owner grants from there.
+        Expired links 404 for everyone."""
         conn = whitelist_db.wl_connect(path)
         try:
             bundle = whitelist_db.get_share_bundle(conn, bundle_id)
@@ -1091,11 +1094,9 @@ def create_app(db_path: Path = None) -> FastAPI:
             profile = whitelist_db.get_profile_by_id(conn, bundle["profile_id"])
             if not profile:
                 return HTMLResponse("Profile not found", status_code=404)
-            tier = whitelist_db.effective_tier(
-                conn, profile["id"], e if e else None)
-            if whitelist_db.bundle_is_expired(bundle) and tier != "granted":
+            if whitelist_db.bundle_is_expired(bundle):
                 return HTMLResponse("Link expired", status_code=404)
-            cards = whitelist_db.cards_for_share_bundle(conn, bundle, tier)
+            cards = whitelist_db.cards_for_share_bundle(conn, bundle, "anonymous")
             vcf = _build_vcard(profile, cards)
             filename = profile["handle"] or "card"
         finally:
@@ -1113,12 +1114,15 @@ def create_app(db_path: Path = None) -> FastAPI:
         """The recipient's page: the chosen card set as ONE combined card,
         grouped per card with reach-me actions inside each block.
 
-        Link lifecycle (ruling 2026-09-20):
-        - a connected viewer (any list tier — their live grant resolves to
-          'granted') sees their normal governed view even after expiry;
-          the connection outlives the link
-        - an expired link opened by a stranger pings the owner ONCE (per
-          bundle, deduped) and shows the expired page with a Connect path
+        F4 ruling (UX pass 2, 2026-09-23): share links ALWAYS deliver the
+        PUBLIC-facing page — no granted-tier links. Whoever opens the link
+        (stranger or connected contact) sees exactly the public view;
+        recipients who want more use the request-access flow (Connect),
+        and the owner grants from there.
+
+        Link lifecycle:
+        - an expired link shows the expired page and pings the owner ONCE
+          (per bundle, deduped) with a fresh dashboard path
         - a BLACKLISTED opener gets the same expired page but triggers NO
           ping — the owner is never bothered by blacklisted people
         """
@@ -1132,12 +1136,11 @@ def create_app(db_path: Path = None) -> FastAPI:
                 return HTMLResponse("<h1>Profile not found</h1>", status_code=404)
 
             viewer_email = e if e else None
-            tier = whitelist_db.effective_tier(conn, profile["id"], viewer_email)
 
-            if whitelist_db.bundle_is_expired(bundle) and tier != "granted":
+            if whitelist_db.bundle_is_expired(bundle):
                 if not whitelist_db.is_blacklisted(
                         conn, profile["id"], viewer_email or ""):
-                    # Stranger at an expired link → ping the owner ONCE
+                    # Opener at an expired link → ping the owner ONCE
                     # (dedupe per bundle) with a fresh dashboard path —
                     # the re-share lives on the owner share page.
                     owner_id = profile.get("owner_id") or profile["id"]
@@ -1157,18 +1160,19 @@ def create_app(db_path: Path = None) -> FastAPI:
                     "share_expired.html").render(
                     request=request, profile=profile, bundle_id=bundle_id))
 
-            if not whitelist_db.bundle_is_expired(bundle):
-                # Tracked event, same P3-T4 contract as /p/{handle}.
-                whitelist_db.record_scan(conn, profile["id"],
-                                         viewer_email if viewer_email else None)
+            # Tracked event, same P3-T4 contract as /p/{handle}.
+            whitelist_db.record_scan(conn, profile["id"],
+                                     viewer_email if viewer_email else None)
 
             stale = is_verified_stale(profile.get("verified_at"))
-            cards = whitelist_db.cards_for_share_bundle(conn, bundle, tier)
+            # F4 ruling: the link renders the PUBLIC-facing page for every
+            # recipient — anonymous tier, no exceptions.
+            cards = whitelist_db.cards_for_share_bundle(conn, bundle, "anonymous")
             bio_visibility = whitelist_db.get_bio_visibility(conn, profile["id"])
 
             return HTMLResponse(jinja.get_template("share_bundle.html").render(
                 request=request, profile=profile, bundle_id=bundle_id,
-                tier=tier, stale=stale, cards=cards,
+                tier="anonymous", stale=stale, cards=cards,
                 bio_visibility=bio_visibility, viewer_email=viewer_email,
                 days_since=days_since))
         finally:

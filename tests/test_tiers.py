@@ -54,14 +54,18 @@ def _make_old_db(tmp_path: Path):
 
 
 def test_anonymous_sees_public_only(tmp_path: Path):
-    """Anonymous viewer (no ?e= param) sees only public fields."""
+    """Anonymous viewer (no ?e= param) sees only public-facing content.
+
+    F3 heal (UX pass 2): legacy 'public' emails heal to the new 'granted'
+    default — the anonymous public view pins on the company line, whose
+    default IS public under the pass-2 defaults ruling."""
     db = _make_db(tmp_path)
     app = create_app(db)
     client = TestClient(app)
     resp = client.get("/p/testuser")
     assert resp.status_code == 200
     html = resp.text
-    assert "public@testco.com" in html
+    assert "TestCo" in html, "title/company default public — visible anonymously"
     assert "private@testco.com" not in html
     assert "+15551234567" not in html
 

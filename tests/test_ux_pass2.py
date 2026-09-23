@@ -863,3 +863,140 @@ class TestPairingFixes:
         assert 'id="new-connection-link"' in html, "F6: + link is hookable"
         assert "new-connection-link" in html and "addEventListener('input'" in html, \
             "F6: typed-but-unsubmitted query syncs onto the + href"
+
+
+# ============================================================
+# Captain rulings on the pairing report (F3 backfill, F4 public links)
+# ============================================================
+
+class TestF3VisibilityBackfill:
+    def _seed_stale_visibilities(self, db: Path):
+        conn = whitelist_db.wl_connect(db)
+        whitelist_db.wl_init(conn)
+        whitelist_db.seed_profile(conn, {
+            "handle": "healuser",
+            "name": {"display": "Heal User"},
+            "org": {}, "emails": [], "phones": [],
+        })
+        # Simulate pre-pass-2 data: legacy seed defaults and old editor
+        # defaults side by side, plus one explicitly-hidden row.
+        conn.executescript("""
+            INSERT INTO profile_fields (id, profile_id, field_type, field_value, visibility)
+                VALUES (901, 1, 'title',   'Old Title',   'granted');
+            INSERT INTO profile_fields (id, profile_id, field_type, field_value, visibility)
+                VALUES (902, 1, 'company', 'Old Co',      'granted');
+            INSERT INTO profile_fields (id, profile_id, field_type, field_value, visibility)
+                VALUES (903, 1, 'website', 'https://old.example', 'granted');
+            INSERT INTO profile_fields (id, profile_id, field_type, field_value, visibility)
+                VALUES (904, 1, 'phone',   '+1-555-000-0000', 'public');
+            INSERT INTO profile_fields (id, profile_id, field_type, field_value, visibility)
+                VALUES (905, 1, 'email',   'old@x.com',   'public');
+            INSERT INTO profile_fields (id, profile_id, field_type, field_value, visibility)
+                VALUES (906, 1, 'note',    'secret note', 'private');
+        """)
+        conn.commit()
+        conn.close()
+
+    def _vis(self, db: Path, fid: int) -> str:
+        conn = whitelist_db.wl_connect(db)
+        v = conn.execute(
+            "SELECT visibility FROM profile_fields WHERE id = ?", (fid,)
+        ).fetchone()[0]
+        conn.close()
+        return v
+
+    def test_backfill_applies_pass2_defaults(self, tmp_path):
+        db = tmp_path / "t.db"
+        self._seed_stale_visibilities(db)
+        TestClient(create_app(db))  # boot runs the one-time heal
+        assert self._vis(db, 901) == "public", "title healed to public"
+        assert self._vis(db, 902) == "public", "company healed to public"
+        assert self._vis(db, 903) == "public", "website healed to public"
+        assert self._vis(db, 904) == "granted", "phone public->granted"
+        assert self._vis(db, 905) == "granted", "email public->granted"
+
+    def test_explicit_private_rows_untouched(self, tmp_path):
+        db = tmp_path / "t.db"
+        self._seed_stale_visibilities(db)
+        TestClient(create_app(db))
+        assert self._vis(db, 906) == "private", \
+            "explicitly user-set rows are exempt — never auto-exposed"
+
+    def test_heal_is_one_time(self, tmp_path):
+        """After the heal, an EXPLICIT visibility edit must survive reboots."""
+        db = tmp_path / "t.db"
+        self._seed_stale_visibilities(db)
+        TestClient(create_app(db))  # heal runs
+        conn = whitelist_db.wl_connect(db)
+        conn.execute(
+            "UPDATE profile_fields SET visibility='granted' WHERE id = 901")
+        conn.commit()
+        conn.close()
+        TestClient(create_app(db))  # reboot — heal must NOT run again
+        assert self._vis(db, 901) == "granted", \
+            "marker-gated: the heal never fights later explicit edits"
+
+    def test_bio_visibility_untouched(self, tmp_path):
+        db = tmp_path / "t.db"
+        conn = whitelist_db.wl_connect(db)
+        whitelist_db.wl_init(conn)
+        whitelist_db.seed_profile(conn, {
+            "handle": "bio-user",
+            "name": {"display": "Bio User"},
+            "org": {}, "emails": [], "phones": [],
+        })
+        conn.commit()
+        conn.close()
+        client = TestClient(create_app(db))  # boot first: bio column + heal
+        conn = whitelist_db.wl_connect(db)
+        whitelist_db.update_bio(conn, 1, "hello")
+        whitelist_db.update_bio_visibility(conn, 1, "private")
+        conn.close()
+        client.get(f"/owner/{_owner_token()}/profile")  # second boot: heal must not run
+        conn = whitelist_db.wl_connect(db)
+        v = whitelist_db.get_bio_visibility(conn, 1)
+        conn.close()
+        assert v == "private", "bio: public is already the default; private is explicit"
+
+
+class TestF4PublicShareLinks:
+    def _connected_bundle(self, tmp_path):
+        db = _make_db(tmp_path)
+        client = TestClient(create_app(db))
+        work = _card_id(db, "Work")
+        conn = whitelist_db.wl_connect(db)
+        gid = whitelist_db.create_grant(conn, 1, "friend@x.com", "Friend")
+        whitelist_db.apply_decision(conn, gid, "approve", "lifetime",
+                                    merge_contacts=False)
+        conn.close()
+        client.post(f"/owner/{_owner_token()}/share",
+                    data={"card_ids": [str(work)]}, follow_redirects=False)
+        conn = whitelist_db.wl_connect(db)
+        bundle_id = conn.execute(
+            "SELECT id FROM share_bundles ORDER BY created_at DESC LIMIT 1"
+        ).fetchone()[0]
+        conn.close()
+        return db, client, bundle_id
+
+    def test_share_page_public_only_even_for_connected(self, tmp_path):
+        db, client, bundle_id = self._connected_bundle(tmp_path)
+        html = client.get(f"/s/{bundle_id}?e=friend%40x.com").text
+        assert "jason@waltheremc.com" not in html, \
+            "F4: no granted-tier links — public page for everyone"
+        assert ">Connect</a>" in html or "/p/jasonheath/request-form" in html, \
+            "F4: request-access affordance on the public page"
+
+    def test_owner_share_page_shows_public_reality(self, tmp_path):
+        db, client, bundle_id = self._connected_bundle(tmp_path)
+        html = client.get(f"/owner/{_owner_token()}/share/{bundle_id}").text
+        assert "jason@waltheremc.com" not in html.split("What recipients will see")[1], \
+            "F4: the owner preview shows exactly the public reality"
+
+    def test_vcf_public_only_always(self, tmp_path):
+        db, client, bundle_id = self._connected_bundle(tmp_path)
+        body = client.get(f"/s/{bundle_id}/card.vcf?e=friend%40x.com").text
+        # The Work card only carries the granted email: public reality = no
+        # EMAIL line at all, granted data never present.
+        assert "jason@waltheremc.com" not in body, "F4: vcf public-only"
+        assert "EMAIL" not in body
+        assert "BEGIN:VCARD" in body

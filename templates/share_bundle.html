@@ -50,8 +50,9 @@
             </div>
         </div>
 
-        {# Bio — shown when public, or when granted-tier viewer #}
-        {% if profile.bio and (bio_visibility == 'public' or tier == 'granted') %}
+        {# Bio — the link is the PUBLIC-facing page (F4 ruling): shown only
+           when the bio itself is public. #}
+        {% if profile.bio and bio_visibility == 'public' %}
         <div class="mb-6 pb-4" style="border-bottom: 1px solid var(--wl-glass-border);">
             <p class="wl-text-sub text-sm whitespace-pre-line">{{ profile.bio }}</p>
         </div>
@@ -62,9 +63,10 @@
            and no "Forward your card" section (removed per ruling). #}
         {% include "share_cards_fragment.html" %}
 
-        {# Save to contacts — vCard built from exactly what this viewer can see #}
+        {# Save to contacts — vCard built from exactly the PUBLIC fields
+           (the link is the public-facing page, F4 ruling) #}
         <div class="mt-6 pt-4" style="border-top: 1px solid var(--wl-glass-border);">
-            <a href="/s/{{ bundle_id }}/card.vcf{% if tier == 'granted' and viewer_email %}?e={{ viewer_email | urlencode }}{% endif %}"
+            <a href="/s/{{ bundle_id }}/card.vcf"
                class="wl-btn-ink inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm"
                download>
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -74,15 +76,15 @@
             </a>
         </div>
 
-        {# Connect — recipients can always request access #}
-        {% if tier != 'granted' %}
+        {# Connect — the request-access affordance is ALWAYS here (F4
+           ruling): share links deliver the public page; anyone who wants
+           more connects, and the owner is notified (app/email). #}
         <div class="mt-6 pt-4" style="border-top: 1px solid var(--wl-glass-border);">
             <a href="/p/{{ profile.handle }}/request-form"
                class="wl-btn-ink inline-block px-6 py-2 rounded-lg text-sm">
                 Connect
             </a>
         </div>
-        {% endif %}
     </div>
 </div>
 {% endblock %}
