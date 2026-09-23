@@ -1,6 +1,6 @@
 # WhiteList / relmgr — Product Specification
 
-> Consolidated from the recovered plan archive (`~/.hermes/plans/`) and the codebase at commit `c0345a4`. Last updated 2026-09-18 (refined 2026-09-18).
+> Consolidated from the recovered plan archive (`~/.hermes/plans/`) and the codebase at commit `c0345a4`. Last updated 2026-09-23 (UX pass 3).
 
 ## One-liner
 
@@ -174,7 +174,12 @@ three-duration model is retained below for the audit trail vocabulary:
 - **No auto-expiry** — GreyList contacts never auto-expire or auto-transition.
 - **No expired state** — the concept of "expired" is absorbed into the GreyList state; there is no separate expired badge or view, and no 'Expires' row anywhere in the UI.
 
-**GreyList state** is derived: a grant is GreyList when `status='granted'`, `expires_at` has passed, and `quarter_status` is `'pending_review'` or `'punted'`. The `quarter_status` column tracks the review cycle:
+**GreyList state** is derived: a grant is GreyList when `status='granted'`
+and `expires_at` carries any real timestamp (marker lapsed OR still in the
+future — UX pass 3 bug fix, 2026-09-23: the contact card previously rendered
+a badge-moved grey contact as WhiteList until the marker lapsed, while the
+contact list already showed GreyList; both now agree). The `quarter_status`
+column tracks the review cycle:
 
 | quarter_status | Meaning |
 |---|---|
@@ -249,12 +254,21 @@ The following rulings were established during development and are preserved as b
 | Photo originals | **Kept** — originals are kept after the 512-square encode. Spec-level ruling; code follow-up pending (current implementation discards them). |
 | Contact list shows all live contacts | The contact list view shows all contacts from `contacts.db` (1,920+), not just WhiteList-approved ones. |
 | Bio cap | **500** (UX pass 2, 2026-09-22 — supersedes the earlier 2,000). |
-| Field visibility defaults | **All fields default 'granted'; title, company, website, and bio default 'public'** (UX pass 2, 2026-09-22) — **backfilled onto all existing data** (F3, 2026-09-23; explicitly-private rows exempt, one-time heal). |
-| Share links are public-facing | **Share links ALWAYS deliver the PUBLIC-facing page** (F4 ruling change, 2026-09-23) — no granted-tier links; the owner preview shows exactly that public reality; recipients who want more use the Connect request flow, and the owner grants from there. |
+| Field visibility defaults | **All fields default 'granted'; title, company, website, and bio default 'public'** (UX pass 2, 2026-09-22) — **backfilled onto all existing data** (F3, 2026-09-23; explicitly-private rows exempt, one-time heal). **Extended UX pass 3 (2026-09-23):** birthday, the personal-identity types (high school, maiden name, nickname), and city/state-level address parts (city, state, childhood city/state) also default **public**; street-level addresses (address1, address2, zip, childhood street) default **granted**. Defaults apply to NEW fields — existing rows are never re-flipped (the F3 heal ran once). |
+| Share links are public-facing | **Share links ALWAYS deliver the PUBLIC-facing page** (F4 ruling change, 2026-09-23) — no granted-tier links; the owner preview shows exactly that public reality; recipients who want more use the Connect request flow, and the owner grants from there. **Sharing ALWAYS includes the bio** (UX pass 3, 2026-09-23) — the bio renders on /s/ links even when the bio_visibility dropdown is private. |
 | Profile QR removed | The public profile shows ONE Connect button instead of a QR; the owner is notified in-app/email when a stranger connects (UX pass 2, 2026-09-22). |
 | Grey/black never expire | Quarterly review confirms/updates contact info and reviews grey/black contacts; it never deletes them (UX pass 2, 2026-09-22). |
+| Default cards: Personal + Work | **Every profile defaults with exactly two cards — 'Personal' and 'Work', ALWAYS created (even empty)** (UX pass 3, 2026-09-23). Personal is the TOP card: it carries the default public picture and leads every surface (public profile, share sets, contact detail). Legacy default names (Identity, Contact, Location, Details, Social) are no longer seeded but still get their cascade-orphan heal. |
+| Default picture governance | ONE public default picture — the top (Personal) card's. Sharing personal only → personal picture; work only → work picture; multiple cards → personal takes precedence (UX pass 3, 2026-09-23). |
+| Unified sharing | **The 'Share your card' chooser page is ELIMINATED** (UX pass 3, 2026-09-23): My Profile shows the QR (profile link) between the name and the Share button; Share fires the NATIVE share popup (copy link / email / SMS as standard fallbacks; messenger/signal/telegram later). No card-choosing at share time — the access-grant decision lands after a contact requests access. Legacy /s/{bundle_id} links keep rendering. |
+| Phone display format | **+1(XXX)XXX-XXXX everywhere** (UX pass 3, 2026-09-23) — display-time only (`format_phone_display`); stored values are never rewritten; non-US numbers render unchanged. |
+| Personal identity fields | High School, Maiden Name, Nickname, Childhood Home Address — personal-card fields for friend-finding, MULTIPLES allowed, default PUBLIC (addresses only at city/state level; street-level defaults granted). Birthday defaults public on personal cards. A HIGH-SCHOOL picture rides on personal cards — default and HS pictures both default public (UX pass 3, 2026-09-23). |
+| Search breadth | Contact-list search matches ALL public-facing and granted fields EXCEPT bios — name, email, titles, phones, addresses (UX pass 3, 2026-09-23). |
+| Filter tabs | Picture-based round tabs under the search bar: the Personal card's picture, each Work card's picture, and the white/grey/black list badges — MULTI-SELECT combinable (card group OR, state group OR, groups AND). Rows sort card type alphabetical, then white/grey/black (UX pass 3, 2026-09-23). |
+| Requests live in the list | Access requests land at the TOP of the whitelist in an AMBER box below the search bar (UX pass 3, 2026-09-23). The notifications PAGE is eliminated (see below). |
+| Notifications page eliminated | Investigation ruled the page redundant (UX pass 3, 2026-09-23): requests/forwards live in the amber box, the quarterly review is the quarterly email plus the grey rows in the list, and expired-link pings belonged to the retired share chooser. The notifications TABLE + data layer remain (append-only event record; the email push's source of truth); the page, routes, and header button are gone. |
 
-| Seed default cards cover all owners | `seed_default_cards()` now seeds Work (email fields) and Personal (phone fields) cards for every profile, not just the default owner. |
+| Seed default cards cover all owners | **UX pass 3 (2026-09-23): the default pair is Personal + Work for every profile, always created (even empty); Personal first (top card / default picture).** Legacy names heal-only. |
 
 ## Implementation Status Map (as of commit c0345a4)
 
@@ -300,6 +314,22 @@ The following rulings were established during development and are preserved as b
 | Book Me (calendar availability) | ❌ Deferred | Explicitly not MVP. Intended as Cal.com embed or Google Calendar API. |
 | GUI evaluation pass | ❌ Deferred | GUI evaluation before QR generation; verification-loop testing deferred until after QR. |
 | Context layer (category UI) | ❌ Removed 2026-09-12 | Context `<select>` eliminated from all templates. DB columns (`grant_contexts`, `context` on `access_grants`) and routes (`/categorize`, `/context`) remain dormant but functional. See git history for the cut commit. |
+
+### Prod-Spec Nice-to-Haves (documented only — NOT to implement yet)
+
+Captain ruling UX pass 3 (2026-09-23): record these for the production spec;
+do NOT build them now.
+
+1. **Contact validation** — validate phone numbers (E.164 sanity / per-region
+   rules), free-text fields, and email syntax at entry time (card editor +
+   new-connection quick start). Today values are stored as typed and phones
+   are formatted only at display time.
+2. **Physical address mapped to map data** — resolve the structured address
+   block (address1/city/state/zip/country) to geocodable map data (map links
+   or embedded maps) on contact and share surfaces.
+3. **Social login imports** — import contact/identity data from Facebook,
+   Instagram, LinkedIn, and YouTube (OAuth), extending the self-publish
+   model: users pull their own data instead of hand-typing it.
 
 ### Test Suite
 

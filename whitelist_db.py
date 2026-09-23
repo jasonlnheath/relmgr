@@ -164,7 +164,13 @@ CARD_EDITOR_FIELD_TYPES = (
     'messenger', 'messaging_app',
     'facebook', 'instagram', 'social_other',
     'title', 'company', 'address1', 'address2', 'city', 'state', 'zip',
+    'country',
     'website', 'birthday', 'note',
+    # UX pass 3 (2026-09-23) personal-identity fields for friend-finding:
+    # personal cards only, MULTIPLES allowed, city/state-level addresses only
+    # public by default (street-level childhood address defaults granted).
+    'high_school', 'maiden_name', 'nickname',
+    'childhood_address1', 'childhood_city', 'childhood_state',
 )
 
 CARD_EDITOR_FIELD_LABELS = {
@@ -187,9 +193,16 @@ CARD_EDITOR_FIELD_LABELS = {
     'city': 'City',
     'state': 'State/Province',
     'zip': 'Zip/Postal Code',
+    'country': 'Country',
     'website': 'Website',
     'birthday': 'Birthday',
     'note': 'Note',
+    'high_school': 'High school',
+    'maiden_name': 'Maiden name',
+    'nickname': 'Nickname',
+    'childhood_address1': 'Childhood address',
+    'childhood_city': 'Childhood city',
+    'childhood_state': 'Childhood state',
 }
 
 # Editor sections in render order: (heading, ((field_type, sublabel), …)).
@@ -223,16 +236,73 @@ CARD_EDITOR_SECTIONS = (
         ('city', 'City'),
         ('state', 'State/Province'),
         ('zip', 'Zip/Postal Code'),
+        ('country', 'Country'),
     )),
     ('Title', (('title', None),)),
     ('Company', (('company', None),)),
     ('Website', (('website', None),)),
     ('Birthday', (('birthday', None),)),
     ('Note', (('note', None),)),
+    # UX pass 3 (2026-09-23): personal-identity fields for friend-finding.
+    # MULTIPLES allowed (someone attends several schools, carries several
+    # nicknames); addresses surface city/state publicly, street-level data
+    # stays granted by default.
+    ('Personal history', (
+        ('high_school', 'High school'),
+        ('maiden_name', 'Maiden name'),
+        ('nickname', 'Nickname'),
+    )),
+    ('Childhood home', (
+        ('childhood_address1', 'Childhood address'),
+        ('childhood_city', 'Childhood city'),
+        ('childhood_state', 'Childhood state'),
+    )),
 )
 
 # Repeatable types that get a "+ Add …" row button in the editor.
-CARD_EDITOR_MULTI_TYPES = ('email', 'phone', 'video_app', 'messaging_app', 'social_other')
+CARD_EDITOR_MULTI_TYPES = ('email', 'phone', 'video_app', 'messaging_app', 'social_other',
+                           'high_school', 'maiden_name', 'nickname',
+                           'childhood_address1', 'childhood_city', 'childhood_state')
+
+# ============================================================
+# Card ordering + kind (UX pass 3, 2026-09-23): Personal is THE default
+# card (top of every surface, its picture is the default public picture),
+# Work second, everything else alphabetical after. One SQL fragment so the
+# public view, share bundles, and the owner's card list can never drift.
+# ============================================================
+
+_CARD_ORDER_SQL = (
+    "CASE WHEN lower(name) = 'personal' THEN 0 "
+    "WHEN lower(name) = 'work' THEN 1 ELSE 2 END, name"
+)
+
+
+def card_kind(card: dict) -> str | None:
+    """'personal' | 'work' | None for a card dict (name-based, lowercased)."""
+    name = (card.get("name") or "").strip().lower()
+    if name == "personal":
+        return "personal"
+    if name == "work":
+        return "work"
+    return None
+
+
+def format_phone_display(value) -> str:
+    """UX pass 3: display phones as +1(XXX)XXX-XXXX.
+
+    10-digit numbers (and 11-digit +1-prefixed) format as US; anything
+    else (international, extensions, junk) renders unchanged. Display-time
+    only — stored values are never rewritten.
+    """
+    if value is None:
+        return ""
+    raw = str(value)
+    digits = re.sub(r"\D", "", raw)
+    if len(digits) == 11 and digits.startswith("1"):
+        digits = digits[1:]
+    if len(digits) == 10:
+        return f"+1({digits[0:3]}){digits[3:6]}-{digits[6:10]}"
+    return raw
 
 
 def wl_connect(db_path: Optional[Path] = None) -> sqlite3.Connection:
@@ -499,6 +569,58 @@ def ensure_vcard_fields_v3_schema(conn: sqlite3.Connection) -> None:
     """)
     conn.execute("DROP TABLE profile_fields")
     conn.execute("ALTER TABLE profile_fields_v3 RENAME TO profile_fields")
+    conn.execute("PRAGMA foreign_keys=ON")
+    conn.commit()
+
+
+# UX pass 3 (2026-09-23): personal-identity field types (high_school,
+# maiden_name, nickname, childhood address parts) plus 'country'. SQLite
+# cannot ALTER a CHECK constraint → the same row-preserving table-swap
+# heal as v2/v3, detected by the distinctive 'childhood_city' literal.
+_PROFILE_FIELDS_PASS3_DDL = f"""
+CREATE TABLE profile_fields_pass3 (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_id INTEGER NOT NULL,
+    field_type TEXT NOT NULL CHECK(field_type IN {CARD_EDITOR_FIELD_TYPES!r}),
+    field_value TEXT NOT NULL,
+    visibility TEXT NOT NULL CHECK(visibility IN {_VCARD_VISIBILITY!r}),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(profile_id, field_type, field_value),
+    FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+)
+"""
+
+
+def ensure_vcard_fields_pass3_schema(conn: sqlite3.Connection) -> None:
+    """Migrate profile_fields to the pass-3 field-type set (idempotent).
+
+    Must run AFTER ensure_vcard_fields_v3_schema (pre-v3 tables are swapped
+    forward by that heal first). No value mapping — purely additive
+    vocabulary. Ids and card_fields links survive the swap (same F1
+    foreign_keys=OFF convention as v2/v3).
+    """
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='profile_fields'"
+    ).fetchone()
+    if row is None or not row[0]:
+        return  # table absent — wl_init creates it fresh this boot
+    if "'childhood_city'" in row[0]:
+        return  # already pass-3
+
+    conn.execute("DROP TABLE IF EXISTS profile_fields_pass3")
+    conn.execute(_PROFILE_FIELDS_PASS3_DDL)
+    conn.execute("PRAGMA foreign_keys=OFF")
+    conn.execute("""
+        INSERT INTO profile_fields_pass3
+            (id, profile_id, field_type, field_value,
+             visibility, created_at, updated_at)
+        SELECT id, profile_id, field_type, field_value,
+               visibility, created_at, updated_at
+        FROM profile_fields
+    """)
+    conn.execute("DROP TABLE profile_fields")
+    conn.execute("ALTER TABLE profile_fields_pass3 RENAME TO profile_fields")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.commit()
 
@@ -1749,12 +1871,16 @@ def is_grey(grant: dict) -> bool:
         return False
     if grant.get("expires_at") is None:
         return False  # lifetime grants are never grey
-    now = _now_iso()
+    # UX pass 3 bug fix (2026-09-23): a badge-move to grey stamps a FUTURE
+    # quarter marker (set_badge_state), and the contact card used to render
+    # that contact as WhiteList until the marker lapsed — contradicting the
+    # contact list. Grey is now the STATE 'granted + real-timestamp marker',
+    # whether the marker has lapsed yet or not (the marker feeds the
+    # quarterly review, it never expires access — semantics ruling). Legacy
+    # '14d'/'90d' strings still fail the GLOB-shaped guard and never grey.
     if not re.fullmatch(r"[0-9].*Z", grant["expires_at"]):
         return False  # legacy expiry strings are not grey
-    if grant["expires_at"] > now:
-        return False  # not yet expired
-    return True  # expired granted = grey (derived, no exceptions)
+    return True
 
 
 def mark_grey_pending_review(conn: sqlite3.Connection, profile_id: int) -> int:
@@ -2287,9 +2413,14 @@ def get_card_by_id(conn: sqlite3.Connection, card_id: int) -> Optional[dict]:
 
 
 def list_cards(conn: sqlite3.Connection, owner_profile_id: int) -> list[dict]:
-    """All cards for an owner, with fields attached."""
+    """All cards for an owner, with fields attached.
+
+    UX pass 3 ordering: Personal first, Work second, then the rest
+    alphabetically — the top card carries the default public picture.
+    """
     rows = conn.execute(
-        "SELECT * FROM cards WHERE owner_profile_id = ? ORDER BY name",
+        "SELECT * FROM cards WHERE owner_profile_id = ? "
+        f"ORDER BY {_CARD_ORDER_SQL}",
         (owner_profile_id,),
     ).fetchall()
     result = []
@@ -2322,7 +2453,8 @@ def cards_for_public_view(
     """
     visible_vis = (("public", "granted", "private") if tier == "granted" else ("public",))
     rows = conn.execute(
-        "SELECT id FROM cards WHERE owner_profile_id = ? ORDER BY id",
+        "SELECT id FROM cards WHERE owner_profile_id = ? "
+        f"ORDER BY {_CARD_ORDER_SQL}",
         (profile_id,),
     ).fetchall()
     card_ids = [r["id"] for r in rows]
@@ -2638,10 +2770,15 @@ def cards_for_share_bundle(
     visible_vis = (("public", "granted", "private")
                    if tier == "granted" else ("public",))
     out: list[dict] = []
-    for card_id in bundle["card_ids"]:
-        card = get_card_by_id(conn, card_id)
-        if card is None:
-            continue
+    resolved = [c for c in (get_card_by_id(conn, cid)
+                            for cid in bundle["card_ids"])
+                if c is not None]
+    # UX pass 3: Personal first (its picture leads the shared set), Work
+    # second, the rest alphabetical — same ordering contract as the profile.
+    resolved.sort(key=lambda c: (0 if card_kind(c) == "personal"
+                                 else 1 if card_kind(c) == "work" else 2,
+                                 c["name"]))
+    for card in resolved:
         visible_fields = [f for f in card["fields"]
                           if f["visibility"] in visible_vis]
         if not visible_fields:
@@ -2771,6 +2908,18 @@ def ensure_card_photo_column(conn: sqlite3.Connection) -> None:
     cols = [r["name"] for r in conn.execute("PRAGMA table_info(cards)").fetchall()]
     if "photo_path" not in cols:
         conn.execute("ALTER TABLE cards ADD COLUMN photo_path TEXT")
+
+
+def ensure_card_hs_photo_column(conn: sqlite3.Connection) -> None:
+    """UX pass 3 (2026-09-23): high-school picture on personal cards.
+
+    Second picture slot (cards.hs_photo_path) — additive column, idempotent.
+    Both the default and the HS picture default PUBLIC (ruling): anonymous
+    viewers see them on the public profile.
+    """
+    cols = [r["name"] for r in conn.execute("PRAGMA table_info(cards)").fetchall()]
+    if "hs_photo_path" not in cols:
+        conn.execute("ALTER TABLE cards ADD COLUMN hs_photo_path TEXT")
 
 
 # ============================================================
@@ -3130,10 +3279,12 @@ def ensure_whitelist_schema(conn: sqlite3.Connection) -> None:
     ensure_quarantine_schema(conn)              # blacklist silence: quarantine store
     ensure_vcard_fields_schema(conn)      # VCard field expansion (field_type + visibility)
     ensure_vcard_fields_v3_schema(conn)   # Round-2 types: 'address'→'address1' + apps (AFTER v2)
+    ensure_vcard_fields_pass3_schema(conn)      # UX pass 3: personal-identity types + country
     ensure_pass2_visibility_heal(conn)    # UX pass 2 F3: one-time visibility defaults backfill
     ensure_profile_field_labels(conn)     # UX pass 2: phone label support (additive column)
     ensure_profile_bio_column(conn)       # Phase A1: profiles.bio
     ensure_card_photo_column(conn)              # Phase A1: cards.photo_path
+    ensure_card_hs_photo_column(conn)           # UX pass 3: cards.hs_photo_path (high-school picture)
     ensure_profile_bio_visibility_column(conn)  # Whitelist: bio visibility toggle
     ensure_card_forwardings(conn)               # Whitelist: trusted forwarding
     ensure_access_grants_v3(conn)               # quarterly rhythm: quarter_status columns
@@ -3146,24 +3297,19 @@ def ensure_whitelist_schema(conn: sqlite3.Connection) -> None:
 def seed_default_cards(conn: sqlite3.Connection) -> None:
     """Seed / self-heal the default cards (idempotent).
 
-    Default cards and their field types:
-    - Identity: title, company
-    - Work: email
-    - Contact: phone + preferred channels + video/messaging apps
-    - Location: address1..zip, website
-    - Details: birthday, note
-    - Social: facebook, instagram, social_other
+    UX pass 3 ruling (2026-09-23): EVERY profile defaults with exactly two
+    default cards — 'Personal' and 'Work', ALWAYS created (even empty, even
+    with no fields yet). Personal is created FIRST so it holds the lower id:
+    the top card, whose picture is THE default public picture. Field types:
+    - Personal: phone/text channels, birthday, personal history
+      (high_school, maiden_name, nickname), childhood home parts
+    - Work: email, title, company, website, country
 
-    Two roles:
-    1. First boot after a profile appears: create cards for field types that
-       have data.
-    2. Reseed heal: seed_profile() DELETEs all profile_fields and reinserts
-       with fresh ids — card_fields' ON DELETE CASCADE silently empties every
-       card, and the old "cards exist -> skip" logic never repaired it. So a
-       default-named card with zero fields gets its field mapping rebuilt by
-       type on every boot. Cost of the heal: an intentionally emptied card
-       refills; deliberate per-card curation should use other names. Custom
-       (non-default) cards are never touched.
+    Legacy default-named cards (Identity, Contact, Location, Details,
+    Social) are no longer created fresh, but their field mappings are still
+    REPAIRED when cascade-orphaned by a seed_profile reseed (the same heal
+    as before — an intentionally emptied legacy card refills; deliberate
+    curation should use other names). Custom cards are never touched.
     """
     # Fresh empty DB pre-wl_init has no profiles table yet — seeding is a
     # no-op there; boot re-runs this on every real request path.
@@ -3174,17 +3320,25 @@ def seed_default_cards(conn: sqlite3.Connection) -> None:
     # curate on their My Profile page).
     owners = conn.execute("SELECT id FROM profiles ORDER BY id").fetchall()
 
-    # Card name → set of field types that belong to it
-    # Order matters: the first card (lowest id) is the default card for
-    # anonymous viewers. Work must come first so its public fields are
-    # visible to anon viewers.
+    # UX pass 3 default pair — ALWAYS created, in this order (Personal
+    # must land the lower id: it is the top card / default picture).
+    DEFAULT_CARD_ORDER = ("Personal", "Work")
+    DEFAULT_CARD_TYPES = {
+        "Personal": {"phone", "text_number", "facetime_number", "birthday",
+                     "high_school", "maiden_name", "nickname",
+                     "childhood_address1", "childhood_city", "childhood_state"},
+        "Work": {"email", "title", "company", "website", "country"},
+    }
+    # Legacy default names: never created fresh any more, but a card that
+    # already exists with one of these names still gets its mapping rebuilt
+    # when a reseed cascade empties it.
     CARD_FIELD_TYPES = {
-        "Work": {"email"},
         "Contact": {"phone", "text_number", "facetime_number",
                     "facetime", "skype", "video_app",
                     "messenger", "messaging_app"},
         "Identity": {"title", "company"},
-        "Location": {"address1", "address2", "city", "state", "zip", "website"},
+        "Location": {"address1", "address2", "city", "state", "zip",
+                     "country", "website"},
         "Details": {"birthday", "note"},
         "Social": {"facebook", "instagram", "social_other"},
     }
@@ -3192,6 +3346,46 @@ def seed_default_cards(conn: sqlite3.Connection) -> None:
     now = _now_iso()
     for owner in owners:
         owner_id = owner["id"]
+        # --- Pass 3 default pair: create-always, heal-always ---
+        for card_name in DEFAULT_CARD_ORDER:
+            field_types = DEFAULT_CARD_TYPES[card_name]
+            field_ids = []
+            for ft in sorted(field_types):
+                field_ids.extend(r["id"] for r in conn.execute(
+                    "SELECT id FROM profile_fields WHERE profile_id = ? AND field_type = ?",
+                    (owner_id, ft),
+                ).fetchall())
+            card = conn.execute(
+                "SELECT id FROM cards WHERE owner_profile_id = ? AND name = ?",
+                (owner_id, card_name),
+            ).fetchone()
+            if card is None:
+                conn.execute(
+                    "INSERT INTO cards (owner_profile_id, name, created_at, updated_at) VALUES (?, ?, ?, ?)",
+                    (owner_id, card_name, now, now),
+                )
+                card_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+            else:
+                card_id = card["id"]
+                n_fields = conn.execute(
+                    "SELECT COUNT(*) FROM card_fields WHERE card_id = ?", (card_id,)
+                ).fetchone()[0]
+                if n_fields > 0:
+                    continue  # populated (curated)
+                # Empty Personal/Work: backfill any matching fields (a reseed
+                # cascade or later-added data), but the card itself stays.
+            existing_mapped = {r["id"] for r in conn.execute(
+                "SELECT pf.id FROM card_fields cf JOIN profile_fields pf ON cf.field_id = pf.id WHERE cf.card_id = ?",
+                (card_id,),
+            ).fetchall()}
+            for fid in field_ids:
+                if fid not in existing_mapped:
+                    conn.execute(
+                        "INSERT INTO card_fields (card_id, field_id) VALUES (?, ?)",
+                        (card_id, fid),
+                    )
+
+        # --- Legacy names: heal-only (never created fresh) ---
         for card_name, field_types in CARD_FIELD_TYPES.items():
             # Collect field ids for all field types in this card
             field_ids = []
@@ -3207,21 +3401,14 @@ def seed_default_cards(conn: sqlite3.Connection) -> None:
             ).fetchone()
 
             if card is None:
-                if not field_ids:
-                    continue  # nothing to group yet
-                conn.execute(
-                    "INSERT INTO cards (owner_profile_id, name, created_at, updated_at) VALUES (?, ?, ?, ?)",
-                    (owner_id, card_name, now, now),
-                )
-                card_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-            else:
-                card_id = card["id"]
-                n_fields = conn.execute(
-                    "SELECT COUNT(*) FROM card_fields WHERE card_id = ?", (card_id,)
-                ).fetchone()[0]
-                if n_fields > 0 or not field_ids:
-                    continue  # populated (curated) or nothing to backfill
-                # Cascade-orphaned by a reseed — rebuild the mapping, skip dupes.
+                continue  # legacy names are no longer seeded
+            card_id = card["id"]
+            n_fields = conn.execute(
+                "SELECT COUNT(*) FROM card_fields WHERE card_id = ?", (card_id,)
+            ).fetchone()[0]
+            if n_fields > 0 or not field_ids:
+                continue  # populated (curated) or nothing to backfill
+            # Cascade-orphaned by a reseed — rebuild the mapping, skip dupes.
             existing_mapped = {r["id"] for r in conn.execute(
                 "SELECT pf.id FROM card_fields cf JOIN profile_fields pf ON cf.field_id = pf.id WHERE cf.card_id = ?",
                 (card_id,),
@@ -3328,10 +3515,17 @@ def add_profile_field(conn: sqlite3.Connection, profile_id: int,
 
 
 def update_card_photo(conn: sqlite3.Connection, card_id: int,
-                      photo_path: str | None) -> None:
-    """Set or clear a card's photo path."""
+                      photo_path: str | None,
+                      kind: str = "default") -> None:
+    """Set or clear a card's photo path.
+
+    UX pass 3: kind='hs' targets the HIGH-SCHOOL picture slot
+    (cards.hs_photo_path); 'default' is the classic picture
+    (cards.photo_path).
+    """
+    col = "hs_photo_path" if kind == "hs" else "photo_path"
     conn.execute(
-        "UPDATE cards SET photo_path = ?, updated_at = datetime('now') WHERE id = ?",
+        f"UPDATE cards SET {col} = ?, updated_at = datetime('now') WHERE id = ?",
         (photo_path, card_id),
     )
     conn.commit()
@@ -3769,12 +3963,47 @@ def list_contact_list_rows(
             seen_emails.add(primary_email.lower())
 
     # ── 8. Apply search filter ──
+    # UX pass 3 (2026-09-23): search matches ALL public-facing and granted
+    # fields EXCEPT bios — not just name/email. Per row the haystack is:
+    # name + email + the row's phones/org text (contacts-table mode) + the
+    # registry profile's public/granted field VALUES (matched by email),
+    # titles, phones and addresses included. The bio lives on profiles.bio
+    # and is never part of the blob (ruling: bios never match).
     if q:
         q_lower = q.lower()
-        rows = [
-            r for r in rows
-            if q_lower in r["name"].lower() or q_lower in r["email"].lower()
-        ]
+        emails = {r["email"].lower() for r in rows if r.get("email")}
+        fields_by_email: dict[str, str] = {}
+        if emails:
+            email_to_pid = {
+                r["field_value"].strip().lower(): r["profile_id"]
+                for r in conn.execute(
+                    "SELECT profile_id, field_value FROM profile_fields "
+                    "WHERE field_type = 'email'")
+                if r["field_value"] and r["field_value"].strip().lower() in emails
+            }
+            if email_to_pid:
+                pids = sorted(set(email_to_pid.values()))
+                marks = ",".join("?" for _ in pids)
+                blob_by_pid: dict[int, list[str]] = {}
+                for r in conn.execute(
+                    f"SELECT profile_id, field_value FROM profile_fields "
+                    f"WHERE profile_id IN ({marks}) AND visibility != 'private'",
+                    pids,
+                ):
+                    blob_by_pid.setdefault(r["profile_id"], []).append(
+                        r["field_value"] or "")
+                for addr, pid in email_to_pid.items():
+                    fields_by_email[addr] = " \n".join(
+                        blob_by_pid.get(pid, []))
+
+        def _haystack(r: dict) -> str:
+            parts = [r["name"] or "", r["email"] or "",
+                     str(r.get("phone") or ""), str(r.get("org") or "")]
+            if r.get("email"):
+                parts.append(fields_by_email.get(r["email"].lower(), ""))
+            return " \n".join(parts).lower()
+
+        rows = [r for r in rows if q_lower in _haystack(r)]
 
     # ── 9. Apply pagination ──
     total = len(rows)
@@ -3875,8 +4104,14 @@ def create_contact_vcard(conn: sqlite3.Connection, owner_profile_id: int,
     the conventional phone/email fields at their DEFAULT visibility
     ('granted' per the UX pass 2 defaults ruling). Default cards are
     seeded for the new profile and the created fields are attached to
-    their default cards (Contact / Work), exactly like a self-published
-    profile would look after seeding.
+    their default cards, exactly like a self-published profile would look
+    after seeding.
+
+    UX pass 3 (2026-09-23): the stub profile is stamped owner_id = the
+    creating owner and has no password — a CURATED profile. The card
+    editor's ownership guard lets the creating owner open its editor
+    ("create opens the NEW vCard with ALL fields ready to populate")
+    while other accounts still 404 (ruling 2A isolation intact).
 
     Returns the created profile dict (with fields attached).
     Raises ValueError when display_name is empty.
@@ -3897,9 +4132,9 @@ def create_contact_vcard(conn: sqlite3.Connection, owner_profile_id: int,
 
     now = _now_iso()
     conn.execute(
-        "INSERT INTO profiles (handle, display_name, created_at, updated_at)"
-        " VALUES (?, ?, ?, ?)",
-        (handle, name, now, now),
+        "INSERT INTO profiles (handle, display_name, owner_id, created_at, updated_at)"
+        " VALUES (?, ?, ?, ?, ?)",
+        (handle, name, owner_profile_id, now, now),
     )
     profile_id = conn.execute(
         "SELECT id FROM profiles WHERE handle = ?", (handle,)

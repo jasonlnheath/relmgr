@@ -82,5 +82,6 @@ def test_dashboard_still_works_without_context(tmp_path):
     client = TestClient(create_app(db))
     resp = client.get(f"/owner/{_token(db)}")
     assert resp.status_code == 200
-    assert "plain@y.com" in resp.text and "ctx@y.com" in resp.text
+    # UX pass 3: rows render NAMES (no email sub-line).
+    assert "Plain" in resp.text and "Ctx" in resp.text
     assert "Permanent" in resp.text or "permanent" in resp.text.lower() or "WhiteList" in resp.text  # round-2: WhiteList badge for lifetime

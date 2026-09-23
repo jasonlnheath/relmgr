@@ -146,6 +146,9 @@ def _make_jinja():
     jinja = Jinja2Templates(directory=str(_JINJA_DIR))
     # UX pass 2: phone label rendering shared by every field-row template.
     jinja.env.globals["label_display"] = whitelist_db.label_display
+    # UX pass 3: +1(XXX)XXX-XXXX display formatting, one formatter for every
+    # surface (stored values are never rewritten).
+    jinja.env.globals["phone_fmt"] = whitelist_db.format_phone_display
     return jinja
 
 
@@ -341,8 +344,8 @@ def _send_connection_request_email(db_path: Path, grant_id: str) -> None:
         f"New connection request on RelMgr from {who} "
         f"({grant['requester_email']}).\n\n"
         f"Review and decide here:\n\n{link}\n\n"
-        "This link expires in 7 days. You can also decide from your "
-        "dashboard notifications.\n"
+        "This link expires in 7 days. You can also decide from the amber "
+        "Requests box at the top of your WhiteList.\n"
     )
     mailer.send_email(owner_email, "RelMgr: new connection request", body)
 
@@ -413,8 +416,19 @@ def _build_vcard(profile: dict, cards: list[dict]) -> str:
                 lines.append(f"URL:{v}")
             elif t == "birthday":
                 lines.append(f"BDAY:{v}")
-            elif t == "note":
-                lines.append(f"NOTE:{v}")
+            elif t == "nickname":
+                lines.append(f"NICKNAME:{v}")
+            elif t in ("note", "high_school", "maiden_name",
+                       "childhood_address1", "childhood_city",
+                       "childhood_state", "country"):
+                # UX pass 3: personal-history + country fields travel as
+                # labeled NOTE lines (vCard has no native slots for them).
+                label = ("High school" if t == "high_school"
+                         else "Maiden name" if t == "maiden_name"
+                         else "Childhood home" if t.startswith("childhood_")
+                         else "Country" if t == "country"
+                         else "Note")
+                lines.append(f"NOTE:{_vcf_escape(label + ': ' + f['field_value'])}")
             elif t == "title":
                 lines.append(f"TITLE:{v}")
             elif t == "company":
@@ -442,6 +456,8 @@ def create_app(db_path: Path = None) -> FastAPI:
                 or Path(__file__).parent / "contacts.db")
     jinja = _make_jinja()
     application = FastAPI(title="WhiteList")
+    # Tests (and tooling) recover the tmp db path from the bound app.
+    application.state.relmgr_db_path = path
 
     # ============================================================
     # Static files (scroll-mark favicon, badge PNGs)
@@ -927,155 +943,25 @@ def create_app(db_path: Path = None) -> FastAPI:
                 _send_connection_request_email, path, grant_id))
 
     # ------------------------------------------------------------------
-    # Share bundles (captain ruling 2026-09-20): the Share flow is
-    # chooser → Next → ONE QR + ONE link encoding the chosen card set.
-    # The bundle link is stable while fields update (card IDs stored,
-    # values read live) and expires exactly one week after creation.
+    # Sharing (UX pass 3, 2026-09-23): UNIFIED. The chooser → Next →
+    # bundle flow is RETIRED — My Profile shows the profile QR between the
+    # name and the Share button, and Share fires the native share popup
+    # directly with the /p/{handle} link (copy link, email, SMS standard).
+    # No card-choosing at share time: the access-grant decision lands after
+    # a contact requests access (Connect → amber request box → grant).
+    # Legacy /s/{bundle_id} links keep rendering for already-shared URLs.
     # ------------------------------------------------------------------
 
     def _bundle_share_url(bundle_id: str) -> str:
         return f"{mailer.app_base_url()}/s/{bundle_id}"
 
+    def _profile_share_url(handle: str) -> str:
+        return f"{mailer.app_base_url()}/p/{handle}"
+
     def _bundle_share_message(display_name: str, bundle_id: str) -> str:
         # Exact copy sent by the native share sheet (ruling 2026-09-20).
         return (f"{display_name} wants to share their WhiteList card: "
                 f"{_bundle_share_url(bundle_id)}")
-
-    @application.post("/owner/{token}/share/preview")
-    async def owner_share_preview(request: Request, token: str):
-        """'What they'll see' fragment for the chooser (ruling 2026-09-20):
-        the bundle exactly as an anonymous recipient will see it, public
-        fields only — rendered BEFORE the Next step so the user confirms.
-        """
-        form = await request.form()
-        raw_ids = form.getlist("card_ids")
-        conn = whitelist_db.wl_connect(path)
-        try:
-            result = _resolve_owner(conn, request, token, _get_secret())
-            if result[0] is None and result[2] is None:
-                return HTMLResponse("Invalid or expired link", status_code=403)
-            if result[2]:
-                return HTMLResponse("")  # session flow: fragment only
-            profile_id = result[0]
-            try:
-                card_ids = [int(c) for c in raw_ids]
-            except (ValueError, TypeError):
-                card_ids = []
-            # Fix-pass F1: ownership parity with the create route — a
-            # foreign or nonexistent card id must never render here, so
-            # filter to the owner's own cards before resolving.
-            card_ids = whitelist_db.filter_owned_cards(
-                conn, profile_id, card_ids)
-            # F4 ruling (2026-09-23): the chooser preview shows EXACTLY what
-            # recipients get — the PUBLIC-facing page. Share links deliver
-            # public data only; more access goes through Connect.
-            cards = whitelist_db.cards_for_share_bundle(
-                conn, {"card_ids": card_ids}, "anonymous")
-            return HTMLResponse(jinja.get_template(
-                "share_cards_fragment.html").render(
-                request=request, cards=cards, preview_mode=True))
-        finally:
-            conn.close()
-
-    @application.post("/owner/{token}/share")
-    async def owner_share_create(request: Request, token: str):
-        """Chooser Next step: create ONE bundle for the chosen card set,
-        then show the owner the single QR + single link for it."""
-        form = await request.form()
-        raw_ids = form.getlist("card_ids")
-        conn = whitelist_db.wl_connect(path)
-        try:
-            result = _resolve_owner(conn, request, token, _get_secret())
-            if result[0] is None and result[2] is None:
-                return HTMLResponse("Invalid or expired link", status_code=403)
-            if result[2]:
-                return RedirectResponse(url=f"/owner/{result[2]}")
-            profile_id = result[0]
-            profile = result[1]
-            try:
-                card_ids = [int(c) for c in raw_ids]
-            except (ValueError, TypeError):
-                card_ids = None
-            try:
-                bundle = whitelist_db.create_share_bundle(
-                    conn, profile_id, card_ids or [])
-            except ValueError:
-                return _my_profile_html(
-                    conn, request, token, profile,
-                    share_error=("Choose at least one card to share"
-                                 if not card_ids else
-                                 "Invalid card selection"),
-                    status_code=400)
-            return RedirectResponse(
-                url=f"/owner/{token}/share/{bundle['id']}", status_code=303)
-        finally:
-            conn.close()
-
-    @application.get("/owner/{token}/share/{bundle_id}", response_class=HTMLResponse)
-    async def owner_share_page(request: Request, token: str, bundle_id: str):
-        """Owner's share sheet: single QR + single link + native share."""
-        conn = whitelist_db.wl_connect(path)
-        try:
-            result = _resolve_owner(conn, request, token, _get_secret())
-            if result[0] is None and result[2] is None:
-                return HTMLResponse("Invalid or expired link", status_code=403)
-            if result[2]:
-                return RedirectResponse(url=f"/owner/{result[2]}")
-            profile_id = result[0]
-            profile = result[1]
-            bundle = whitelist_db.get_share_bundle(conn, bundle_id)
-            if not bundle or bundle["profile_id"] != profile_id:
-                return HTMLResponse("Not found", status_code=404)
-            expired = whitelist_db.bundle_is_expired(bundle)
-            card_names = []
-            for cid in bundle["card_ids"]:
-                card = whitelist_db.get_card_by_id(conn, cid)
-                if card:
-                    card_names.append(card["name"])
-            # UX pass (2026-09-22): show the ACTUAL card being shared below
-            # the QR + link — same recipient rendering as /s/{bundle_id}.
-            # F4 ruling: links deliver the PUBLIC-facing page, so this is
-            # the anonymous-tier render — exactly what recipients get.
-            bundle_cards = whitelist_db.cards_for_share_bundle(
-                conn, {"card_ids": bundle["card_ids"]}, "anonymous")
-        finally:
-            conn.close()
-
-        share_url = _bundle_share_url(bundle_id)
-        return HTMLResponse(jinja.get_template("owner_share.html").render(
-            request=request,
-            token=token,
-            profile=profile,
-            bundle_id=bundle_id,
-            card_names=card_names,
-            cards=bundle_cards,
-            share_url=share_url,
-            share_message=_bundle_share_message(profile["display_name"], bundle_id),
-            # UX pass 2: default email subject '<First> <Last> WhiteList Card'.
-            share_subject=f"{profile['display_name']} WhiteList Card",
-            expired=expired,
-        ))
-
-    @application.post("/owner/{token}/share/{bundle_id}/reshare")
-    async def owner_share_reshare(request: Request, token: str, bundle_id: str):
-        """Re-share path for an expired link (ruling 2026-09-20): stamp a
-        fresh one-week shelf life on the same bundle/link."""
-        conn = whitelist_db.wl_connect(path)
-        try:
-            result = _resolve_owner(conn, request, token, _get_secret())
-            if result[0] is None and result[2] is None:
-                return HTMLResponse("Invalid or expired link", status_code=403)
-            if result[2]:
-                return RedirectResponse(url=f"/owner/{result[2]}")
-            profile_id = result[0]
-            bundle = whitelist_db.get_share_bundle(conn, bundle_id)
-            if not bundle or bundle["profile_id"] != profile_id:
-                return HTMLResponse("Not found", status_code=404)
-            whitelist_db.renew_share_bundle(conn, bundle_id)
-        finally:
-            conn.close()
-        return RedirectResponse(
-            url=f"/owner/{token}/share/{bundle_id}", status_code=303)
 
     @application.get("/s/{bundle_id}/card.vcf")
     async def share_bundle_vcf(request: Request, bundle_id: str,
@@ -1287,7 +1173,8 @@ def create_app(db_path: Path = None) -> FastAPI:
                 page = max(0, int(request.query_params.get("page", 0)))
             except ValueError:
                 page = 0
-            per_page = 50
+            # UX pass 3 (2026-09-23): reduced rows (~100 per page).
+            per_page = 100
 
             # Owner dashboard: per-owner isolation (ruling 2A). Every auth
             # path — session cookie, integer-payload token, and the legacy
@@ -1335,6 +1222,16 @@ def create_app(db_path: Path = None) -> FastAPI:
                     if gd["status"] == "denied":
                         continue
                     prof = profile_map.get(gd["profile_id"])
+                    # UX pass 3: card tabs work in pure-whitelist mode too —
+                    # resolve each grant's card refs exactly like the data
+                    # layer does in contacts mode.
+                    gcard_rows = conn.execute(
+                        "SELECT c.id, c.name FROM grant_cards gc JOIN cards c ON gc.card_id = c.id "
+                        "WHERE gc.grant_id = ?",
+                        (gd["id"],),
+                    ).fetchall()
+                    gcard_refs = [{"id": r["id"], "name": r["name"]}
+                                  for r in gcard_rows]
                     rows.append({
                         "contact_id": None,
                         "name": gd.get("requester_name") or gd.get("requester_email", "Unknown"),
@@ -1343,7 +1240,8 @@ def create_app(db_path: Path = None) -> FastAPI:
                         "org": "",
                         "granted": gd["status"] == "granted",
                         "live_grant": gd,
-                        "cards": [],
+                        "cards": [r["name"] for r in gcard_rows],
+                        "card_refs": gcard_refs,
                         "perm": "permanent" if gd.get("expires_at") is None else ("temp" if gd.get("expires_at") else None),
                         "logo_state": ("fresh" if whitelist_db.is_current_quarter(prof.get("verified_at")) else "stale") if prof else None,
                         "refreshed_at": None,
@@ -1357,12 +1255,12 @@ def create_app(db_path: Path = None) -> FastAPI:
                 (profile_id,),
             ).fetchone()[0]
 
-            # Notification center (2026-09-20): raise the quarterly prompt
-            # (idempotent per owner+quarter via dedupe key) and read the
-            # unread badge count for the dashboard header.
+            # UX pass 3 (2026-09-23): the in-app notification PAGE is retired
+            # (requests live in the amber box below; quarterly = the email +
+            # the grey rows in this list). The quarterly prompt ROW is still
+            # raised here — the append-only event record survives; only the
+            # page, its routes, and the header button are gone.
             whitelist_db.sync_quarterly_notifications(conn, profile_id)
-            unread_notifications = whitelist_db.unread_notification_count(
-                conn, profile_id)
 
             # Unified row list for single-surface contact list (round-2)
             all_rows = rows
@@ -1372,8 +1270,15 @@ def create_app(db_path: Path = None) -> FastAPI:
             # two cards appears twice in the list, once per card, each row
             # deep-linking the detail view with that card selected. Contacts
             # and pending grants without cards render one row as before.
+            # UX pass 3 (2026-09-23): PENDING rows leave the main list —
+            # they land in the amber request box at the top (below the
+            # search bar), per the captain's ruling.
             expanded_rows: list[dict] = []
+            pending_rows: list[dict] = []
             for r in all_rows:
+                if r.get("is_pending"):
+                    pending_rows.append(r)
+                    continue
                 refs = r.get("card_refs") or []
                 if refs:
                     for ref in refs:
@@ -1383,6 +1288,62 @@ def create_app(db_path: Path = None) -> FastAPI:
                 else:
                     expanded_rows.append(r)
             all_rows = expanded_rows
+
+            # UX pass 3 (2026-09-23): PICTURE-BASED MULTI-SELECT FILTER TABS
+            # below the search bar. Card tabs carry the card's own picture
+            # (Personal first, then Work, then the rest alphabetical); list
+            # badge tabs carry the white/grey/black state. ?f=<id>,<id>,...
+            # combines selections: card group OR, state group OR, the two
+            # groups AND together (e.g. personal + work1 + grey + white).
+            owner_cards_all = whitelist_db.list_cards(conn, profile_id)
+            filter_tabs: list[dict] = []
+            for c in owner_cards_all:
+                filter_tabs.append({
+                    "kind": "card",
+                    "key": str(c["id"]),
+                    "card": c,
+                })
+            for state_key, label in (("whitelist", "WhiteList"),
+                                     ("greylist", "GreyList"),
+                                     ("blacklist", "BlackList")):
+                filter_tabs.append({
+                    "kind": "state",
+                    "key": state_key,
+                    "label": label,
+                })
+            raw_f = (request.query_params.get("f") or "")
+            selected_f = {tok for tok in raw_f.split(",") if tok}
+            valid_keys = {t["key"] for t in filter_tabs}
+            selected_f &= valid_keys
+            sel_cards = {int(k) for k in selected_f if k.isdigit()}
+            sel_states = selected_f - {str(k) for k in sel_cards}
+
+            def _row_state(r: dict) -> str:
+                gd = r.get("live_grant")
+                if not gd:
+                    return "blacklist"  # plain address-book contact: no access
+                if gd.get("status") != "granted":
+                    return "blacklist"
+                return "whitelist" if gd.get("expires_at") is None else "greylist"
+
+            if sel_cards or sel_states:
+                def _matches(r: dict) -> bool:
+                    card_ok = (not sel_cards
+                               or (r.get("row_card") is not None
+                                   and r["row_card"]["id"] in sel_cards))
+                    state_ok = (not sel_states
+                                or _row_state(r) in sel_states)
+                    return card_ok and state_ok
+                all_rows = [r for r in all_rows if _matches(r)]
+
+            # UX pass 3 sort ruling: card type alphabetical, then the state
+            # white/grey/black, then name.
+            _STATE_RANK = {"whitelist": 0, "greylist": 1, "blacklist": 2}
+            all_rows.sort(key=lambda r: (
+                (r.get("row_card") or {}).get("name", "") or "",
+                _STATE_RANK[_row_state(r)],
+                (r.get("name") or "").lower(),
+            ))
 
             # UX pass (2026-09-22): the A–Z rail + prefix filter run on the
             # MERGED rows, whatever mode produced them; pagination slices
@@ -1425,8 +1386,11 @@ def create_app(db_path: Path = None) -> FastAPI:
             return HTMLResponse(jinja.get_template("contact_list.html").render(
                 request=request,
                 all_rows=all_rows,
+                pending_rows=pending_rows,
                 my_card=my_card,
                 all_cards=all_cards,
+                filter_tabs=filter_tabs,
+                selected_f=selected_f,
                 token=token,
                 q=q,
                 letter=letter,
@@ -1436,7 +1400,6 @@ def create_app(db_path: Path = None) -> FastAPI:
                 total_rows=total_rows,
                 total_contacts=total_contacts,
                 denied_count=denied_count,
-                unread_notifications=unread_notifications,
                 days_since=days_since,
                 days_until=days_until,
             ))
@@ -1515,63 +1478,16 @@ def create_app(db_path: Path = None) -> FastAPI:
         finally:
             conn.close()
 
-    # ------------------------------------------------------------------ Notification center (2026-09-20)
-    # The in-app center is the source of truth; email is only the push.
-    @application.get("/owner/{token}/notifications", response_class=HTMLResponse)
-    async def owner_notifications(request: Request, token: str):
-        conn = whitelist_db.wl_connect(path)
-        try:
-            result = _resolve_owner(conn, request, token, _get_secret())
-            if result[0] is None and result[2] is None:
-                return HTMLResponse("Invalid or expired link", status_code=403)
-            if result[2]:
-                return RedirectResponse(url=f"/owner/{result[2]}")
-            profile_id = result[0]
-            notifications = whitelist_db.list_notifications(conn, profile_id)
-            unread_notifications = whitelist_db.unread_notification_count(
-                conn, profile_id)
-        finally:
-            conn.close()
-        return HTMLResponse(jinja.get_template("notifications.html").render(
-            request=request,
-            notifications=notifications,
-            unread_notifications=unread_notifications,
-            token=token,
-            days_since=days_since,
-        ))
-
-    @application.post("/owner/{token}/notifications/read-all")
-    async def owner_notifications_read_all(request: Request, token: str):
-        conn = whitelist_db.wl_connect(path)
-        try:
-            result = _resolve_owner(conn, request, token, _get_secret())
-            if result[0] is None and result[2] is None:
-                return HTMLResponse("Invalid or expired link", status_code=403)
-            if result[2]:
-                return RedirectResponse(url=f"/owner/{result[2]}")
-            profile_id = result[0]
-            whitelist_db.mark_all_notifications_read(conn, profile_id)
-        finally:
-            conn.close()
-        # 303 See Other: the browser must follow with GET.
-        return RedirectResponse(url=f"/owner/{token}/notifications", status_code=303)
-
-    @application.post("/owner/{token}/notifications/{notification_id}/read")
-    async def owner_notification_read(request: Request, token: str, notification_id: int):
-        conn = whitelist_db.wl_connect(path)
-        try:
-            result = _resolve_owner(conn, request, token, _get_secret())
-            if result[0] is None and result[2] is None:
-                return HTMLResponse("Invalid or expired link", status_code=403)
-            if result[2]:
-                return RedirectResponse(url=f"/owner/{result[2]}")
-            profile_id = result[0]
-            # Owner-scoped: a foreign/unknown id is a silent no-op.
-            whitelist_db.mark_notification_read(
-                conn, profile_id, notification_id)
-        finally:
-            conn.close()
-        return RedirectResponse(url=f"/owner/{token}/notifications", status_code=303)
+    # ------------------------------------------------------------------
+    # Notification PAGE — ELIMINATED (UX pass 3, 2026-09-23 captain ruling
+    # investigation): connection requests and forwards now land at the TOP
+    # of the whitelist in the amber request box; the quarterly review is
+    # the quarterly email + the grey contacts visible in the list itself;
+    # expired-link pings were tied to the retired share-chooser flow. The
+    # page carried nothing unique. The notifications TABLE and its data
+    # layer stay (append-only event record + the email push's source of
+    # truth) — only the page, its routes, and the header button are gone.
+    # ------------------------------------------------------------------
 
     # ------------------------------------------------------------------ New connection (+ button, UX pass 2)
     # The round + button RIGHT of the search bar: search the database for
@@ -1613,12 +1529,23 @@ def create_app(db_path: Path = None) -> FastAPI:
                 return HTMLResponse(jinja.get_template("new_connection.html").render(
                     request=request, token=token, q="", matches=matches,
                     error="Name is required."), status_code=400)
-            whitelist_db.create_contact_vcard(
+            new_profile = whitelist_db.create_contact_vcard(
                 conn, profile_id, display_name, phone=phone, email=email)
+            # UX pass 3 (bug fix + create-flow ruling): land DIRECTLY in the
+            # new vCard's editor — ALL field sections ready to populate. The
+            # Personal card is the top/default card; fall back to the first
+            # card when a custom heal left none (there is always Personal,
+            # but never 404 on a race).
+            cards = whitelist_db.list_cards(conn, new_profile["id"])
+            target = next((c for c in cards if c["name"].lower() == "personal"),
+                          cards[0] if cards else None)
         finally:
             conn.close()
-        # 303 See Other: land back on the contact list with a GET.
-        return RedirectResponse(url=f"/owner/{token}", status_code=303)
+        if target is None:
+            # 303 See Other: land back on the contact list with a GET.
+            return RedirectResponse(url=f"/owner/{token}", status_code=303)
+        return RedirectResponse(
+            url=f"/owner/{token}/cards/{target['id']}/edit", status_code=303)
 
     # ------------------------------------------------------------------ Manage access (P5-T3)
     @application.post("/owner/{token}/access", response_class=HTMLResponse)
@@ -1725,6 +1652,10 @@ def create_app(db_path: Path = None) -> FastAPI:
         # Resolve BASE_URL for the share-link template (config-driven:
         # APP_BASE_URL > legacy BASE_URL > LAN default, never fails).
         base_url = mailer.app_base_url()
+        # UX pass 3: UNIFIED sharing — the link the QR + Share button carry
+        # is the profile URL itself. No bundle, no card-choosing: the
+        # access-grant decision lands after a contact requests access.
+        share_url = f"{base_url}/p/{profile['handle']}"
         return HTMLResponse(jinja.get_template("my_profile.html").render(
             request=request,
             profile=profile,
@@ -1741,6 +1672,10 @@ def create_app(db_path: Path = None) -> FastAPI:
             days_until=days_until,
             share_error=share_error,
             BASE_URL=base_url,
+            share_url=share_url,
+            share_message=(f"{profile['display_name']} wants to share their "
+                           f"WhiteList card: {share_url}"),
+            share_subject=f"{profile['display_name']} WhiteList Card",
         ), status_code=status_code)
 
     @application.get("/owner/{token}/profile", response_class=HTMLResponse)
@@ -1957,6 +1892,13 @@ def create_app(db_path: Path = None) -> FastAPI:
         Returns (profile_id, card, error_response) — error_response is set
         when the caller must return it immediately (403 invalid link,
         session-redirect, or 404 unknown/foreign card — ruling 2A).
+
+        UX pass 3 exception: CURATED stub profiles. A profile the owner
+        created via the + new-connection flow (owner_id = that owner,
+        password_hash NULL — never self-published) is editable by its
+        creating owner, so 'Create vCard' can open the new vCard's editor.
+        Other accounts still 404 (2A isolation intact), and a profile that
+        has signed in / set a password is self-published and closes again.
         """
         result = _resolve_owner(conn, request, token, _get_secret())
         if result[0] is None and result[2] is None:
@@ -1968,7 +1910,13 @@ def create_app(db_path: Path = None) -> FastAPI:
         if not card:
             return None, None, HTMLResponse("Card not found", status_code=404)
         if card["owner_profile_id"] != profile_id:
-            return None, None, HTMLResponse("Not found", status_code=404)
+            stub = conn.execute(
+                "SELECT owner_id, password_hash FROM profiles WHERE id = ?",
+                (card["owner_profile_id"],),
+            ).fetchone()
+            if not (stub is not None and stub["password_hash"] is None
+                    and stub["owner_id"] == profile_id):
+                return None, None, HTMLResponse("Not found", status_code=404)
         return profile_id, card, None
 
     def _card_editor_html(conn, request, token: str, profile: dict, card: dict,
@@ -2007,7 +1955,10 @@ def create_app(db_path: Path = None) -> FastAPI:
             profile_id, card, err = _resolve_editor_card(conn, request, token, card_id)
             if err is not None:
                 return err
-            profile = whitelist_db.get_profile_by_id(conn, profile_id)
+            # UX pass 3: render the CARD-owner profile — for curated stubs
+            # (new-connection vCards) the name being edited is the stub's,
+            # never the signed-in owner's.
+            profile = whitelist_db.get_profile_by_id(conn, card["owner_profile_id"])
             if not profile:
                 return HTMLResponse("Profile not found", status_code=404)
             return _card_editor_html(conn, request, token, profile, card)
@@ -2016,9 +1967,16 @@ def create_app(db_path: Path = None) -> FastAPI:
 
     _FIELD_KEY_RE = re.compile(r"^field_(\d+)_(value|remove)$")
 
-    # UX pass 2 (2026-09-22) defaults ruling: EVERY field defaults to
-    # 'granted' except title, company, and website, which default 'public'.
-    _PUBLIC_DEFAULT_TYPES = ("title", "company", "website")
+    # UX pass 3 defaults ruling (2026-09-23): identity/friend-finding fields
+    # default PUBLIC — title, company, website, birthday, the personal
+    # history types (high school / maiden name / nickname), and the
+    # city/state-level address parts. Street-level addresses (address1,
+    # address2, zip, childhood street) default 'granted'; everything else
+    # defaults 'granted'.
+    _PUBLIC_DEFAULT_TYPES = ("title", "company", "website", "birthday",
+                             "high_school", "maiden_name", "nickname",
+                             "city", "state",
+                             "childhood_city", "childhood_state")
 
     def _editor_default_visibility(field_type: str) -> str:
         return ("public" if field_type in _PUBLIC_DEFAULT_TYPES else "granted")
@@ -2113,13 +2071,13 @@ def create_app(db_path: Path = None) -> FastAPI:
                     new_fields=new_fields,
                 )
             except ValueError as exc:
-                profile = whitelist_db.get_profile_by_id(conn, profile_id)
+                profile = whitelist_db.get_profile_by_id(conn, card["owner_profile_id"])
                 card = whitelist_db.get_card_by_id(conn, card_id)
                 return _card_editor_html(conn, request, token, profile, card,
                                          error=str(exc), status_code=400)
 
             card = whitelist_db.get_card_by_id(conn, card_id)
-            profile = whitelist_db.get_profile_by_id(conn, profile_id)
+            profile = whitelist_db.get_profile_by_id(conn, card["owner_profile_id"])
             return _card_editor_html(conn, request, token, profile, card)
         finally:
             conn.close()
@@ -2198,12 +2156,14 @@ def create_app(db_path: Path = None) -> FastAPI:
 
             whitelist_db.delete_card(conn, card_id, profile_id)
 
-            # The card's photo file has no DB row anymore — unlink it.
-            photo_path = f"{profile_id}_{card_id}.jpg"
-            try:
-                (Path(__file__).parent / "uploads" / photo_path).unlink()
-            except OSError:
-                pass
+            # The card's photo files have no DB row anymore — unlink both
+            # slots (default + high-school picture, UX pass 3).
+            for photo_path in (f"{profile_id}_{card_id}.jpg",
+                               f"{profile_id}_{card_id}_hs.jpg"):
+                try:
+                    (Path(__file__).parent / "uploads" / photo_path).unlink()
+                except OSError:
+                    pass
 
             # 303 (See Other): the browser must land on My Profile with a
             # GET — a 307 would replay the POST onto /profile (405).
@@ -2212,12 +2172,17 @@ def create_app(db_path: Path = None) -> FastAPI:
             conn.close()
 
     @application.post("/owner/{token}/cards/{card_id}/photo")
-    async def owner_upload_photo(request: Request, token: str, card_id: int):
+    async def owner_upload_photo(request: Request, token: str, card_id: int,
+                                 photo_kind: str = Query(None)):
         from starlette.datastructures import UploadFile
         import os
 
         form = await request.form()
         remove_photo = form.get("remove_photo")
+        # UX pass 3: two picture slots on personal cards — the DEFAULT
+        # picture (photo_kind absent/'default') and the HIGH-SCHOOL picture
+        # ('hs'). Both default public on personal cards.
+        kind = "hs" if photo_kind == "hs" else "default"
 
         conn = whitelist_db.wl_connect(path)
         try:
@@ -2228,16 +2193,21 @@ def create_app(db_path: Path = None) -> FastAPI:
             upload_dir = Path(__file__).parent / "uploads"
             upload_dir.mkdir(exist_ok=True)
             photo_path = f"{profile_id}_{card_id}.jpg"
-            full_path = upload_dir / photo_path
+            hs_photo_path = f"{profile_id}_{card_id}_hs.jpg"
+            slot_path = hs_photo_path if kind == "hs" else photo_path
+            full_path = upload_dir / slot_path
 
             if remove_photo:
                 # Remove photo
-                if card.get("photo_path"):
+                stored = (card.get("hs_photo_path") if kind == "hs"
+                          else card.get("photo_path"))
+                if stored:
                     try:
                         os.unlink(full_path)
                     except OSError:
                         pass
-                whitelist_db.update_card_photo(conn, card_id, None)
+                whitelist_db.update_card_photo(
+                    conn, card_id, None, kind=kind)
             else:
                 # Two upload paths: the client-side cropper posts its result
                 # as a base64 data URL (photo_data); a raw file (photo) is
@@ -2267,10 +2237,13 @@ def create_app(db_path: Path = None) -> FastAPI:
                     except ValueError:
                         return HTMLResponse("Invalid image file", status_code=400)
                     full_path.write_bytes(data)
-                    whitelist_db.update_card_photo(conn, card_id, photo_path)
+                    whitelist_db.update_card_photo(
+                        conn, card_id,
+                        hs_photo_path if kind == "hs" else photo_path,
+                        kind=kind)
 
             card = whitelist_db.get_card_by_id(conn, card_id)
-            profile = whitelist_db.get_profile_by_id(conn, profile_id)
+            profile = whitelist_db.get_profile_by_id(conn, card["owner_profile_id"])
             if not profile:
                 return HTMLResponse("Profile not found", status_code=404)
             # Back to the editor (the upload lives there now).
@@ -2312,6 +2285,17 @@ def create_app(db_path: Path = None) -> FastAPI:
     async def serve_photo(owner_profile_id: int, card_id: int):
         upload_dir = Path(__file__).parent / "uploads"
         photo_path = f"{owner_profile_id}_{card_id}.jpg"
+        full_path = upload_dir / photo_path
+        if not full_path.exists():
+            return HTMLResponse("Photo not found", status_code=404)
+        from fastapi.responses import FileResponse
+        return FileResponse(full_path, media_type="image/jpeg")
+
+    @application.get("/photos/{owner_profile_id}/{card_id}/hs")
+    async def serve_hs_photo(owner_profile_id: int, card_id: int):
+        """UX pass 3: the HIGH-SCHOOL picture slot on personal cards."""
+        upload_dir = Path(__file__).parent / "uploads"
+        photo_path = f"{owner_profile_id}_{card_id}_hs.jpg"
         full_path = upload_dir / photo_path
         if not full_path.exists():
             return HTMLResponse("Photo not found", status_code=404)

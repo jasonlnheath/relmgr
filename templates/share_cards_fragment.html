@@ -66,7 +66,7 @@
             {% for f in card.visible_fields %}
             <div class="flex items-start wl-text-sub">
                 <span class="w-28 flex-shrink-0 text-right pr-4 text-xs wl-text-faint uppercase tracking-wide pt-0.5">{% if f.field_type == 'phone' and f.get('label') %}{{ label_display(f.label) }}{% else %}{{ f.field_type }}{% endif %}</span>
-                <span class="flex-1 min-w-0 wl-text break-words">{{ f.field_value }}</span>
+                <span class="flex-1 min-w-0 wl-text break-words">{% if f.field_type in ('phone', 'text_number', 'facetime_number') %}{{ phone_fmt(f.field_value) }}{% else %}{{ f.field_value }}{% endif %}</span>
                 {% if f.visibility == 'private' %}
                 <span class="ml-2 text-xs wl-text-faint" title="Private field">🔒</span>
                 {% endif %}

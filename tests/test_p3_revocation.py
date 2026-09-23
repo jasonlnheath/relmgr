@@ -230,8 +230,10 @@ def test_dashboard_renders_revoke_button_for_active_grant(tmp_path):
     client = TestClient(create_app(db))
     resp = client.get(f"/owner/{owner_token}")
     assert resp.status_code == 200
-    # contacts.html still shows active grants; revoke is via manage form
-    assert "active@example.com" in resp.text
+    # contacts.html still shows active grants; revoke is via manage form.
+    # UX pass 3: rows no longer carry an email sub-line — assert on the
+    # requester name, which is what the list renders.
+    assert "Viewer" in resp.text
 
 
 # ------------------------------------------------------------------ migration

@@ -18,68 +18,65 @@
                     <h2 class="wl-heading wl-heading-sm wl-text">{{ profile.display_name }}</h2>
                     <p class="text-xs wl-text-faint mt-1">{{ visit_count }} visits (last 14 days)</p>
                 </div>
-                <div class="flex items-center gap-2">
-                    <button type="button" onclick="document.getElementById('share-chooser').classList.toggle('hidden')"
-                            class="wl-btn-ink px-3 py-1 rounded text-xs inline-flex items-center gap-1.5">
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 12.632a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z"/>
-                        </svg>
-                        Share
-                    </button>
-                    <a href="/p/{{ profile.handle }}?e={{ owner_email | urlencode }}"
-                       class="wl-link text-sm">
-                        View profile →
-                    </a>
-                </div>
+                <a href="/p/{{ profile.handle }}?e={{ owner_email | urlencode }}"
+                   class="wl-link text-sm">
+                    View profile →
+                </a>
             </div>
 
-            {# Share flow (2026-09-20): card chooser → Next → one QR + one
-               link encoding the chosen set. No QR here anymore — the link
-               is minted on the next screen. #}
-            <div id="share-chooser" class="hidden mt-3 p-3 rounded-lg" style="background: rgba(255,255,255,0.03); border: 1px solid var(--wl-glass-border);">
-                <p id="share-chooser-hint" class="text-xs wl-text-faint mb-2">Choose the cards you want to share.</p>
-                <form id="share-chooser-form" method="POST" action="/owner/{{ token }}/share">
-                    <div class="space-y-1">
-                        {% for card in cards %}
-                        <label class="flex items-center gap-2 text-sm cursor-pointer">
-                            <input type="checkbox" name="card_ids" value="{{ card.id }}"
-                                   class="w-4 h-4 rounded"
-                                   style="accent-color: #E8E8E8;">
-                            <span class="wl-text">{{ card.name }}</span>
-                            <span class="text-xs wl-text-faint">{{ card.fields|length }} field{{ '' if card.fields|length == 1 else 's' }}</span>
-                        </label>
-                        {% else %}
-                        <p class="text-xs wl-text-faint">No cards to share yet — create one below.</p>
-                        {% endfor %}
-                    </div>
-                    {% if share_error %}
-                    <p class="text-xs mt-2" style="color: var(--wl-danger);">{{ share_error }}</p>
-                    {% endif %}
-                    <button type="submit"
-                            class="wl-btn-ink px-3 py-1 rounded text-xs mt-2">
-                        Next
-                    </button>
-                </form>
-                {# Live 'what they'll see' preview — the bundle exactly as an
-                   anonymous recipient sees it (public fields only), rendered
-                   before the Next step (ruling 2026-09-20). #}
-                <div id="share-preview" class="hidden mt-3" aria-live="polite"></div>
+            {# ========================================================
+               UNIFIED SHARING (UX pass 3, 2026-09-23): the 'Share your
+               card' chooser page is ELIMINATED. Between the name and the
+               Share button sits the QR (encoding the profile link); the
+               Share button fires the NATIVE share popup directly — copy
+               link, email and SMS are the standard targets. No
+               card-choosing at share time: the access-grant decision
+               lands after a contact requests access.
+               ======================================================== #}
+            <div class="flex flex-col items-center gap-3 my-4">
+                <a href="/p/{{ profile.handle }}?e={{ owner_email | urlencode }}"
+                   title="Open your public profile"
+                   aria-label="Open your public profile">
+                    <img src="/qr/{{ profile.handle }}"
+                         alt="QR code to your WhiteList profile"
+                         class="w-36 h-36 rounded-lg"
+                         style="background: #FFFFFF; padding: 6px; border: 1px solid var(--wl-glass-edge);">
+                </a>
+                <button type="button" id="share-button"
+                        data-share-url="{{ share_url }}"
+                        data-share-text="{{ share_message }}"
+                        data-share-title="{{ share_subject }}"
+                        class="wl-btn-ink px-4 py-2 rounded-lg text-sm inline-flex items-center gap-1.5">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 12.632a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z"/>
+                    </svg>
+                    Share
+                </button>
+                {# No-JS / no-native-share fallback: copy link, email, SMS —
+                   the standard share targets (messenger apps come later). #}
+                <div id="share-fallback" class="hidden flex items-center gap-3 text-sm">
+                    <button type="button" id="share-copy"
+                            class="wl-btn-ink px-3 py-1 rounded text-xs">Copy link</button>
+                    <a href="mailto:?subject={{ share_subject | urlencode }}&body={{ share_message | urlencode }}"
+                       class="wl-link text-xs">Email</a>
+                    <a href="sms:?&body={{ share_message | urlencode }}"
+                       class="wl-link text-xs">SMS</a>
+                </div>
+                <span id="share-copied" class="hidden text-xs wl-text-sub">Link copied</span>
             </div>
 
             {# Bio #}
             <div class="mt-3">
                 <div class="flex items-center justify-between mb-1">
                     <label class="text-sm font-medium wl-text-sub">Bio</label>
-                    <form method="POST" action="/owner/{{ token }}/bio-visibility" class="flex items-center gap-1">
-                        <select name="bio_visibility"
+                    {# UX pass 3: the separate 'Visibility' button is REMOVED —
+                       the dropdown applies on change. #}
+                    <form method="POST" action="/owner/{{ token }}/bio-visibility">
+                        <select name="bio_visibility" onchange="this.form.submit()"
                                 class="wl-select text-xs border border-gray-600 rounded px-1 py-0.5 focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
                             <option value="public" {% if profile.get('bio_visibility') == 'public' %}selected{% endif %}>Public</option>
                             <option value="private" {% if profile.get('bio_visibility') == 'private' %}selected{% endif %}>Private</option>
                         </select>
-                        <button type="submit"
-                                class="wl-btn-gray px-2 py-0.5 rounded text-xs">
-                            Visibility
-                        </button>
                     </form>
                 </div>
                 <form method="POST" action="/owner/{{ token }}/bio" class="mt-1">
@@ -173,38 +170,50 @@
 </div>
 
 <script>
-// Live 'what they'll see' preview: re-fetch the anonymous-tier fragment
-// whenever the chooser selection changes (degrades to no preview w/o JS).
-function updateSharePreview() {
-    const form = document.getElementById('share-chooser-form');
-    const panel = document.getElementById('share-preview');
-    const data = new FormData(form);
-    fetch('/owner/{{ token }}/share/preview', { method: 'POST', body: data })
-        .then(r => r.text())
-        .then(html => {
-            panel.innerHTML = html;
-            panel.classList.toggle('hidden', !document.querySelector('#share-chooser input[name="card_ids"]:checked'));
-        })
-        .catch(() => {});
-}
-document.querySelectorAll('#share-chooser input[name="card_ids"]').forEach(cb => {
-    cb.addEventListener('change', updateSharePreview);
-});
-
-// UX pass (2026-09-22): chooser copy — 'Click next to share.' once at
-// least one card is selected.
+// ============================================================
+// UNIFIED SHARING (UX pass 3): Share fires the NATIVE share popup
+// (navigator.share) directly. When the platform has no native share
+// (desktop browsers), the standard fallback row appears: copy link,
+// email, SMS — messenger/signal/telegram come later.
+// ============================================================
 (function () {
-    const hint = document.getElementById('share-chooser-hint');
-    if (!hint) return;
-    const IDLE = 'Choose the cards you want to share.';
-    const READY = 'Click next to share.';
-    function syncHint() {
-        const any = !!document.querySelector('#share-chooser input[name="card_ids"]:checked');
-        hint.textContent = any ? READY : IDLE;
+    const btn = document.getElementById('share-button');
+    const fallback = document.getElementById('share-fallback');
+    const copied = document.getElementById('share-copied');
+    if (!btn) return;
+    const url = btn.dataset.shareUrl;
+    const text = btn.dataset.shareText;
+    const title = btn.dataset.shareTitle;
+    if (!(navigator.share)) {
+        if (fallback) fallback.classList.remove('hidden');
     }
-    document.querySelectorAll('#share-chooser input[name="card_ids"]').forEach(cb =>
-        cb.addEventListener('change', syncHint));
-    syncHint();
+    btn.addEventListener('click', async () => {
+        if (navigator.share) {
+            try {
+                await navigator.share({ title: title, text: text, url: url });
+                return;
+            } catch (e) {
+                if (e && e.name === 'AbortError') return;
+                // Fall through to the fallback row on any other error.
+            }
+        }
+        if (fallback) fallback.classList.remove('hidden');
+    });
+    const copyBtn = document.getElementById('share-copy');
+    if (copyBtn) {
+        copyBtn.addEventListener('click', async () => {
+            try {
+                await navigator.clipboard.writeText(url);
+            } catch (e) {
+                // clipboard API needs a secure context — degrade to prompt
+                window.prompt('Copy your link:', url);
+            }
+            if (copied) {
+                copied.classList.remove('hidden');
+                setTimeout(() => copied.classList.add('hidden'), 2000);
+            }
+        });
+    }
 })();
 
 // UX pass 2 (2026-09-22): bio carries a LIVE 500-character limit —

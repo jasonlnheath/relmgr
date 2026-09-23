@@ -270,9 +270,10 @@ def test_default_cards_reattach_after_profile_reseed(tmp_path):
     whitelist_db.seed_profile(conn, data)
     whitelist_db.ensure_whitelist_schema(conn)   # boot after profile exists -> seeds cards
 
+    # UX pass 3: the default pair is Personal + Work (Personal first).
     cards = {c["name"]: c for c in whitelist_db.list_cards(conn, 1)}
-    assert set(cards) == {"Work", "Contact"}
-    assert len(cards["Work"]["fields"]) == 1 and len(cards["Contact"]["fields"]) == 1
+    assert set(cards) == {"Personal", "Work"}
+    assert len(cards["Work"]["fields"]) == 1 and len(cards["Personal"]["fields"]) == 1
 
     # Reseed: seed_profile deletes + reinserts fields (cascade empties card_fields)
     whitelist_db.seed_profile(conn, data)
@@ -283,5 +284,5 @@ def test_default_cards_reattach_after_profile_reseed(tmp_path):
     whitelist_db.seed_default_cards(conn)
     cards = {c["name"]: c for c in whitelist_db.list_cards(conn, 1)}
     assert len(cards["Work"]["fields"]) == 1, "Work card still empty after heal"
-    assert len(cards["Contact"]["fields"]) == 1, "Contact card still empty after heal"
+    assert len(cards["Personal"]["fields"]) == 1, "Personal card still empty after heal"
     conn.close()

@@ -166,52 +166,48 @@ class TestConnectionRequestFlow:
 
 
 class TestDashboardBadgeAndCenter:
-    def test_unread_badge_on_dashboard(self, world, mail_env, recorder):
+    """UX pass 3 (2026-09-23): the notifications PAGE is ELIMINATED.
+
+    Requests land in the amber Requests box at the top of the whitelist;
+    the page routes answer 404; the data layer (rows, mark-read, isolation)
+    survives as the append-only event record.
+    """
+
+    def test_request_lands_in_amber_box(self, world, mail_env, recorder):
         db, client, pid, tok = world
         client.post("/p/owner1/request", data={
             "name": "Badge", "email": "badge@example.com"})
         dash = client.get(f"/owner/{tok}", follow_redirects=True)
         assert dash.status_code == 200
-        assert "/owner/" in dash.text and "notifications" in dash.text
-        # PR 16 re-rendered the bell as a text link: the unread count sits
-        # inline before the word ("1 Notifications").
-        assert "1 Notifications" in dash.text, "unread count must show on the dashboard link"
+        assert "Requests" in dash.text, "the amber Requests box must render"
+        assert "Badge" in dash.text, "the requester must appear in the box"
 
-    def test_badge_clears_after_mark_read(self, world, mail_env, recorder):
+    def test_notifications_page_routes_are_gone(self, world, mail_env, recorder):
         db, client, pid, tok = world
-        client.post("/p/owner1/request", data={
-            "name": "Clear", "email": "clear@example.com"})
-        page = client.get(f"/owner/{tok}/notifications")
-        assert page.status_code == 200
-        assert "Connection request from Clear" in page.text
-
-        conn = whitelist_db.wl_connect(db)
-        try:
-            nid = whitelist_db.list_notifications(conn, pid)[0]["id"]
-        finally:
-            conn.close()
-        r = client.post(f"/owner/{tok}/notifications/{nid}/read",
-                        follow_redirects=False)
-        assert r.status_code == 303
-        dash = client.get(f"/owner/{tok}", follow_redirects=True)
-        assert ">1</span>" not in dash.text
-
-    def test_mark_all_read(self, world, mail_env, recorder):
-        db, client, pid, tok = world
-        for i in range(2):
-            client.post("/p/owner1/request", data={
-                "name": f"M{i}", "email": f"m{i}@example.com"})
+        assert client.get(f"/owner/{tok}/notifications").status_code == 404
         r = client.post(f"/owner/{tok}/notifications/read-all",
                         follow_redirects=False)
-        assert r.status_code == 303
+        assert r.status_code == 404
+        r = client.post(f"/owner/{tok}/notifications/1/read",
+                        follow_redirects=False)
+        assert r.status_code == 404
+
+    def test_mark_read_data_layer_still_owner_scoped(self, world, mail_env, recorder):
+        db, client, pid, tok = world
         conn = whitelist_db.wl_connect(db)
         try:
+            whitelist_db.create_notification(
+                conn, pid, "connection_request", title="t", dedupe_key=None)
+            nid = whitelist_db.list_notifications(conn, pid)[0]["id"]
+            # owner-scoped no-op on a foreign id
+            assert whitelist_db.mark_notification_read(conn, pid, nid + 999) is False
+            assert whitelist_db.unread_notification_count(conn, pid) == 1
+            whitelist_db.mark_all_notifications_read(conn, pid)
             assert whitelist_db.unread_notification_count(conn, pid) == 0
-            assert client.get(f"/owner/{tok}/notifications").text.count("Mark read") == 0
         finally:
             conn.close()
 
-    def test_owner_isolation_on_center(self, tmp_path, mail_env, recorder):
+    def test_owner_isolation_on_rows(self, tmp_path, mail_env, recorder):
         db = tmp_path / "iso.db"
         conn = whitelist_db.wl_connect(db)
         whitelist_db.ensure_whitelist_schema(conn)
@@ -232,24 +228,18 @@ class TestDashboardBadgeAndCenter:
                                        "password": "password123"})
         tok_b = wl_tokens.make_token(b"test-secret", "owner_dashboard",
                                      str(b), expires_days=7)
-        page = client_b.get(f"/owner/{tok_b}/notifications")
-        assert page.status_code == 200
-        assert "Stranger" not in page.text, "another owner's rows are unreachable"
-        assert "No notifications yet" in page.text
+        dash_b = client_b.get(f"/owner/{tok_b}")
+        assert dash_b.status_code == 200
+        assert "Stranger" not in dash_b.text, "another owner's requests never leak"
 
         conn = whitelist_db.wl_connect(db)
         try:
             nid = whitelist_db.list_notifications(conn, a)[0]["id"]
-        finally:
-            conn.close()
-        client_b.post(f"/owner/{tok_b}/notifications/{nid}/read")
-        conn = whitelist_db.wl_connect(db)
-        try:
+            client_b.post(f"/owner/{tok_b}/x")  # warm no-op; keep flow identical
             assert whitelist_db.unread_notification_count(conn, a) == 1, \
-                "foreign mark-read must be a no-op"
+                "another owner's rows are unreachable"
         finally:
             conn.close()
-
 
 class TestResetAndQuarterlyLinks:
     def test_reset_email_uses_configured_base(self, world, mail_env, recorder):
