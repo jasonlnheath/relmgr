@@ -91,14 +91,20 @@ def test_granted_viewer_sees_all(tmp_path: Path):
 
 
 def test_expired_grant_renders_anonymous(tmp_path: Path):
-    """An expired grant renders as anonymous (public only)."""
+    """A grey (lapsed quarter marker) grant KEEPS granted access.
+
+    Superseded by the never-expire ruling (UX pass 2, 2026-09-22): a
+    status='granted' grant never loses access — the lapsed marker only
+    feeds the quarterly review prompt. This pin used to assert the viewer
+    dropped to anonymous; it now pins the ruling: granted fields stay
+    visible. Revoked/denied still render anonymous (see test_ux_pass2)."""
     db = _make_db(tmp_path)
     conn = whitelist_db.wl_connect(db)
     profile = whitelist_db.get_profile(conn, "testuser")
     grant_id = whitelist_db.create_grant(
         conn, profile["id"], "expired@example.com", "Expired Viewer"
     )
-    # Set a grant that expired 30 days ago
+    # Set a grant whose quarter marker lapsed 30+ days ago (grey cycle).
     old_date = "2026-08-01T00:00:00Z"
     whitelist_db.update_grant_status(
         conn, grant_id, "granted", granted_at=old_date, expires_at="2026-08-15T00:00:00Z"
@@ -110,8 +116,9 @@ def test_expired_grant_renders_anonymous(tmp_path: Path):
     resp = client.get("/p/testuser?e=expired@example.com")
     assert resp.status_code == 200
     html = resp.text
-    assert "private@testco.com" not in html
-    assert "+15551234567" not in html
+    assert "private@testco.com" in html, \
+        "never-expire ruling: a lapsed-marker grey contact keeps granted view"
+    assert "+15551234567" in html
     assert "public@testco.com" in html
 
 

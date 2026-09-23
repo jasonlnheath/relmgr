@@ -729,3 +729,137 @@ def test_spec_documents_pass2():
     assert "never expire" in spec.lower(), "item 16: never-expire semantics"
     assert "Connect" in spec, "item 11: Connect replaces the profile QR"
     assert "500" in spec, "item 9: bio cap 500"
+
+
+# ============================================================
+# Pairing-review fixes (F1/F2/F5/F6) — never-expire made REAL
+# ============================================================
+
+class TestNeverExpireInCode:
+    """F1: tier admission and request-dedupe must honour the ruling — a
+    status='granted' grant NEVER loses access, marker lapsed or not."""
+
+    def _lapsed_grey(self, db: Path, email="grey@x.com"):
+        conn = whitelist_db.wl_connect(db)
+        gid = whitelist_db.create_grant(conn, 1, email, "Grey")
+        whitelist_db.apply_decision(conn, gid, "approve", "quarter")
+        conn.execute(
+            "UPDATE access_grants SET expires_at='2020-01-01T00:00:00Z', "
+            "quarter_status='pending_review' WHERE id = ?", (gid,))
+        conn.commit()
+        conn.close()
+        return gid
+
+    def test_effective_tier_stays_granted_for_lapsed_grey(self, tmp_path):
+        db = _make_db(tmp_path)
+        client = TestClient(create_app(db))  # boot first: heals grant columns
+        conn = whitelist_db.wl_connect(db)
+        self._lapsed_grey(db)
+        assert whitelist_db.effective_tier(conn, 1, "grey@x.com") == "granted", \
+            "F1: grey access must NOT lapse when the quarter marker passes"
+        conn.close()
+
+    def test_profile_page_keeps_granted_fields_for_grey_viewer(self, tmp_path):
+        db = _make_db(tmp_path)
+        client = TestClient(create_app(db))
+        self._lapsed_grey(db, "grey@x.com")
+        html = client.get("/p/jasonheath?e=grey%40x.com").text
+        assert "jason@waltheremc.com" in html, \
+            "F1: the grey viewer still sees granted fields on the profile"
+        assert "555-1234" in html
+
+    def test_grey_contact_rerequest_does_not_duplicate(self, tmp_path):
+        db = _make_db(tmp_path)
+        client = TestClient(create_app(db))
+        gid = self._lapsed_grey(db, "grey@x.com")
+        conn = whitelist_db.wl_connect(db)
+        again = whitelist_db.create_grant(conn, 1, "grey@x.com", "Grey")
+        count = conn.execute(
+            "SELECT COUNT(*) FROM access_grants WHERE LOWER(requester_email)='grey@x.com'"
+        ).fetchone()[0]
+        conn.close()
+        assert again == gid, "grey grant is still live for dedupe (F1)"
+        assert count == 1, "no duplicate pending row for a grey re-request"
+
+    def test_revoked_and_denied_still_anonymous(self, tmp_path):
+        db = _make_db(tmp_path)
+        client = TestClient(create_app(db))  # boot first: heals grant columns
+        conn = whitelist_db.wl_connect(db)
+        g1 = whitelist_db.create_grant(conn, 1, "revoked@x.com", "R")
+        whitelist_db.apply_decision(conn, g1, "approve", "quarter")
+        whitelist_db.revoke_grant(conn, g1)
+        g2 = whitelist_db.create_grant(conn, 1, "denied@x.com", "D")
+        whitelist_db.apply_decision(conn, g2, "deny", "quarter")
+        assert whitelist_db.effective_tier(conn, 1, "revoked@x.com") == "anonymous"
+        assert whitelist_db.effective_tier(conn, 1, "denied@x.com") == "anonymous"
+        conn.close()
+
+    def test_legacy_string_expiry_never_leaks(self, tmp_path):
+        db = _make_db(tmp_path)
+        client = TestClient(create_app(db))  # boot first: heals grant columns
+        conn = whitelist_db.wl_connect(db)
+        gid = whitelist_db.create_grant(conn, 1, "legacy@x.com", "L")
+        conn.execute(
+            "UPDATE access_grants SET status='granted', expires_at='90d' WHERE id = ?",
+            (gid,))
+        conn.commit()
+        assert whitelist_db.effective_tier(conn, 1, "legacy@x.com") == "anonymous", \
+            "the legacy '90d' bug-row guard must survive the grey-aware admit"
+        conn.close()
+
+
+class TestPairingFixes:
+    """F2/F5/F6 mechanical riders from the pairing review."""
+
+    def test_f2_labels_apply_without_value_updates(self, tmp_path):
+        """F2: the label pass runs at transaction level — it must apply when
+        NO field_updates ride along (e.g. a card with zero existing rows)."""
+        db = _make_db(tmp_path)
+        client = TestClient(create_app(db))
+        conn = whitelist_db.wl_connect(db)
+        cid = conn.execute(
+            "SELECT id FROM cards WHERE owner_profile_id = 1 AND name = 'Contact'"
+        ).fetchone()[0]
+        n_before = conn.execute(
+            "SELECT COUNT(*) FROM card_fields WHERE card_id = ?", (cid,)
+        ).fetchone()[0]
+        conn.close()
+        # POST with ONLY a label key for an existing field on ANOTHER card —
+        # no field_{id}_value anywhere in the body.
+        work_html = client.get(
+            f"/owner/{_owner_token()}/cards/{_card_id(db, 'Work')}/edit").text
+        fid = int(re.search(r'name="field_(\d+)_value"', work_html).group(1))
+        resp = client.post(f"/owner/{_owner_token()}/cards/{cid}/edit",
+                           data={f"field_{fid}_label": "work"})
+        assert resp.status_code == 200
+        conn = whitelist_db.wl_connect(db)
+        label = conn.execute(
+            "SELECT label FROM profile_fields WHERE id = ?", (fid,)).fetchone()[0]
+        n_after = conn.execute(
+            "SELECT COUNT(*) FROM card_fields WHERE card_id = ?", (cid,)
+        ).fetchone()[0]
+        conn.close()
+        assert label == "work", "F2: standalone label saved"
+        assert n_after == n_before, "F2: no fields were linked/unlinked by a label-only save"
+
+    def test_f5_blacklist_badge_text_is_light(self, tmp_path):
+        db = _make_db(tmp_path)
+        client = TestClient(create_app(db))
+        conn = whitelist_db.wl_connect(db)
+        gid = whitelist_db.create_grant(conn, 1, "gone@x.com", "Gone")
+        whitelist_db.apply_decision(conn, gid, "approve", "quarter")
+        whitelist_db.revoke_grant(conn, gid)
+        conn.close()
+        html = client.get(f"/owner/{_owner_token()}/contact/{gid}").text
+        access = html.split('Access</h2>')[1]
+        assert "var(--wl-badge-black)" in access
+        assert "color: var(--wl-ink-muted)" in access, \
+            "F5: black badge carries light ink (readable BlackList label)"
+
+    def test_f6_plus_link_syncs_typed_query(self, tmp_path):
+        db = _make_db(tmp_path)
+        client = TestClient(create_app(db))
+        html = client.get(f"/owner/{_owner_token()}").text
+        assert 'id="new-connection-link"' in html, "F6: + link is hookable"
+        assert "new-connection-link" in html and "addEventListener('input'" in html, \
+            "F6: typed-but-unsubmitted query syncs onto the + href"

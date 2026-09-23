@@ -134,6 +134,19 @@ _LIVE_GRANT_EXPIRY_SQL = (
     "(expires_at IS NULL OR (expires_at GLOB '[0-9]*Z' AND expires_at > ?))"
 )
 
+# Never-expire ruling (UX pass 2, 2026-09-22): a status='granted' grant
+# NEVER loses access — the lapsed quarter marker only feeds the quarterly
+# review prompt, never tier admission. Admission = the live-expiry predicate
+# (lifetime / unexpired real timestamp) OR the grant carries any
+# real-timestamp expiry at all (the grey cycle: marker lapsed, access
+# persists until the owner's own badge move). Legacy '14d'/'90d' bug rows
+# still fail the GLOB guard on BOTH sides and can never leak. Single source
+# of truth shared by effective_tier() and create_grant()'s dedupe — the two
+# sides must not drift (R1). Exactly one ? parameter (now).
+_ADMITTED_EXPIRY_SQL = (
+    f"({_LIVE_GRANT_EXPIRY_SQL} OR expires_at GLOB '[0-9]*Z')"
+)
+
 # ============================================================
 # Card-editor field registry (round 2, 2026-09-20 captain walkthrough)
 # ============================================================
@@ -860,7 +873,10 @@ def effective_tier(
     """Determine a viewer's access tier for a given profile.
 
     Returns 'granted' if the viewer has an active grant, 'anonymous' otherwise.
-    Expired grants are treated as anonymous.
+    Revoked/denied grants are anonymous; GRANTED grants — including grey ones
+    whose quarter marker has lapsed — are 'granted' (never-expire ruling,
+    UX pass 2: the marker only prompts the quarterly review, it never ends
+    access).
     """
     if now is None:
         now = _now_iso()
@@ -881,13 +897,14 @@ def effective_tier(
     if own:
         return "granted"
 
-    # Robust tier check via the shared live-grant predicate
-    # (_LIVE_GRANT_EXPIRY_SQL — see its comment for why legacy expiry strings
-    # can't leak). Do not re-inline this SQL; both sides of R1 must stay one.
+    # Tier admission via the shared admitted-grant predicate
+    # (_ADMITTED_EXPIRY_SQL — grey-aware per the never-expire ruling; see its
+    # comment for why legacy expiry strings can't leak). Do not re-inline
+    # this SQL; both sides of R1 must stay one.
     row = conn.execute(
         f"""SELECT status FROM access_grants
             WHERE profile_id = ? AND LOWER(requester_email) = LOWER(?)
-              AND status = 'granted' AND {_LIVE_GRANT_EXPIRY_SQL}""",
+              AND status = 'granted' AND {_ADMITTED_EXPIRY_SQL}""",
         (profile_id, viewer_email, now),
     ).fetchone()
 
@@ -942,10 +959,12 @@ def create_grant(
 ) -> str:
     """Create a pending access grant. Returns grant UUID.
 
-    Spec: dedupe on profile+email — but only against *live* grants (pending,
-    or granted-and-not-yet-expired). A denied or expired grant is history, not
-    a life ban: re-requesting after one inserts a fresh pending row instead of
-    silently returning the dead grant id.
+    Spec: dedupe on profile+email — but only against *admitting* grants
+    (pending, or granted — grey included, never-expire ruling UX pass 2: a
+    grey contact re-requesting must NOT mint a duplicate pending row). A
+    denied or revoked grant is history, not a life ban: re-requesting after
+    one inserts a fresh pending row instead of silently returning the dead
+    grant id.
 
     owner_id: the profile that owns this grant (for per-owner isolation).
     If None, defaults to profile_id.
@@ -955,7 +974,7 @@ def create_grant(
             WHERE profile_id = ? AND LOWER(requester_email) = LOWER(?)
               AND (
                     status = 'pending'
-                    OR (status = 'granted' AND {_LIVE_GRANT_EXPIRY_SQL})
+                    OR (status = 'granted' AND {_ADMITTED_EXPIRY_SQL})
                   )
             ORDER BY created_at DESC LIMIT 1""",
         (profile_id, requester_email, _now_iso()),
@@ -3395,20 +3414,22 @@ def save_card_editor(
                     "UPDATE profile_fields SET visibility = ?, updated_at = datetime('now') WHERE id = ?",
                     (visibility, fid),
                 )
-            # Phone label support (UX pass 2): labels apply STANDALONE —
-            # a row keyed only a label (no value/visibility change) must
-            # still save it. '' clears, value sets; ownership checked.
-            for fid, raw_label in field_labels.items():
-                row = conn.execute(
-                    "SELECT profile_id FROM profile_fields WHERE id = ?", (fid,)
-                ).fetchone()
-                if row is None or row["profile_id"] != owner_id:
-                    raise ValueError(f"field_id {fid} not found or not owned by this profile")
-                new_label = normalize_field_label(raw_label) or None
-                conn.execute(
-                    "UPDATE profile_fields SET label = ?, updated_at = datetime('now') WHERE id = ?",
-                    (new_label, fid),
-                )
+
+        # Phone label support (UX pass 2): labels apply STANDALONE at the
+        # transaction level — a row keyed only a label (no value/visibility
+        # change, or a value emptied to unlink) must still save it. ''
+        # clears, value sets; ownership checked (IDOR — fail closed).
+        for fid, raw_label in field_labels.items():
+            row = conn.execute(
+                "SELECT profile_id FROM profile_fields WHERE id = ?", (fid,)
+            ).fetchone()
+            if row is None or row["profile_id"] != owner_id:
+                raise ValueError(f"field_id {fid} not found or not owned by this profile")
+            new_label = normalize_field_label(raw_label) or None
+            conn.execute(
+                "UPDATE profile_fields SET label = ?, updated_at = datetime('now') WHERE id = ?",
+                (new_label, fid),
+            )
 
         # 5. New fields: create (or reuse an identical type+value row) and
         #    link to the card.

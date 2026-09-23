@@ -136,12 +136,17 @@
                 {% set access_state = 'GreyList' if is_grey else ('WhiteList' if grant.status == 'granted' else 'BlackList') %}
                 {% set badge_key = 'greylist' if is_grey else ('whitelist' if grant.status == 'granted' else 'blacklist') %}
                 {% set badge_token = {'whitelist': 'white', 'greylist': 'grey', 'blacklist': 'black'}[badge_key] %}
+                {# F5 (pass-2 pairing): dark text is unreadable on the black
+                   badge — black gets light ink, white/grey keep dark. #}
+                {% set badge_text = {'white': 'var(--wl-surface-base)',
+                                     'grey': 'var(--wl-surface-base)',
+                                     'black': 'var(--wl-ink-muted)'}[badge_token] %}
                 <div class="flex items-center wl-text-sub">
                     <span class="w-28 flex-shrink-0 text-right pr-4 text-xs wl-text-faint uppercase tracking-wide">status</span>
                     <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs"
                         data-state="{{ badge_key }}"
                         style="background: var(--wl-badge-{{ badge_token }});
-                        color: var(--wl-surface-base);"
+                        color: {{ badge_text }};"
                         aria-label="{{ access_state }}">
                         <img src="/static/badge-{{ badge_key }}.png" class="w-3 h-3" alt="" aria-hidden="true">
                         {{ access_state }}

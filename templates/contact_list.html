@@ -55,6 +55,7 @@
                placeholder="Search WhiteList"
                class="flex-1 min-w-0 px-3 py-2 border border-gray-600 rounded-lg text-sm bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
         <a href="/owner/{{ token }}/new-connection{% if q %}?q={{ q | urlencode }}{% endif %}"
+           id="new-connection-link"
            title="Add a new connection"
            aria-label="Add a new connection"
            class="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center wl-btn-ink text-xl leading-none">+</a>
@@ -241,4 +242,22 @@
     </div>
     {% endif %}
 </div>
+
+<script>
+// UX pass 2 F6: the + button must carry a typed-but-unsubmitted query —
+// clicking + without pressing Enter still lands on the DB search.
+(function () {
+    const input = document.querySelector('form input[name="q"]');
+    const plus = document.getElementById('new-connection-link');
+    if (!input || !plus) return;
+    function sync() {
+        const base = plus.href.split('?')[0];
+        plus.href = input.value.trim()
+            ? base + '?q=' + encodeURIComponent(input.value.trim())
+            : base;
+    }
+    input.addEventListener('input', sync);
+    sync();
+})();
+</script>
 {% endblock %}

@@ -132,7 +132,14 @@ def test_legacy_14d_string_does_not_leak_private_fields(tmp_path):
 
 
 def test_iso_expiry_enforced(tmp_path):
-    """Stored ISO timestamps: past -> anonymous, future -> granted, NULL -> active."""
+    """Stored ISO timestamps under the never-expire ruling (UX pass 2).
+
+    past (grey cycle) -> granted — the lapsed marker only prompts the
+    quarterly review, it never ends access. future/NULL -> granted as
+    before. The leak guard this test originally pinned (legacy '14d'/'90d'
+    strings must NEVER admit) is pinned separately by
+    test_ux_pass2.TestNeverExpireInCode.test_legacy_string_expiry_never_leaks.
+    """
     from fastapi.testclient import TestClient
     from app import create_app
 
@@ -156,7 +163,8 @@ def test_iso_expiry_enforced(tmp_path):
     conn.close()
 
     client = TestClient(create_app(db))
-    assert "private@testco.com" not in client.get("/p/testuser?e=past@example.com").text
+    assert "private@testco.com" in client.get("/p/testuser?e=past@example.com").text, \
+        "never-expire ruling: lapsed-marker grey keeps granted fields"
     assert "private@testco.com" in client.get("/p/testuser?e=fut@example.com").text
     assert "private@testco.com" in client.get("/p/testuser?e=life@example.com").text
 
@@ -307,8 +315,11 @@ def test_denied_requester_can_re_request(tmp_path):
 
 
 def test_expired_grant_holder_can_re_request(tmp_path):
-    """Same trap for expired grants: re-request after expiry creates a fresh
-    pending grant instead of reusing the dead one."""
+    """Superseded by the never-expire ruling (UX pass 2): a granted contact
+    whose quarter marker lapsed is NOT dead — re-requesting reuses the SAME
+    grant instead of minting a duplicate pending row (grey keeps access).
+    Only revoked/denied grants are history: re-request after REVOCATION
+    creates a fresh pending grant."""
     db = _make_db(tmp_path)
     conn = whitelist_db.wl_connect(db)
     profile = whitelist_db.get_profile(conn, "testuser")
@@ -316,12 +327,18 @@ def test_expired_grant_holder_can_re_request(tmp_path):
     whitelist_db.update_grant_status(
         conn, g1, "granted",
         granted_at="2026-01-01T00:00:00Z",
-        expires_at="2026-01-31T00:00:00Z")  # long expired
+        expires_at="2026-01-31T00:00:00Z")  # long-lapsed grey marker
 
     g2 = whitelist_db.create_grant(conn, profile["id"], "carol@x.com", "Carol")
-    row = conn.execute("SELECT status FROM access_grants WHERE id = ?", (g2,)).fetchone()
-    assert row is not None and row["status"] == "pending", (
-        f"re-request after expiry must be pending, got {row['status']!r}")
+    assert g2 == g1, "a grey contact re-requesting reuses the live grant (no duplicate)"
+
+    # The dead-grant path is REVOCATION, not expiry: re-request after revoke
+    # must insert a fresh pending row.
+    whitelist_db.revoke_grant(conn, g1)
+    g3 = whitelist_db.create_grant(conn, profile["id"], "carol@x.com", "Carol")
+    row = conn.execute("SELECT status FROM access_grants WHERE id = ?", (g3,)).fetchone()
+    assert g3 != g1 and row["status"] == "pending", (
+        f"re-request after revocation must be pending, got {row['status']!r}")
     conn.close()
 
 
