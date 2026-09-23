@@ -143,7 +143,10 @@ def _encode_square_jpeg(content: bytes) -> bytes:
 
 
 def _make_jinja():
-    return Jinja2Templates(directory=str(_JINJA_DIR))
+    jinja = Jinja2Templates(directory=str(_JINJA_DIR))
+    # UX pass 2: phone label rendering shared by every field-row template.
+    jinja.env.globals["label_display"] = whitelist_db.label_display
+    return jinja
 
 
 def _b64url_encode(data: bytes) -> str:
@@ -963,8 +966,12 @@ def create_app(db_path: Path = None) -> FastAPI:
             # filter to the owner's own cards before resolving.
             card_ids = whitelist_db.filter_owned_cards(
                 conn, profile_id, card_ids)
+            # UX pass 2 (2026-09-22): the chooser preview renders the
+            # GRANTED tier — with granted as the default field visibility,
+            # a public-tier render showed 'Nothing shared yet' for almost
+            # every real bundle.
             cards = whitelist_db.cards_for_share_bundle(
-                conn, {"card_ids": card_ids}, "anonymous")
+                conn, {"card_ids": card_ids}, "granted")
             return HTMLResponse(jinja.get_template(
                 "share_cards_fragment.html").render(
                 request=request, cards=cards, preview_mode=True))
@@ -1028,9 +1035,10 @@ def create_app(db_path: Path = None) -> FastAPI:
                     card_names.append(card["name"])
             # UX pass (2026-09-22): show the ACTUAL card being shared below
             # the QR + link — same recipient rendering as /s/{bundle_id}
-            # (share_cards_fragment), public fields only.
+            # (share_cards_fragment). Rendered at the GRANTED tier per the
+            # UX pass 2 defaults ruling (granted is the default visibility).
             bundle_cards = whitelist_db.cards_for_share_bundle(
-                conn, {"card_ids": bundle["card_ids"]}, "anonymous")
+                conn, {"card_ids": bundle["card_ids"]}, "granted")
         finally:
             conn.close()
 
@@ -1044,6 +1052,8 @@ def create_app(db_path: Path = None) -> FastAPI:
             cards=bundle_cards,
             share_url=share_url,
             share_message=_bundle_share_message(profile["display_name"], bundle_id),
+            # UX pass 2: default email subject '<First> <Last> WhiteList Card'.
+            share_subject=f"{profile['display_name']} WhiteList Card",
             expired=expired,
         ))
 
@@ -1559,6 +1569,53 @@ def create_app(db_path: Path = None) -> FastAPI:
             conn.close()
         return RedirectResponse(url=f"/owner/{token}/notifications", status_code=303)
 
+    # ------------------------------------------------------------------ New connection (+ button, UX pass 2)
+    # The round + button RIGHT of the search bar: search the database for
+    # 'new connections'; on no hits, offer to create a standard vCard.
+    @application.get("/owner/{token}/new-connection", response_class=HTMLResponse)
+    async def owner_new_connection(request: Request, token: str,
+                                   q: str = Query(None)):
+        conn = whitelist_db.wl_connect(path)
+        try:
+            result = _resolve_owner(conn, request, token, _get_secret())
+            if result[0] is None and result[2] is None:
+                return HTMLResponse("Invalid or expired link", status_code=403)
+            if result[2]:
+                return RedirectResponse(url=f"/owner/{result[2]}")
+            profile_id = result[0]
+            matches = whitelist_db.search_new_connections(conn, profile_id, q or "")
+        finally:
+            conn.close()
+        return HTMLResponse(jinja.get_template("new_connection.html").render(
+            request=request, token=token, q=q or "", matches=matches))
+
+    @application.post("/owner/{token}/new-connection")
+    async def owner_new_connection_create(request: Request, token: str):
+        form = await request.form()
+        display_name = (form.get("display_name") or "").strip()
+        phone = (form.get("phone") or "").strip()
+        email = (form.get("email") or "").strip()
+
+        conn = whitelist_db.wl_connect(path)
+        try:
+            result = _resolve_owner(conn, request, token, _get_secret())
+            if result[0] is None and result[2] is None:
+                return HTMLResponse("Invalid or expired link", status_code=403)
+            if result[2]:
+                return RedirectResponse(url=f"/owner/{result[2]}")
+            profile_id = result[0]
+            if not display_name:
+                matches = whitelist_db.search_new_connections(conn, profile_id, "")
+                return HTMLResponse(jinja.get_template("new_connection.html").render(
+                    request=request, token=token, q="", matches=matches,
+                    error="Name is required."), status_code=400)
+            whitelist_db.create_contact_vcard(
+                conn, profile_id, display_name, phone=phone, email=email)
+        finally:
+            conn.close()
+        # 303 See Other: land back on the contact list with a GET.
+        return RedirectResponse(url=f"/owner/{token}", status_code=303)
+
     # ------------------------------------------------------------------ Manage access (P5-T3)
     @application.post("/owner/{token}/access", response_class=HTMLResponse)
     async def owner_manage_access(request: Request, token: str):
@@ -1705,10 +1762,11 @@ def create_app(db_path: Path = None) -> FastAPI:
         form = await request.form()
         bio = (form.get("bio") or "").strip()
         bio_error = None
-        if len(bio) > 2000:
+        if len(bio) > 500:
             # B2: over-limit is REJECTED — never silently truncate-and-save.
             # The draft re-renders so the user can trim it themselves.
-            bio_error = f"Bio must be 2000 characters or fewer (currently {len(bio)})."
+            # UX pass 2 (2026-09-22): cap lowered 2000 → 500.
+            bio_error = f"Bio must be 500 characters or fewer (currently {len(bio)})."
             conn = whitelist_db.wl_connect(path)
             try:
                 result = _resolve_owner(conn, request, token, _get_secret())
@@ -1855,7 +1913,8 @@ def create_app(db_path: Path = None) -> FastAPI:
         form = await request.form()
         field_type = form.get("field_type", "")
         field_value = (form.get("field_value") or "").strip()
-        visibility = form.get("visibility", "public")
+        # UX pass 2 defaults ruling: everything defaults to 'granted'.
+        visibility = form.get("visibility", "granted")
 
         if not field_type or field_type not in ("email", "phone"):
             return HTMLResponse("Invalid field type", status_code=400)
@@ -1953,6 +2012,82 @@ def create_app(db_path: Path = None) -> FastAPI:
 
     _FIELD_KEY_RE = re.compile(r"^field_(\d+)_(value|remove)$")
 
+    # UX pass 2 (2026-09-22) defaults ruling: EVERY field defaults to
+    # 'granted' except title, company, and website, which default 'public'.
+    _PUBLIC_DEFAULT_TYPES = ("title", "company", "website")
+
+    def _editor_default_visibility(field_type: str) -> str:
+        return ("public" if field_type in _PUBLIC_DEFAULT_TYPES else "granted")
+
+    def _parse_editor_form(form):
+        """Parse the card-editor POST body into save_card_editor args.
+
+        Shared by the save route AND the per-field ✕ delete route: the ✕
+        posts the WHOLE editor form (formaction override), so the delete
+        path must persist everything else keyed in — this is the fix for
+        the pass-2 data-loss bug (deleting a field used to drop edits).
+
+        Returns (display_name, card_name, updates, labels, removals,
+        new_fields) where updates are (fid, value, visibility), labels map
+        fid → raw label submission, and new_fields are
+        (type, value, visibility[, label]) 4-tuples.
+        """
+        display_name = (form.get("display_name") or "").strip()
+        card_name = (form.get("card_name") or "").strip()
+
+        # Existing rows: field_{id}_value (+ _visibility, + _label +
+        # _label_custom, + _remove). Collect all key kinds first — a row
+        # with only non-value keys must still register.
+        remove_ids: set[int] = set()
+        value_rows: dict[int, tuple[str, str | None]] = {}
+        for key in form.keys():
+            m = _FIELD_KEY_RE.match(key)
+            if not m:
+                continue
+            fid = int(m.group(1))
+            if m.group(2) == "remove":
+                remove_ids.add(fid)
+            else:
+                value_rows[fid] = (form.get(key) or "",
+                                   form.get(f"field_{fid}_visibility"))
+        updates = [(fid, v, vis) for fid, (v, vis) in value_rows.items()
+                   if fid not in remove_ids]
+        removals = list(remove_ids)
+
+        labels: dict[int, str] = {}
+        for key in form.keys():
+            m = re.match(r"^field_(\d+)_label$", key)
+            if m:
+                fid = int(m.group(1))
+                raw = form.get(key) or ""
+                if raw == "__custom":
+                    raw = form.get(f"field_{fid}_label_custom") or ""
+                labels[fid] = raw
+
+        # New rows: new_{type}_value[] + new_{type}_visibility[] (+
+        # _label[]/_label_custom[]) as parallel getlists (the + Add rows
+        # from the editor UI).
+        new_fields: list[tuple] = []
+        for t in whitelist_db.CARD_EDITOR_FIELD_TYPES:
+            values = form.getlist(f"new_{t}_value")
+            vis = form.getlist(f"new_{t}_visibility")
+            raw_labels = form.getlist(f"new_{t}_label")
+            custom_labels = form.getlist(f"new_{t}_label_custom")
+            for i, value in enumerate(values):
+                # UX pass 2 defaults ruling: 'granted' everywhere, except
+                # title/company/website which default 'public'. (Was
+                # blanket-private before the ruling.)
+                visibility = (vis[i] if i < len(vis)
+                              else _editor_default_visibility(t))
+                label = ""
+                if i < len(raw_labels):
+                    label = raw_labels[i]
+                    if label == "__custom" and i < len(custom_labels):
+                        label = custom_labels[i]
+                new_fields.append((t, value, visibility, label))
+
+        return display_name, card_name, updates, labels, removals, new_fields
+
     @application.post("/owner/{token}/cards/{card_id}/edit", response_class=HTMLResponse)
     async def owner_card_edit_save(request: Request, token: str, card_id: int):
         form = await request.form()
@@ -1962,46 +2097,15 @@ def create_app(db_path: Path = None) -> FastAPI:
             if err is not None:
                 return err
 
-            display_name = (form.get("display_name") or "").strip()
-            card_name = (form.get("card_name") or "").strip()
-
-            # Existing rows: field_{id}_value (+ _visibility, + _remove).
-            # Collect both key kinds first — a row with a remove checkbox
-            # (and no value input, e.g. a checkbox-only POST) must still
-            # register as a removal.
-            remove_ids: set[int] = set()
-            value_rows: dict[int, tuple[str, str | None]] = {}
-            for key in form.keys():
-                m = _FIELD_KEY_RE.match(key)
-                if not m:
-                    continue
-                fid = int(m.group(1))
-                if m.group(2) == "remove":
-                    remove_ids.add(fid)
-                else:
-                    value_rows[fid] = (form.get(key) or "",
-                                       form.get(f"field_{fid}_visibility"))
-            updates = [(fid, v, vis) for fid, (v, vis) in value_rows.items()
-                       if fid not in remove_ids]
-            removals = list(remove_ids)
-
-            # New rows: new_{type}_value[] + new_{type}_visibility[] as
-            # parallel getlists (the + Add rows from the editor UI).
-            new_fields: list[tuple[str, str, str]] = []
-            for t in whitelist_db.CARD_EDITOR_FIELD_TYPES:
-                values = form.getlist(f"new_{t}_value")
-                vis = form.getlist(f"new_{t}_visibility")
-                for i, value in enumerate(values):
-                    # Absent visibility defaults to private — zero-trust
-                    # default (user decides, app enforces).
-                    visibility = vis[i] if i < len(vis) else "private"
-                    new_fields.append((t, value, visibility))
+            (display_name, card_name, updates, labels, removals,
+             new_fields) = _parse_editor_form(form)
 
             try:
                 whitelist_db.save_card_editor(
                     conn, card_id,
                     display_name=display_name, card_name=card_name,
-                    field_updates=updates, field_removals=removals,
+                    field_updates=updates, field_labels=labels,
+                    field_removals=removals,
                     new_fields=new_fields,
                 )
             except ValueError as exc:
@@ -2022,21 +2126,52 @@ def create_app(db_path: Path = None) -> FastAPI:
         """UX pass (2026-09-22): the editor's per-field ✕ deletes the field
         from the card IMMEDIATELY — no checkbox accumulate-then-save step.
 
+        Pass-2 BUG FIX: the ✕ posts the WHOLE editor form (formaction
+        override), and this route used to ignore the body and redirect —
+        every other edit keyed into the form was lost on the refresh. The
+        full form is now parsed and applied TOGETHER with the removal, so
+        deleting a field never drops entered data.
+
         Unlink semantics match save_card_editor removals: the card_fields
         row goes, the profile_fields row survives (cards are lenses, not
         containers). Ownership/IDOR is enforced by save_card_editor
         (foreign card or field → ValueError → 404).
         """
+        form = await request.form()
         conn = whitelist_db.wl_connect(path)
         try:
             profile_id, card, err = _resolve_editor_card(conn, request, token, card_id)
             if err is not None:
                 return err
+
+            (display_name, card_name, updates, labels, removals,
+             new_fields) = _parse_editor_form(form)
+            removals.append(field_id)  # the ✕'s own removal
+            updates = [(fid, v, vis) for fid, v, vis in updates
+                       if fid != field_id]
+            labels.pop(field_id, None)
             try:
-                whitelist_db.save_card_editor(conn, card_id,
-                                              field_removals=[field_id])
-            except ValueError:
-                return HTMLResponse("Not found", status_code=404)
+                whitelist_db.save_card_editor(
+                    conn, card_id,
+                    display_name=display_name, card_name=card_name,
+                    field_updates=updates, field_labels=labels,
+                    field_removals=removals,
+                    new_fields=new_fields,
+                )
+            except ValueError as exc:
+                # A foreign field id stays a 404 (IDOR, fail closed); any
+                # other save error (duplicate value, …) re-renders the
+                # editor with the message so keyed data survives.
+                row = conn.execute(
+                    "SELECT profile_id FROM profile_fields WHERE id = ?",
+                    (field_id,),
+                ).fetchone()
+                if row is None or row["profile_id"] != profile_id:
+                    return HTMLResponse("Not found", status_code=404)
+                profile = whitelist_db.get_profile_by_id(conn, profile_id)
+                card = whitelist_db.get_card_by_id(conn, card_id)
+                return _card_editor_html(conn, request, token, profile, card,
+                                         error=str(exc), status_code=400)
             # 303 back to the editor GET — the row is gone on landing.
             return RedirectResponse(
                 url=f"/owner/{token}/cards/{card_id}/edit", status_code=303)

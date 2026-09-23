@@ -50,6 +50,7 @@
         </div>
         <p id="share-msg" class="text-xs wl-text-faint mt-1 hidden">Link copied!</p>
         <input type="hidden" id="share-text" value="{{ share_message }}">
+        <input type="hidden" id="share-subject" value="{{ share_subject }}">
         <p class="text-xs wl-text-faint mt-3">Sharing sends: “{{ share_message }}”</p>
 
         {# UX pass (2026-09-22): where the platform share sheet is missing
@@ -119,10 +120,12 @@ async function nativeShare() {
     // No platform share sheet here (desktop without the Web Share API):
     // copy the link and surface forward actions — email / messaging /
     // paste-anywhere — so the link still reaches other apps.
+    // UX pass 2: default email subject '<First> <Last> WhiteList Card'.
     const mail = document.getElementById('fallback-email');
     const sms = document.getElementById('fallback-sms');
     if (mail) {
-        mail.href = 'mailto:?subject=' + encodeURIComponent('WhiteList card') +
+        mail.href = 'mailto:?subject=' +
+                    encodeURIComponent(document.getElementById('share-subject').value) +
                     '&body=' + encodeURIComponent(text + ' ' + url);
     }
     if (sms) {

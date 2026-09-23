@@ -83,11 +83,11 @@
                     </form>
                 </div>
                 <form method="POST" action="/owner/{{ token }}/bio" class="mt-1">
-                    <textarea name="bio" rows="3" maxlength="2000"
+                    <textarea name="bio" rows="3" maxlength="500"
                               class="w-full border border-gray-600 rounded-lg px-3 py-2 text-sm bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]"
                               placeholder="Tell us about yourself...">{{ profile.bio or '' }}</textarea>
                     <div class="flex items-center justify-between mt-1">
-                        <span id="bio-count" class="text-xs wl-text-faint">{{ bio_len }}/2000 characters</span>
+                        <span id="bio-count" class="text-xs wl-text-faint">{{ bio_len }}/500 characters</span>
                         <button type="submit"
                                 class="wl-btn-ink px-3 py-1 rounded text-xs">
                             Save
@@ -207,13 +207,13 @@ document.querySelectorAll('#share-chooser input[name="card_ids"]').forEach(cb =>
     syncHint();
 })();
 
-// UX pass (2026-09-22): bio carries a LIVE 2000-character limit —
+// UX pass 2 (2026-09-22): bio carries a LIVE 500-character limit —
 // maxlength prunes while typing; the counter tracks it live.
 (function () {
     const bio = document.querySelector('textarea[name="bio"]');
     const count = document.getElementById('bio-count');
     if (!bio || !count) return;
-    function sync() { count.textContent = bio.value.length + '/2000 characters'; }
+    function sync() { count.textContent = bio.value.length + '/500 characters'; }
     bio.addEventListener('input', sync);
     sync();
 })();

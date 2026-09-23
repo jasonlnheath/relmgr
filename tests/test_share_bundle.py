@@ -184,6 +184,10 @@ class TestChooserFlow:
         assert resp.status_code == 400
 
     def test_preview_fragment_public_only(self, tmp_path):
+        """UX pass 2 (2026-09-22): the chooser preview searches GRANTED data
+        per the defaults ruling (granted is the default field visibility, so
+        a public-tier render showed 'Nothing shared yet' for real bundles).
+        Private fields still never leak into the preview."""
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
         work = _card_id(db, "Work")
@@ -191,8 +195,9 @@ class TestChooserFlow:
                            data={"card_ids": [str(work)]})
         assert resp.status_code == 200
         assert "public@waltheremc.com" in resp.text
-        assert "jheath@waltheremc.com" not in resp.text, \
-            "preview is what an anonymous recipient sees"
+        assert "jheath@waltheremc.com" in resp.text, \
+            "preview renders the granted tier (UX pass 2 defaults ruling)"
+        assert "Nothing shared yet" not in resp.text
         assert "Work" in resp.text
 
     def test_preview_ignores_foreign_cards(self, tmp_path):

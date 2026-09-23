@@ -64,11 +64,18 @@
         </div>
         {% endif %}
 
-        {# QR code — scannable access key (dynamic generation) #}
+        {# UX pass 2 (2026-09-22): the QR is REMOVED from the profile — it
+           encoded only a profile link. In its place: ONE Connect button.
+           Randos on the public profile click Connect and the owner is
+           notified through the app and/or email. #}
+        {% if tier != 'granted' %}
         <div class="mb-6 pb-4" style="border-bottom: 1px solid var(--wl-glass-border);">
-            <p class="text-xs wl-text-faint mb-2">Scan to connect</p>
-            <img src="/qr/{{ profile.handle }}" alt="QR code" class="w-32 h-32 rounded-lg" style="background: #fff; padding: 8px;">
+            <a href="/p/{{ profile.handle }}/request-form"
+               class="wl-btn-ink inline-block px-6 py-2 rounded-lg text-sm">
+                Connect
+            </a>
         </div>
+        {% endif %}
 
         {# Communication icons — UX pass (2026-09-22): ONE ROW PER CARD,
            each row led by THAT card's picture (not just the work photo).
@@ -134,7 +141,10 @@
         </div>
         {% endif %}
 
-        {# Card-driven field rendering — grouped by card name #}
+        {# Card-driven field rendering — grouped by card name.
+           UX pass 2 (2026-09-22): field names RIGHT-JUSTIFIED with clear
+           spacing so they never overwrite the value; phone labels
+           (Mobile/Home/Work/custom) surface here. #}
         {% if cards %}
         {% for card in cards %}
         {% if card.visible_fields %}
@@ -142,13 +152,7 @@
             <h2 class="wl-heading wl-heading-sm wl-text mb-3">{{ card.name }}</h2>
             <div class="space-y-2">
                 {% for f in card.visible_fields %}
-                <div class="flex items-start wl-text-sub">
-                    <span class="w-24 text-xs wl-text-faint uppercase tracking-wide pt-0.5">{{ _field_label(f.field_type) }}</span>
-                    <span class="wl-text">{{ f.field_value }}</span>
-                    {% if f.visibility == 'private' %}
-                    <span class="ml-2 text-xs wl-text-faint" title="Private field">🔒</span>
-                    {% endif %}
-                </div>
+                {{ _field_row(f) }}
                 {% endfor %}
             </div>
         </div>
@@ -160,70 +164,10 @@
         {% if tier == 'granted' %}
         <div class="space-y-2">
             {% for f in profile.fields %}
-            <div class="flex items-start wl-text-sub">
-                <span class="w-24 text-xs wl-text-faint uppercase tracking-wide pt-0.5">{{ _field_label(f.field_type) }}</span>
-                <span class="wl-text">{{ f.field_value }}</span>
-                {% if f.visibility == 'private' %}
-                <span class="ml-2 text-xs wl-text-faint" title="Private field">🔒</span>
-                {% endif %}
-            </div>
+            {{ _field_row(f) }}
             {% endfor %}
         </div>
         {% endif %}
-        {% endif %}
-
-        {# Trusted forwarding — granted contacts only #}
-        {% if tier == 'granted' %}
-        <div class="mt-6 pt-4" style="border-top: 1px solid var(--wl-glass-border);">
-            <h3 class="wl-heading wl-heading-sm wl-text mb-2">Forward your card</h3>
-            <p class="text-xs wl-text-faint mb-3">
-                Share this card with someone new. The owner will be notified of who you are and who you shared it with.
-            </p>
-            <form method="POST" action="/p/{{ profile.handle }}/forward" class="space-y-2">
-                <div class="grid grid-cols-2 gap-2">
-                    <div>
-                        <label class="text-xs wl-text-faint">Your name</label>
-                        <input type="text" name="forwarder_name"
-                               class="w-full text-xs border border-gray-600 rounded px-2 py-1 bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]"
-                               placeholder="Your name" required>
-                    </div>
-                    <div>
-                        <label class="text-xs wl-text-faint">Your email</label>
-                        <input type="email" name="forwarder_email"
-                               class="w-full text-xs border border-gray-600 rounded px-2 py-1 bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]"
-                               placeholder="you@example.com" required>
-                    </div>
-                </div>
-                <div class="grid grid-cols-2 gap-2">
-                    <div>
-                        <label class="text-xs wl-text-faint">Recipient name</label>
-                        <input type="text" name="recipient_name"
-                               class="w-full text-xs border border-gray-600 rounded px-2 py-1 bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]"
-                               placeholder="Their name">
-                    </div>
-                    <div>
-                        <label class="text-xs wl-text-faint">Recipient email</label>
-                        <input type="email" name="recipient_email"
-                               class="w-full text-xs border border-gray-600 rounded px-2 py-1 bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]"
-                               placeholder="them@example.com" required>
-                    </div>
-                </div>
-                <button type="submit"
-                        class="wl-btn-ink px-3 py-1.5 rounded text-xs">
-                    Forward card
-                </button>
-            </form>
-        </div>
-        {% endif %}
-
-        {# Connect button — request access #}
-        {% if tier != 'granted' %}
-        <div class="mt-6 pt-4" style="border-top: 1px solid var(--wl-glass-border);">
-            <a href="/p/{{ profile.handle }}/request-form"
-               class="wl-btn-ink inline-block px-6 py-2 rounded-lg text-sm">
-                Connect
-            </a>
-        </div>
         {% endif %}
     </div>
 </div>
@@ -255,4 +199,18 @@
     {%- elif field_type == 'note' -%}note
     {%- else -%}{{ field_type }}
     {%- endif -%}
+{% endmacro %}
+
+{# One display row on the view-profile page. UX pass 2 (2026-09-22): the
+   field name is RIGHT-JUSTIFIED in a fixed column with clear spacing
+   (pr-4) so long names never overwrite the value; phone labels
+   (Mobile/Home/Work or a custom name) surface instead of the plain type. #}
+{% macro _field_row(f) %}
+<div class="flex items-start wl-text-sub">
+    <span class="w-28 flex-shrink-0 text-right pr-4 text-xs wl-text-faint uppercase tracking-wide pt-0.5">{% if f.field_type == 'phone' and f.get('label') %}{{ label_display(f.label) }}{% else %}{{ _field_label(f.field_type) }}{% endif %}</span>
+    <span class="flex-1 min-w-0 wl-text break-words">{{ f.field_value }}</span>
+    {% if f.visibility == 'private' %}
+    <span class="ml-2 text-xs wl-text-faint" title="Private field">🔒</span>
+    {% endif %}
+</div>
 {% endmacro %}

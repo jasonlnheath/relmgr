@@ -91,13 +91,7 @@
                 </div>
                 <div class="space-y-2">
                     {% for f in card.visible_fields %}
-                    <div class="flex items-start wl-text-sub">
-                        <span class="w-24 text-xs wl-text-faint uppercase tracking-wide pt-0.5">{{ _field_label(f.field_type) }}</span>
-                        <span class="wl-text">{{ f.field_value }}</span>
-                        {% if f.visibility == 'private' %}
-                        <span class="ml-2 text-xs wl-text-faint" title="Private field">🔒</span>
-                        {% endif %}
-                    </div>
+                    {{ _field_row(f) }}
                     {% else %}
                     <p class="text-sm wl-text-faint">No fields on this card.</p>
                     {% endfor %}
@@ -112,10 +106,7 @@
             <h2 class="wl-heading wl-heading-sm wl-text mb-3">{{ card.name }}</h2>
             <div class="space-y-2">
                 {% for f in card.visible_fields %}
-                <div class="flex items-start wl-text-sub">
-                    <span class="w-24 text-xs wl-text-faint uppercase tracking-wide pt-0.5">{{ _field_label(f.field_type) }}</span>
-                    <span class="wl-text">{{ f.field_value }}</span>
-                </div>
+                {{ _field_row(f) }}
                 {% endfor %}
             </div>
         </div>
@@ -127,114 +118,79 @@
         {% if not cards and tier == 'granted' %}
         <div class="space-y-2">
             {% for f in profile.fields %}
-            <div class="flex items-start wl-text-sub">
-                <span class="w-24 text-xs wl-text-faint uppercase tracking-wide pt-0.5">{{ _field_label(f.field_type) }}</span>
-                <span class="wl-text">{{ f.field_value }}</span>
-                {% if f.visibility == 'private' %}
-                <span class="ml-2 text-xs wl-text-faint" title="Private field">🔒</span>
-                {% endif %}
-            </div>
+            {{ _field_row(f) }}
             {% endfor %}
         </div>
         {% endif %}
 
-        {# Access details #}
+        {# Access details — UX pass 2 (2026-09-22): Status shows the LIST
+           name (WhiteList / GreyList / BlackList), never Granted/Revoked.
+           The redundant Requestor and Name rows are removed, and no
+           'Expires' row — grey and black contacts NEVER expire (semantics
+           ruling); state changes are the owner's choice in the quarterly
+           review. #}
         <div class="mb-6 pb-4" style="border-bottom: 1px solid var(--wl-glass-border);">
             <h2 class="wl-heading wl-heading-sm wl-text mb-3">Access</h2>
             <div class="space-y-2">
                 {% if grant %}
+                {% set access_state = 'GreyList' if is_grey else ('WhiteList' if grant.status == 'granted' else 'BlackList') %}
+                {% set badge_key = 'greylist' if is_grey else ('whitelist' if grant.status == 'granted' else 'blacklist') %}
+                {% set badge_token = {'whitelist': 'white', 'greylist': 'grey', 'blacklist': 'black'}[badge_key] %}
                 <div class="flex items-center wl-text-sub">
-                    <span class="w-24 text-xs wl-text-faint uppercase tracking-wide">status</span>
-                    <span class="wl-text">{{ grant.status|capitalize }}</span>
-                </div>
-                {% if grant.quarter_status %}
-                <div class="flex items-center wl-text-sub">
-                    <span class="w-20 text-xs wl-text-faint uppercase tracking-wide">quarter</span>
+                    <span class="w-28 flex-shrink-0 text-right pr-4 text-xs wl-text-faint uppercase tracking-wide">status</span>
                     <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs"
-                        data-state="{% if grant.expires_at is none %}whitelist{% else %}greylist{% endif %}"
-                        style="background: {% if grant.expires_at is none %}var(--wl-badge-white){% else %}var(--wl-badge-grey){% endif %};
+                        data-state="{{ badge_key }}"
+                        style="background: var(--wl-badge-{{ badge_token }});
                         color: var(--wl-surface-base);"
-                        aria-label="{% if grant.expires_at is none %}Whitelist{% else %}Greylist{% endif %}">
-                        <img src="/static/badge-{{ 'whitelist' if grant.expires_at is none else 'greylist' }}.png" class="w-3 h-3" alt="" aria-hidden="true">
+                        aria-label="{{ access_state }}">
+                        <img src="/static/badge-{{ badge_key }}.png" class="w-3 h-3" alt="" aria-hidden="true">
+                        {{ access_state }}
                     </span>
                 </div>
-                {% endif %}
                 {% if grant.granted_at %}
                 <div class="flex items-center wl-text-sub">
-                    <span class="w-24 text-xs wl-text-faint uppercase tracking-wide">granted</span>
+                    <span class="w-28 flex-shrink-0 text-right pr-4 text-xs wl-text-faint uppercase tracking-wide">granted</span>
                     <span class="wl-text">{{ grant.granted_at[:10] }}</span>
-                </div>
-                {% endif %}
-                {% if grant.expires_at %}
-                <div class="flex items-center wl-text-sub">
-                    <span class="w-24 text-xs wl-text-faint uppercase tracking-wide">expires</span>
-                    <span class="wl-text">{{ grant.expires_at[:10] }}</span>
                 </div>
                 {% endif %}
                 {% if grant.last_reviewed_at %}
                 <div class="flex items-center wl-text-sub">
-                    <span class="w-20 text-xs wl-text-faint uppercase tracking-wide">reviewed</span>
+                    <span class="w-28 flex-shrink-0 text-right pr-4 text-xs wl-text-faint uppercase tracking-wide">reviewed</span>
                     <span class="wl-text">{{ grant.last_reviewed_at[:10] }}</span>
-                </div>
-                {% endif %}
-                {% if grant.requester_email %}
-                <div class="flex items-center wl-text-sub">
-                    <span class="w-24 text-xs wl-text-faint uppercase tracking-wide">requester</span>
-                    <span class="wl-text">{{ grant.requester_email }}</span>
-                </div>
-                {% endif %}
-                {% if grant.requester_name %}
-                <div class="flex items-center wl-text-sub">
-                    <span class="w-24 text-xs wl-text-faint uppercase tracking-wide">name</span>
-                    <span class="wl-text">{{ grant.requester_name }}</span>
                 </div>
                 {% endif %}
                 {% endif %}
             </div>
         </div>
 
-        {# Quarterly decision actions — only for granted tier #}
+        {# Quarterly review actions — UX pass 2: the revoke button is gone
+           here (the contact-list badge moves cover it); grey contacts keep
+           their review choices (Make Permanent / Punt). Review NEVER
+           deletes a contact (semantics ruling). #}
         {% if tier == 'granted' and grant %}
+        {% if is_grey %}
         <div class="mt-6 pt-4" style="border-top: 1px solid var(--wl-glass-border);">
-            {% if is_grey %}
-                <p class="text-xs wl-text-faint mb-2">Quarterly review — choose one:</p>
-                <div class="flex flex-wrap gap-2">
-                    {# Make Permanent #}
-                    <form method="POST" action="/owner/{{ token }}/quarter/make_permanent" class="inline">
-                        <input type="hidden" name="grant_id" value="{{ grant.id }}">
-                        <button type="submit"
-                                class="wl-btn-approve px-4 py-2 rounded-lg text-sm">
-                            Make Permanent
-                        </button>
-                    </form>
-                    {# Revoke #}
-                    <form method="POST" action="/owner/{{ token }}/quarter/revoke" class="inline">
-                        <input type="hidden" name="grant_id" value="{{ grant.id }}">
-                        <button type="submit"
-                                class="wl-btn-revoke px-4 py-2 rounded-lg text-sm">
-                            Revoke
-                        </button>
-                    </form>
-                    {# Punt Another Quarter #}
-                    <form method="POST" action="/owner/{{ token }}/quarter/punt" class="inline">
-                        <input type="hidden" name="grant_id" value="{{ grant.id }}">
-                        <button type="submit"
-                                class="wl-btn-punt px-4 py-2 rounded-lg text-sm">
-                            Punt Another Quarter
-                        </button>
-                    </form>
-                </div>
-            {% else %}
-                {# Non-grey granted contact: only revoke #}
-                <form method="POST" action="/owner/{{ token }}/revoke" class="inline">
+            <p class="text-xs wl-text-faint mb-2">Quarterly review — choose one:</p>
+            <div class="flex flex-wrap gap-2">
+                {# Make Permanent #}
+                <form method="POST" action="/owner/{{ token }}/quarter/make_permanent" class="inline">
                     <input type="hidden" name="grant_id" value="{{ grant.id }}">
                     <button type="submit"
-                            class="wl-btn-revoke px-6 py-2 rounded-lg text-sm">
-                        Revoke Access
+                            class="wl-btn-approve px-4 py-2 rounded-lg text-sm">
+                        Make Permanent
                     </button>
                 </form>
-            {% endif %}
+                {# Punt Another Quarter #}
+                <form method="POST" action="/owner/{{ token }}/quarter/punt" class="inline">
+                    <input type="hidden" name="grant_id" value="{{ grant.id }}">
+                    <button type="submit"
+                            class="wl-btn-punt px-4 py-2 rounded-lg text-sm">
+                        Punt Another Quarter
+                    </button>
+                </form>
+            </div>
         </div>
+        {% endif %}
         {% endif %}
     </div>
 </div>
@@ -266,4 +222,16 @@
     {%- elif field_type == 'note' -%}note
     {%- else -%}{{ field_type }}
     {%- endif -%}
+{% endmacro %}
+
+{# One display row (UX pass 2): RIGHT-justified field names with clear
+   spacing so they never overwrite the value; phone labels surface. #}
+{% macro _field_row(f) %}
+<div class="flex items-start wl-text-sub">
+    <span class="w-28 flex-shrink-0 text-right pr-4 text-xs wl-text-faint uppercase tracking-wide pt-0.5">{% if f.field_type == 'phone' and f.get('label') %}{{ label_display(f.label) }}{% else %}{{ _field_label(f.field_type) }}{% endif %}</span>
+    <span class="flex-1 min-w-0 wl-text break-words">{{ f.field_value }}</span>
+    {% if f.visibility == 'private' %}
+    <span class="ml-2 text-xs wl-text-faint" title="Private field">🔒</span>
+    {% endif %}
+</div>
 {% endmacro %}

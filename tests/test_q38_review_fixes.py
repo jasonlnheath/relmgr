@@ -113,10 +113,11 @@ class TestRenderBuilderDedup:
 # ============================================================
 
 class TestBioOverLimitRejected:
+    # UX pass 2 (2026-09-22): the bio cap is 500 (was 2000).
     def test_over_limit_bio_not_saved(self, tmp_path):
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
-        long_bio = "x" * 2001
+        long_bio = "x" * 501
         resp = client.post(f"/owner/{_tok()}/bio", data={"bio": long_bio})
         assert resp.status_code == 400, f"over-limit bio got {resp.status_code}, spec says 400"
         conn = whitelist_db.wl_connect(db)
@@ -135,7 +136,7 @@ class TestBioOverLimitRejected:
     def test_limit_boundary_ok(self, tmp_path):
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
-        exact = "y" * 2000
+        exact = "y" * 500
         resp = client.post(f"/owner/{_tok()}/bio", data={"bio": exact})
         assert resp.status_code == 200
         conn = whitelist_db.wl_connect(db)
@@ -146,8 +147,8 @@ class TestBioOverLimitRejected:
     def test_over_limit_shows_error(self, tmp_path):
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
-        resp = client.post(f"/owner/{_tok()}/bio", data={"bio": "x" * 2001})
-        assert "2000" in resp.text
+        resp = client.post(f"/owner/{_tok()}/bio", data={"bio": "x" * 501})
+        assert "500" in resp.text
 
 
 # ============================================================

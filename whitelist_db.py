@@ -512,13 +512,14 @@ def _seed_title_company_fields(conn: sqlite3.Connection) -> None:
     for p in profiles:
         pid = p[0]
         if "title" in col_names and p[1]:  # title
+            # UX pass 2 (2026-09-22): title defaults to PUBLIC.
             conn.execute(
-                "INSERT OR IGNORE INTO profile_fields (profile_id, field_type, field_value, visibility) VALUES (?, 'title', ?, 'granted')",
+                "INSERT OR IGNORE INTO profile_fields (profile_id, field_type, field_value, visibility) VALUES (?, 'title', ?, 'public')",
                 (pid, p[1]),
             )
         if "company" in col_names and p[2]:  # company
             conn.execute(
-                "INSERT OR IGNORE INTO profile_fields (profile_id, field_type, field_value, visibility) VALUES (?, 'company', ?, 'granted')",
+                "INSERT OR IGNORE INTO profile_fields (profile_id, field_type, field_value, visibility) VALUES (?, 'company', ?, 'public')",
                 (pid, p[2]),
             )
 
@@ -2657,6 +2658,49 @@ def ensure_profile_bio_visibility_column(conn: sqlite3.Connection) -> None:
         )
 
 
+def ensure_profile_field_labels(conn: sqlite3.Connection) -> None:
+    """Add profile_fields.label for phone label support (UX pass 2, 2026-09-22).
+
+    Values: 'mobile' / 'home' / 'work', or a free CUSTOM label string.
+    NULL = unlabeled (renders with the field-type's default label). Purely
+    additive column — safe on every existing DB, no table swap needed.
+    """
+    cols = [r["name"] for r in conn.execute("PRAGMA table_info(profile_fields)").fetchall()]
+    if "label" not in cols:
+        conn.execute("ALTER TABLE profile_fields ADD COLUMN label TEXT")
+    conn.commit()
+
+
+# Built-in phone label vocabulary (everything else in the label column is a
+# CUSTOM label typed by the owner, stored verbatim).
+PHONE_LABEL_CHOICES = ("mobile", "home", "work")
+PHONE_LABEL_CUSTOM = "__custom"
+
+
+def normalize_field_label(raw: str | None) -> str:
+    """Normalize an editor label submission to a storable label value.
+
+    Built-in choices fold to lowercase ('Mobile' → 'mobile'); a CUSTOM
+    submission keeps the typed text verbatim; empty/absent → '' (no label).
+    """
+    text = (raw or "").strip()
+    if not text or text == PHONE_LABEL_CUSTOM:
+        return ""
+    folded = text.lower()
+    return folded if folded in PHONE_LABEL_CHOICES else text
+
+
+def label_display(label: str | None) -> str:
+    """Render a stored label for display ('mobile' → 'Mobile', custom
+    text shown as typed, '' → '')."""
+    text = (label or "").strip()
+    if not text:
+        return ""
+    if text in PHONE_LABEL_CHOICES:
+        return text.capitalize()
+    return text
+
+
 def ensure_card_photo_column(conn: sqlite3.Connection) -> None:
     """Add photo_path column to cards if missing (idempotent)."""
     cols = [r["name"] for r in conn.execute("PRAGMA table_info(cards)").fetchall()]
@@ -2895,9 +2939,14 @@ def sync_quarterly_notifications(
     conn: sqlite3.Connection, owner_profile_id: int
 ) -> Optional[int]:
     """Raise ONE quarterly-review notification when this owner has grey
-    contacts (expired quarter grants awaiting make-permanent / revoke /
-    punt). Idempotent per owner per quarter via the dedupe key — the
-    dashboard calls this on every render, so repeats must be free."""
+    contacts (contacts in the review cycle). Idempotent per owner per
+    quarter via the dedupe key — the dashboard calls this on every
+    render, so repeats must be free.
+
+    Semantics ruling (UX pass 2, 2026-09-22): grey and black contacts
+    NEVER expire — the quarterly review exists to update/confirm contact
+    information and review grey/black contacts, never to delete them.
+    """
     grey_count = get_grey_contact_count(conn, owner_profile_id)
     if not grey_count:
         return None
@@ -2906,8 +2955,12 @@ def sync_quarterly_notifications(
         conn,
         owner_profile_id,
         "quarterly",
-        f"Quarterly review: {grey_count} grey {label} awaiting a decision",
-        body="Expired quarter grants are waiting — make permanent, revoke, or punt.",
+        f"Quarterly review: {grey_count} grey {label} to review",
+        body=("Quarterly review time — confirm and update contact "
+              "information, fill in missing fields, and review your grey "
+              "and black contacts. Grey and black contacts never expire "
+              "and the review never deletes a contact — every state "
+              "change is your choice."),
         dedupe_key=f"quarterly:{owner_profile_id}:{quarter_end_iso()}",
     )
 
@@ -3012,6 +3065,7 @@ def ensure_whitelist_schema(conn: sqlite3.Connection) -> None:
     ensure_quarantine_schema(conn)              # blacklist silence: quarantine store
     ensure_vcard_fields_schema(conn)      # VCard field expansion (field_type + visibility)
     ensure_vcard_fields_v3_schema(conn)   # Round-2 types: 'address'→'address1' + apps (AFTER v2)
+    ensure_profile_field_labels(conn)     # UX pass 2: phone label support (additive column)
     ensure_profile_bio_column(conn)       # Phase A1: profiles.bio
     ensure_card_photo_column(conn)              # Phase A1: cards.photo_path
     ensure_profile_bio_visibility_column(conn)  # Whitelist: bio visibility toggle
@@ -3180,7 +3234,7 @@ def set_card_fields(conn: sqlite3.Connection, card_id: int, field_ids: list[int]
 
 def add_profile_field(conn: sqlite3.Connection, profile_id: int,
                       field_type: str, field_value: str,
-                      visibility: str) -> dict:
+                      visibility: str, label: str | None = None) -> dict:
     """Add a new field to a profile.
 
     Valid field_type values: email, phone, title, company, address, website,
@@ -3189,12 +3243,16 @@ def add_profile_field(conn: sqlite3.Connection, profile_id: int,
     Valid visibility values: public (everyone), granted (granted contacts only),
     private (granted contacts only, but marked as private).
 
+    ``label`` is the optional phone label ('mobile'/'home'/'work' or custom
+    text; UX pass 2).
+
     Raises ValueError on UNIQUE violation (duplicate value for same type).
     """
     conn.execute(
-        "INSERT INTO profile_fields (profile_id, field_type, field_value, visibility, created_at, updated_at)"
-        " VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))",
-        (profile_id, field_type, field_value, visibility),
+        "INSERT INTO profile_fields (profile_id, field_type, field_value, visibility, label, created_at, updated_at)"
+        " VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))",
+        (profile_id, field_type, field_value, visibility,
+         normalize_field_label(label) or None),
     )
     conn.commit()
     return conn.execute(
@@ -3223,8 +3281,9 @@ def save_card_editor(
     display_name: str | None = None,
     card_name: str | None = None,
     field_updates: list[tuple[int, str, str]] | None = None,
+    field_labels: dict[int, str] | None = None,
     field_removals: list[int] | None = None,
-    new_fields: list[tuple[str, str, str]] | None = None,
+    new_fields: list[tuple] | None = None,
 ) -> dict:
     """Apply the card-editor form: ONE commit for the whole save.
 
@@ -3237,10 +3296,13 @@ def save_card_editor(
         card_name: new cards.name (None/empty → unchanged).
         field_updates: (field_id, value, visibility) — value/visibility are
             applied only when they differ from the stored row.
+        field_labels: {field_id: label} — phone label support (UX pass 2);
+            '' clears the label. Applied with the same differ logic.
         field_removals: field_ids to UNLINK from this card (card_fields row
             deleted; the profile_fields row survives — cards are lenses on
             the same field data, unlinking never destroys it).
-        new_fields: (field_type, value, visibility) — created (or reused when
+        new_fields: (field_type, value, visibility) or, with phone label,
+            (field_type, value, visibility, label) — created (or reused when
             the profile already has an identical type+value row) and linked
             to the card.
 
@@ -3259,6 +3321,7 @@ def save_card_editor(
         raise ValueError(f"card_id {card_id} not found")
     owner_id = card["owner_profile_id"]
     field_updates = field_updates or []
+    field_labels = field_labels or {}
     field_removals = field_removals or []
     new_fields = new_fields or []
 
@@ -3332,10 +3395,26 @@ def save_card_editor(
                     "UPDATE profile_fields SET visibility = ?, updated_at = datetime('now') WHERE id = ?",
                     (visibility, fid),
                 )
+            # Phone label support (UX pass 2): labels apply STANDALONE —
+            # a row keyed only a label (no value/visibility change) must
+            # still save it. '' clears, value sets; ownership checked.
+            for fid, raw_label in field_labels.items():
+                row = conn.execute(
+                    "SELECT profile_id FROM profile_fields WHERE id = ?", (fid,)
+                ).fetchone()
+                if row is None or row["profile_id"] != owner_id:
+                    raise ValueError(f"field_id {fid} not found or not owned by this profile")
+                new_label = normalize_field_label(raw_label) or None
+                conn.execute(
+                    "UPDATE profile_fields SET label = ?, updated_at = datetime('now') WHERE id = ?",
+                    (new_label, fid),
+                )
 
         # 5. New fields: create (or reuse an identical type+value row) and
         #    link to the card.
-        for field_type, value, visibility in new_fields:
+        for entry in new_fields:
+            field_type, value, visibility = entry[0], entry[1], entry[2]
+            label = normalize_field_label(entry[3]) if len(entry) > 3 else None
             if field_type not in CARD_EDITOR_FIELD_TYPES:
                 raise ValueError(f"invalid field type '{field_type}'")
             if visibility not in _VCARD_VISIBILITY:
@@ -3355,9 +3434,10 @@ def save_card_editor(
                 )
             else:
                 cur = conn.execute(
-                    "INSERT INTO profile_fields (profile_id, field_type, field_value, visibility, created_at, updated_at)"
-                    " VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))",
-                    (owner_id, field_type, value, visibility),
+                    "INSERT INTO profile_fields (profile_id, field_type, field_value, visibility, label, created_at, updated_at)"
+                    " VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))",
+                    (owner_id, field_type, value, visibility,
+                     label or None),
                 )
                 fid = cur.lastrowid
             conn.execute(
@@ -3635,3 +3715,132 @@ def list_contact_list_rows(
     rows = rows[start:end]
 
     return rows
+
+
+# ============================================================
+# New-connection search + standard vCard creation (UX pass 2)
+# ============================================================
+
+def search_new_connections(conn: sqlite3.Connection,
+                           owner_profile_id: int, q: str,
+                           limit: int = 10) -> list[dict]:
+    """Search the owner's contacts database for 'new connections'.
+
+    The + button on the contact list searches the imported address book
+    (contacts table, owner-scoped per ruling 2A) by name or email
+    substring. Returns light rows: name, email, phone, org (JSON columns
+    already unpacked). Empty query → [].
+    """
+    text = (q or "").strip()
+    if not text:
+        return []
+    if not _table_exists(conn, "contacts"):
+        return []  # store layer never ran — nothing to search, never a crash
+    like = f"%{text}%"
+    if _contacts_has_owner_col(conn):
+        rows = conn.execute(
+            "SELECT * FROM contacts "
+            "WHERE is_duplicate = 0 AND owner_profile_id = ? "
+            "AND (normalized_name LIKE ? OR emails LIKE ? OR phones LIKE ?) "
+            "ORDER BY normalized_name LIMIT ?",
+            (owner_profile_id, like, like, like, limit),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM contacts "
+            "WHERE is_duplicate = 0 "
+            "AND (normalized_name LIKE ? OR emails LIKE ? OR phones LIKE ?) "
+            "ORDER BY normalized_name LIMIT ?",
+            (like, like, like, limit),
+        ).fetchall()
+
+    import json as _json
+    out: list[dict] = []
+    for r in rows:
+        cd = dict(r)
+
+        def _first_json_list(raw) -> list:
+            try:
+                data = _json.loads(raw) if isinstance(raw, str) else (raw or [])
+            except (ValueError, TypeError):
+                data = []
+            return data if isinstance(data, list) else []
+
+        emails = _first_json_list(cd.get("emails"))
+        phones = _first_json_list(cd.get("phones"))
+        orgs = _first_json_list(cd.get("organizations"))
+
+        def _text_of(entry) -> str:
+            if isinstance(entry, dict):
+                return str(entry.get("address") or entry.get("number")
+                           or entry.get("name") or "")
+            return str(entry) if entry else ""
+
+        email = _text_of(emails[0]) if emails else ""
+        phone = _text_of(phones[0]) if phones else ""
+        org = _text_of(orgs[0]) if orgs else ""
+        name = (f"{cd.get('first_name') or ''} {cd.get('last_name') or ''}"
+                ).strip() or cd.get("normalized_name", "Unknown")
+        out.append({
+            "contact_id": cd.get("id"),
+            "name": name,
+            "email": email,
+            "phone": phone,
+            "org": org,
+        })
+    return out
+
+
+def _slugify_handle(name: str) -> str:
+    """Fold a display name onto the handle vocabulary ([a-z0-9-])."""
+    import re as _re
+    slug = _re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-")
+    return slug or "contact"
+
+
+def create_contact_vcard(conn: sqlite3.Connection, owner_profile_id: int,
+                         display_name: str, phone: str = "",
+                         email: str = "") -> dict:
+    """Create a standard vCard profile (UX pass 2 + button, no-hit path).
+
+    A 'standard vCard' is a registry profile carrying the entered name and
+    the conventional phone/email fields at their DEFAULT visibility
+    ('granted' per the UX pass 2 defaults ruling). Default cards are
+    seeded for the new profile and the created fields are attached to
+    their default cards (Contact / Work), exactly like a self-published
+    profile would look after seeding.
+
+    Returns the created profile dict (with fields attached).
+    Raises ValueError when display_name is empty.
+    """
+    name = (display_name or "").strip()
+    if not name:
+        raise ValueError("Display name is required.")
+    phone = (phone or "").strip()
+    email = (email or "").strip()
+
+    base = _slugify_handle(name)
+    handle = base
+    n = 2
+    while conn.execute("SELECT 1 FROM profiles WHERE handle = ?",
+                       (handle,)).fetchone():
+        handle = f"{base}-{n}"
+        n += 1
+
+    now = _now_iso()
+    conn.execute(
+        "INSERT INTO profiles (handle, display_name, created_at, updated_at)"
+        " VALUES (?, ?, ?, ?)",
+        (handle, name, now, now),
+    )
+    profile_id = conn.execute(
+        "SELECT id FROM profiles WHERE handle = ?", (handle,)
+    ).fetchone()[0]
+
+    if phone:
+        add_profile_field(conn, profile_id, "phone", phone, "granted")
+    if email:
+        add_profile_field(conn, profile_id, "email", email, "granted")
+    seed_default_cards(conn)
+    conn.commit()
+    return get_profile_by_id(conn, profile_id)

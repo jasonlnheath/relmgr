@@ -3,32 +3,27 @@
 
 {% block content %}
 <div class="max-w-2xl mx-auto py-8 px-4">
-    {# Centered header with count + notification center + sign out #}
-    <div class="flex items-center justify-between mb-6">
+    {# UX pass 2 (2026-09-22) layout ruling: notifications button on the
+       LEFT, 'WhiteList' title CENTERED, sign out on the right. #}
+    <div class="relative flex items-center justify-between mb-6">
         <div>
-            <h1 class="wl-heading wl-heading-md">WhiteList</h1>
-            <p class="wl-text-sub text-sm mt-1">{{ total_contacts }} entries</p>
-        </div>
-        <div class="flex items-center gap-2">
             {# Notification center (2026-09-20): unread badge on the dashboard #}
             <a href="/owner/{{ token }}/notifications" class="wl-btn-ink text-xs py-1 px-3 rounded-lg">
                 {% if unread_notifications %}{{ unread_notifications }} {% endif %}Notifications
             </a>
+        </div>
+        <div class="absolute left-1/2 -translate-x-1/2 text-center pointer-events-none">
+            <h1 class="wl-heading wl-heading-md">WhiteList</h1>
+            <p class="wl-text-sub text-sm mt-1">{{ total_contacts }} entries</p>
+        </div>
+        <div class="flex items-center gap-2">
             <form method="POST" action="/signout">
                 <button type="submit" class="wl-btn-ink text-xs py-1 px-3 rounded-lg">Sign out</button>
             </form>
         </div>
     </div>
 
-    {# Search bar — hidden letter field keeps the rail filter through searches #}
-    <form method="GET" action="/owner/{{ token }}" class="mb-4">
-        {% if letter %}<input type="hidden" name="letter" value="{{ letter }}">{% endif %}
-        <input type="text" name="q" value="{{ q or '' }}"
-               placeholder="Search WhiteList"
-               class="w-full px-3 py-2 border border-gray-600 rounded-lg text-sm bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
-    </form>
-
-    {# My card — owner's own profile, sits below search #}
+    {# My card — UX pass 2 layout ruling: my card sits ABOVE the search bar #}
     {% if my_card %}
     <div class="wl-card p-4 mb-4">
         <div class="flex items-center gap-3">
@@ -50,6 +45,20 @@
         </div>
     </div>
     {% endif %}
+
+    {# Search bar + round + button (UX pass 2): the + searches the database
+       for 'new connections' and, on no hits, offers to create a standard
+       vCard. Hidden letter field keeps the rail filter through searches. #}
+    <form method="GET" action="/owner/{{ token }}" class="mb-4 flex items-center gap-2">
+        {% if letter %}<input type="hidden" name="letter" value="{{ letter }}">{% endif %}
+        <input type="text" name="q" value="{{ q or '' }}"
+               placeholder="Search WhiteList"
+               class="flex-1 min-w-0 px-3 py-2 border border-gray-600 rounded-lg text-sm bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
+        <a href="/owner/{{ token }}/new-connection{% if q %}?q={{ q | urlencode }}{% endif %}"
+           title="Add a new connection"
+           aria-label="Add a new connection"
+           class="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center wl-btn-ink text-xl leading-none">+</a>
+    </form>
 
     {# Unified contact rows + fast alphabetical filter rail (UX pass
        2026-09-22): the rail on the right filters by name initial, one
@@ -74,7 +83,9 @@
 
                 {# Name — UX pass ruling (2026-09-22): ONE ROW PER CARD;
                    clicking the row opens the contact's information with
-                   THAT card selected. #}
+                   THAT card selected. UX pass 2: the email sits as compact
+                   subtext — the requester identity stays visible in the
+                   condensed list (the Details expander is gone). #}
                 <div class="flex-1 min-w-0">
                     {% if row.live_grant %}
                     <a href="/owner/{{ token }}/contact/{{ row.live_grant.id }}{% if row.row_card %}?card={{ row.row_card.id }}{% endif %}"
@@ -82,12 +93,15 @@
                     {% else %}
                     <span class="wl-heading wl-heading-sm wl-text block truncate">{{ row.name }}</span>
                     {% endif %}
-                    {% if row.row_card %}
-                    <div class="mt-0.5">
-                        <span class="text-[10px] px-1.5 py-0.5 rounded"
+                    <div class="mt-0.5 flex items-center gap-1.5 flex-wrap min-w-0">
+                        {% if row.email %}
+                        <span class="text-[10px] wl-text-faint truncate max-w-full">{{ row.email }}</span>
+                        {% endif %}
+                        {% if row.row_card %}
+                        <span class="text-[10px] px-1.5 py-0.5 rounded flex-shrink-0"
                               style="background: var(--wl-glass-fill-alt); color: var(--wl-ink-muted);">{{ row.row_card.name }}</span>
+                        {% endif %}
                     </div>
-                    {% endif %}
                 </div>
 
                 {# Access badges — scroll silhouette on colored button.
@@ -114,7 +128,10 @@
                     {% set state_label = {'whitelist': 'WhiteList',
                                           'greylist': 'GreyList',
                                           'blocked': 'BlackList'}[next_state] %}
-                    <form method="POST" action="/owner/{{ token }}/badge">
+                    {# UX pass 2: 'Are you sure?' confirmation on badge
+                       changes — accidental-touch protection on phones. #}
+                    <form method="POST" action="/owner/{{ token }}/badge"
+                          onsubmit="return confirm('Change this contact to {{ state_label }}?');">
                         <input type="hidden" name="grant_id" value="{{ row.live_grant.id }}">
                         <input type="hidden" name="state" value="{{ next_state }}">
                         <button type="submit"
@@ -132,38 +149,24 @@
                 </div>
             </div>
 
-            {# Details on click — expandable section #}
-            <details class="mt-2 pt-2" style="border-top: 1px solid var(--wl-glass-border);">
-                <summary class="text-xs wl-link cursor-pointer">Details</summary>
-                <div class="text-xs wl-text-sub mt-2 space-y-1">
-                    {% if row.email %}<p><strong>Email:</strong> {{ row.email }}</p>{% endif %}
-                    {% if row.phone %}<p><strong>Phone:</strong> {{ row.phone }}</p>{% endif %}
-                    {% if row.org %}<p><strong>Org:</strong> {{ row.org }}</p>{% endif %}
-                    {% if row.cards %}
-                    <p><strong>Cards:</strong> {{ row.cards|join(', ') }}</p>
-                    {% endif %}
-                    {% if row.live_grant %}
-                    <p><strong>Granted:</strong> {{ row.live_grant.created_at[:10] }}</p>
-                    {% if row.live_grant.expires_at %}<p><strong>Expires:</strong> {{ row.live_grant.expires_at[:10] }}</p>{% endif %}
-                    {% endif %}
-                </div>
-
-                {# Actions — approve/deny for pending; granted contacts open
-                   their card by clicking the name (UX pass 2026-09-22) #}
-                {% if row.is_pending %}
-                <form method="POST" action="/owner/{{ token }}/decision" class="mt-3 flex gap-2">
-                    <input type="hidden" name="grant_id" value="{{ row.live_grant.id }}">
-                    <button type="submit" name="decision" value="approve"
-                            class="wl-btn-approve px-3 py-1 rounded text-xs">
-                        Approve
-                    </button>
-                    <button type="submit" name="decision" value="deny"
-                            class="wl-btn-deny px-3 py-1 rounded text-xs">
-                        Deny
-                    </button>
-                </form>
-                {% endif %}
-            </details>
+            {# UX pass 2: the 'Details' expander is REMOVED — a clean,
+               condensed list. Pending rows carry compact Approve/Deny
+               buttons inline so the decision never hides behind a
+               dropdown. #}
+            {% if row.is_pending %}
+            <form method="POST" action="/owner/{{ token }}/decision" class="mt-3 pt-2 flex gap-2"
+                  style="border-top: 1px solid var(--wl-glass-border);">
+                <input type="hidden" name="grant_id" value="{{ row.live_grant.id }}">
+                <button type="submit" name="decision" value="approve"
+                        class="wl-btn-approve px-3 py-1 rounded text-xs">
+                    Approve
+                </button>
+                <button type="submit" name="decision" value="deny"
+                        class="wl-btn-deny px-3 py-1 rounded text-xs">
+                    Deny
+                </button>
+            </form>
+            {% endif %}
         </div>
         {% endfor %}
         </div>

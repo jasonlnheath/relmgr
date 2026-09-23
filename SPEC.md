@@ -45,11 +45,17 @@ aliases         — many handles → one person (profile_aliases)
 Field           — NOT records. Each field is a contact attribute attached to a Card.
   field_type    — one of the vCard field types below (CHECK constraint in profile_fields table)
   field_value   — the actual value
+  label         — optional phone label: 'mobile' | 'home' | 'work' or a free CUSTOM label
+                  string (UX pass 2, 2026-09-22). NULL = unlabeled.
   visibility    — "public" | "granted" | "private"
     - **public**: shown to anonymous viewers and granted contacts
     - **granted**: shown only to granted contacts
     - **private**: shown only to granted contacts (marked as private with 🔒 indicator)
     - The owner always sees all fields regardless of visibility
+    - **Default visibility (UX pass 2, 2026-09-22): every field defaults to
+      'granted' EXCEPT title, company, website — and the bio — which default
+      to 'public'.** Applies to card-editor add rows, absent-visibility
+      saves, the /fields/new route, and the legacy title/company seed.
 
 Standard contact field set (v3, 2026-09-18):
   The field_type enum covers the standard contact attributes used across iOS Contacts,
@@ -82,9 +88,14 @@ Card            — an owner-defined field group (e.g. "Work" = email fields)
   name          — human-readable label
   card_fields   — which profile_fields belong to this card (card_fields table)
 
-QR              — profile URL only, never baked-in vCard data
-  content       — {BASE_URL}/p/{handle}
-  generated as  — PNG, saved to exports/qr_<handle>.png
+QR              — share-bundle link only, never baked-in vCard data
+  content       — {BASE_URL}/s/{bundle_id}
+  generated as  — PNG, served live at /qr/share/{bundle_id}
+  **The per-profile QR (/qr/{handle}) was REMOVED from the public profile
+  (UX pass 2, 2026-09-22): it encoded only a profile link. In its place the
+  public profile shows ONE Connect button — a stranger clicks Connect, and
+  the owner is notified in-app and/or by email through the existing
+  request flow.**
 ```
 
 ### Access Tiers
@@ -101,18 +112,31 @@ Three access states surface in the UI, each with its own badge color and icon:
 
 | State | Color | Meaning |
 |---|---|---|
-| **WhiteList** | Green (#4ADE80) | Permanent access — terminal until manually revoked |
-| **GreyList** | Amber (#FBBF24) | Time-bound access — expires at next quarterly review |
-| **BlackList** | Red (#F87171) | Blocked — no access, silent |
+| **WhiteList** | White (#FFFFFF) | Permanent access — terminal until manually revoked |
+| **GreyList** | Grey (#5A5A62) | Time-marker for the quarterly review cycle |
+| **BlackList** | Black (#0B0B0C) | Blocked — no access, silent |
+
+**UX pass 2 semantics ruling (2026-09-22): greylist and blacklist contacts
+NEVER expire.** A state change is the user's choice, made during the
+quarterly review period (or any time via the badge cycle). The quarterly
+review exists to update/confirm contact information, populate missing
+fields, and review grey/black contacts — NEVER to delete them unless the
+user insists. No surface may tell the owner that a contact 'expires'.
 
 The three states map to database statuses:
 - **WhiteList** → `status='granted'`, `expires_at IS NULL`, `quarter_status IS NULL`
 - **GreyList** → `status='granted'`, `expires_at` set to next quarter end
+  (internal marker that feeds the quarterly review prompt — not an expiry)
 - **BlackList** → `status='revoked'` (revoked == blacklisted, one state)
 
 ### Time-Bound Access
 
-Every permission has an expiration policy. Exactly three durations:
+**Superseded by the UX pass 2 semantics ruling (2026-09-22): grey and black
+contacts never expire — state changes are the user's choice made during the
+quarterly review period.** The quarterly review exists to update/confirm
+contact information, populate missing fields, and review grey/black
+contacts — never to delete them unless the user insists. The historical
+three-duration model is retained below for the audit trail vocabulary:
 
 | Duration type | Behavior |
 |---|---|
@@ -134,13 +158,14 @@ Every permission has an expiration policy. Exactly three durations:
 
 **State model:**
 
-- **GreyList contact stays GreyList while punted** — punting extends the grant and keeps the contact in the GreyList review cycle.
+- **GreyList and BlackList contacts NEVER expire** (UX pass 2, 2026-09-22) — a state change is the user's choice made during the quarterly review period; the quarterly review never deletes contacts unless the user insists.
+- **GreyList contact stays GreyList while punted** — punting extends the internal quarter marker and keeps the contact in the GreyList review cycle.
 - **WhiteList is terminal until manually revoked** — once made permanent, the only way to remove access is revocation.
-- **Revoked and blacklisted are one state** — both rendered as `BlackList` with a red badge in the UI.
+- **Revoked and blacklisted are one state** — both rendered as `BlackList`.
 - **No 90-day minimum** — a contact becomes prompt-eligible at each quarterly boundary for its owner while GreyList.
 - **No countdowns** — no "X days until review" anywhere in the UI.
 - **No auto-expiry** — GreyList contacts never auto-expire or auto-transition.
-- **No expired state** — the concept of "expired" is absorbed into the GreyList state; there is no separate expired badge or view.
+- **No expired state** — the concept of "expired" is absorbed into the GreyList state; there is no separate expired badge or view, and no 'Expires' row anywhere in the UI.
 
 **GreyList state** is derived: a grant is GreyList when `status='granted'`, `expires_at` has passed, and `quarter_status` is `'pending_review'` or `'punted'`. The `quarter_status` column tracks the review cycle:
 
@@ -216,7 +241,10 @@ The following rulings were established during development and are preserved as b
 | Bio only for anonymous | Anonymous visitors see the profile bio only; all fields and cards require a grant. Supersedes the Work-card public default. |
 | Photo originals | **Kept** — originals are kept after the 512-square encode. Spec-level ruling; code follow-up pending (current implementation discards them). |
 | Contact list shows all live contacts | The contact list view shows all contacts from `contacts.db` (1,920+), not just WhiteList-approved ones. |
-| Bio cap | **2,000 confirmed** — 2,000 character cap confirmed for now. |
+| Bio cap | **500** (UX pass 2, 2026-09-22 — supersedes the earlier 2,000). |
+| Field visibility defaults | **All fields default 'granted'; title, company, website, and bio default 'public'** (UX pass 2, 2026-09-22). |
+| Profile QR removed | The public profile shows ONE Connect button instead of a QR; the owner is notified in-app/email when a stranger connects (UX pass 2, 2026-09-22). |
+| Grey/black never expire | Quarterly review confirms/updates contact info and reviews grey/black contacts; it never deletes them (UX pass 2, 2026-09-22). |
 
 | Seed default cards cover all owners | `seed_default_cards()` now seeds Work (email fields) and Personal (phone fields) cards for every profile, not just the default owner. |
 
@@ -295,7 +323,7 @@ The following rulings were established during development and are preserved as b
 | Public card scope | **Resolved** | Anonymous sees bio only; all fields/cards require grant. Supersedes Work-card public default. |
 | Standing posture | **Resolved** | Personal-local now; public deployment deferred — standing decision. |
 | Photo originals | **Resolved** | Kept after 512-square encode; code follow-up pending (current impl discards). |
-| Bio length cap | **Resolved** | 2,000 characters confirmed for now. |
+| Bio length cap | **Resolved** | 500 characters (UX pass 2, 2026-09-22; supersedes the earlier 2,000). |
 | Context layer | **Resolved** | Bookshelved; moved to Deferred section below. |
 | Seed default cards | **All owners** | `seed_default_cards()` seeds Work + Personal for every profile. |
 | Revocation cascade | **None** | Revoking a grant doesn't cascade to audit rows or scan_events. |
