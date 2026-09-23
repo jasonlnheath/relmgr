@@ -38,32 +38,38 @@ def _seed_full(tmp_path: Path) -> Path:
     whitelist_db.seed_default_cards(conn)
     # A public field must exist so the anon default card shows something.
     # B3: add_profile_field is an insert only — the owner attaches a field to
-    # a card via the picker (set_card_fields), so do that too, keeping Work's
-    # seeded fields alongside the new one.
+    # a card via the picker (set_card_fields), so do that too, keeping the
+    # card's other fields alongside the new one.
+    # UX pass 3: the DEFAULT card is now PERSONAL (top card, default public
+    # picture), so the public field attaches to Personal.
     pub = whitelist_db.add_profile_field(
         conn, 1, "email", "public@waltheremc.com", "public")
-    work = conn.execute(
-        "SELECT id FROM cards WHERE owner_profile_id = 1 AND name = 'Work'"
+    personal = conn.execute(
+        "SELECT id FROM cards WHERE owner_profile_id = 1 AND name = 'Personal'"
     ).fetchone()
-    work_ids = [f["id"] for f in conn.execute(
+    personal_ids = [f["id"] for f in conn.execute(
         "SELECT pf.* FROM card_fields cf "
         "JOIN profile_fields pf ON cf.field_id = pf.id WHERE cf.card_id = ?",
-        (work["id"],),
+        (personal["id"],),
     )]
-    whitelist_db.set_card_fields(conn, work["id"], work_ids + [pub["id"]])
+    whitelist_db.set_card_fields(conn, personal["id"], personal_ids + [pub["id"]])
     whitelist_db.update_bio(conn, 1, "I sell wheel bushings.")
     conn.close()
     return db
 
 
 def test_anon_sees_default_card_only(tmp_path):
-    """Anon: default (lowest id) card only; public fields only; no hidden notice (round-2)."""
+    """Anon: default card only; public fields only; no hidden notice (round-2).
+
+    UX pass 3: the default card is PERSONAL (top card — its picture is the
+    default public picture, and its public identity fields are the
+    friend-finding surface).
+    """
     db = _seed_full(tmp_path)
     client = TestClient(create_app(db))
     html = client.get("/p/jasonheath").text
-    # Work is the default card (lowest id from seed_default_cards).
-    assert "Work" in html
-    assert "Contact" not in html, "anon must not see non-default cards"
+    assert "Personal" in html
+    assert "Work" not in html, "anon must not see non-default cards"
     # Public field visible, granted-visibility fields hidden.
     assert "public@waltheremc.com" in html
     assert "jheath@waltheremc.com" not in html
@@ -103,8 +109,8 @@ def test_granted_tier_sees_all_cards_and_fields(tmp_path):
 
     client = TestClient(create_app(db))
     html = client.get("/p/jasonheath?e=visitor%40x.com").text
-    assert "Work" in html
-    assert "Contact" in html, "granted tier must see all cards"
+    assert "Personal" in html
+    assert "Work" in html, "granted tier must see all cards"
     # Granted-visibility fields now visible.
     assert "jheath@waltheremc.com" in html
     assert "555-1234" in html
@@ -125,8 +131,8 @@ def test_owner_self_view_shows_all_cards_photos_bio(tmp_path):
 
     client = TestClient(create_app(db))
     me = client.get("/p/jasonheath?e=jheath%40waltheremc.com").text
+    assert "Personal" in me
     assert "Work" in me
-    assert "Contact" in me
     assert "jheath@waltheremc.com" in me
     assert "555-1234" in me
     assert "I sell wheel bushings." in me, "bio missing from self-view"

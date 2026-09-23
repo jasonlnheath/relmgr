@@ -191,7 +191,8 @@ class TestSeedAllOwners:
             "SELECT cf.field_id FROM card_fields cf JOIN cards c ON cf.card_id=c.id "
             "WHERE c.owner_profile_id=2 AND c.name='Work'").fetchall()
         conn.close()
-        assert sorted(names) == ["Contact", "Work"], f"second owner cards: {names}"
+        # UX pass 3: the default pair is Personal + Work for EVERY profile.
+        assert sorted(names) == ["Personal", "Work"], f"second owner cards: {names}"
         assert len(work_emails) == 1
 
     def test_seed_is_idempotent_for_two_owners(self, tmp_path):
@@ -203,7 +204,8 @@ class TestSeedAllOwners:
         whitelist_db.seed_default_cards(conn)
         count = conn.execute("SELECT COUNT(*) c FROM cards WHERE owner_profile_id=2").fetchone()["c"]
         conn.close()
-        assert count == 1, "seed not idempotent for profile 2"
+        # UX pass 3: the Personal+Work pair always exists (and only those).
+        assert count == 2, "seed not idempotent for profile 2"
 
     def test_no_profiles_no_cards(self, tmp_path):
         db = tmp_path / "empty.db"

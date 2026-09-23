@@ -292,7 +292,9 @@ def test_dashboard_shows_active_grants_with_expiry(tmp_path):
     resp = client.get(f"/owner/{_owner_token()}")
     assert resp.status_code == 200
     html = resp.text
-    assert "active@example.com" in html, "Dashboard must show active grant requester"
+    # UX pass 3: rows no longer carry an email sub-line — the requester
+    # NAME is what the list renders.
+    assert "Active" in html, "Dashboard must show active grant requester"
 
 
 # ============================================================

@@ -81,7 +81,7 @@ class TestPhoneLabels:
     def test_phone_row_renders_label_select(self, tmp_path):
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
-        html, _ = _editor_gets(db, client, "Contact")
+        html, _ = _editor_gets(db, client, "Personal")
         assert 'name="field_' in html and "_label\"" in html
         assert ">Mobile</option>" in html
         assert ">Home</option>" in html
@@ -91,7 +91,7 @@ class TestPhoneLabels:
     def test_custom_label_saves_and_displays(self, tmp_path):
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
-        html, cid = _editor_gets(db, client, "Contact")
+        html, cid = _editor_gets(db, client, "Personal")
         fid = int(re.search(r'name="field_(\d+)_value"', html).group(1))
         resp = client.post(f"/owner/{_owner_token()}/cards/{cid}/edit", data={
             "field_1_value": "555-1234",
@@ -148,7 +148,7 @@ class TestPhoneLabels:
     def test_new_phone_row_carries_label_select(self, tmp_path):
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
-        html, _ = _editor_gets(db, client, "Contact")
+        html, _ = _editor_gets(db, client, "Personal")
         assert 'name="new_phone_label"' in html
 
 
@@ -160,7 +160,10 @@ class TestVisibilityDefaults:
     def test_new_row_select_defaults(self, tmp_path):
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
-        html, _ = _editor_gets(db, client, "Work")
+        # UX pass 3: the Personal card has no title/company/website rows, so
+        # the dedicated add-row slots (and their default-visibility selects)
+        # render there.
+        html, _ = _editor_gets(db, client, "Personal")
 
         def _selected_default(name: str) -> str:
             m = re.search(
@@ -182,7 +185,7 @@ class TestVisibilityDefaults:
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
         # The Contact card has no extra phone; add one with NO visibility key.
-        resp = client.post(f"/owner/{_owner_token()}/cards/{_card_id(db, 'Contact')}/edit",
+        resp = client.post(f"/owner/{_owner_token()}/cards/{_card_id(db, 'Personal')}/edit",
                            data={"new_phone_value": "+1-555-000-1111"})
         assert resp.status_code == 200
         conn = whitelist_db.wl_connect(db)
@@ -195,7 +198,7 @@ class TestVisibilityDefaults:
     def test_save_without_visibility_title_defaults_public(self, tmp_path):
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
-        resp = client.post(f"/owner/{_owner_token()}/cards/{_card_id(db, 'Identity')}/edit",
+        resp = client.post(f"/owner/{_owner_token()}/cards/{_card_id(db, 'Work')}/edit",
                            data={"new_title_value": "VP Engineering"})
         assert resp.status_code == 200
         conn = whitelist_db.wl_connect(db)
@@ -280,7 +283,7 @@ class TestDeleteKeepsKeyedData:
         # A DIFFERENT card's field row is keyed + edited in the same POST.
         contact_fid = int(re.search(
             r'name="field_(\d+)_value"',
-            client.get(f"/owner/{_owner_token()}/cards/{_card_id(db, 'Contact')}/edit").text,
+            client.get(f"/owner/{_owner_token()}/cards/{_card_id(db, 'Personal')}/edit").text,
         ).group(1))
         resp = client.post(
             f"/owner/{_owner_token()}/cards/{cid}/fields/{fid}/delete",
@@ -358,24 +361,15 @@ class TestViewProfileFieldRows:
 # ============================================================
 
 class TestSharePreviewAndSubject:
-    def test_owner_share_subject_is_name_card(self, tmp_path):
+    def test_share_subject_is_name_card(self, tmp_path):
+        """UX pass 3: unified sharing — the subject lives on the My Profile
+        share button (default '<First> <Last> WhiteList Card')."""
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
-        work = _card_id(db, "Work")
-        client.post(f"/owner/{_owner_token()}/share",
-                    data={"card_ids": [str(work)]})
-        # POST redirects to /share/{bundle_id}
-        # (re-create to know the id — the bundle id is derived from the row)
-        conn = whitelist_db.wl_connect(db)
-        bundle_id = conn.execute(
-            "SELECT id FROM share_bundles ORDER BY created_at DESC LIMIT 1"
-        ).fetchone()[0]
-        conn.close()
-        resp = client.get(f"/owner/{_owner_token()}/share/{bundle_id}")
-        assert 'id="share-subject"' in resp.text
-        assert "Jason Heath WhiteList Card" in resp.text, \
+        resp = client.get(f"/owner/{_owner_token()}/profile")
+        assert 'data-share-title="Jason Heath WhiteList Card"' in resp.text, \
             "default email subject '<First> <Last> WhiteList Card'"
-        assert "encodeURIComponent('WhiteList card')" not in resp.text
+        assert 'data-share-url=' in resp.text and "/p/jasonheath" in resp.text
 
 
 # ============================================================
@@ -566,7 +560,9 @@ class TestContactListPass2:
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
         html = client.get(f"/owner/{_owner_token()}").text
-        edit_profile_pos = html.find("Edit profile")
+        # UX pass 3: my-card row IS the link to the edit-profile page
+        # (no email line, no separate Edit link).
+        edit_profile_pos = html.find('href="/owner/{{token}}/profile"'.replace("{{token}}", _owner_token()))
         search_pos = html.find('name="q"')
         assert edit_profile_pos != -1 and search_pos != -1
         assert edit_profile_pos < search_pos, "my card sits ABOVE the search bar"
@@ -575,11 +571,13 @@ class TestContactListPass2:
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
         html = client.get(f"/owner/{_owner_token()}").text
-        notif_pos = html.find("Notifications</a>")
+        # UX pass 3: the notifications button is GONE (page eliminated) —
+        # centered title, sign out right.
+        assert "Notifications</a>" not in html, "notifications button removed"
         title_pos = html.find(">WhiteList</h1>")
         signout_pos = html.find("Sign out</button>")
-        assert notif_pos < title_pos < signout_pos, \
-            "notifications LEFT, centered title, sign out right"
+        assert title_pos != -1 and signout_pos != -1
+        assert title_pos < signout_pos, "centered title, sign out right"
         assert "left-1/2" in html, "title is centered"
 
     def test_round_plus_button_right_of_search(self, tmp_path):
@@ -818,7 +816,7 @@ class TestPairingFixes:
         client = TestClient(create_app(db))
         conn = whitelist_db.wl_connect(db)
         cid = conn.execute(
-            "SELECT id FROM cards WHERE owner_profile_id = 1 AND name = 'Contact'"
+            "SELECT id FROM cards WHERE owner_profile_id = 1 AND name = 'Personal'"
         ).fetchone()[0]
         n_before = conn.execute(
             "SELECT COUNT(*) FROM card_fields WHERE card_id = ?", (cid,)
@@ -968,13 +966,10 @@ class TestF4PublicShareLinks:
         gid = whitelist_db.create_grant(conn, 1, "friend@x.com", "Friend")
         whitelist_db.apply_decision(conn, gid, "approve", "lifetime",
                                     merge_contacts=False)
-        conn.close()
-        client.post(f"/owner/{_owner_token()}/share",
-                    data={"card_ids": [str(work)]}, follow_redirects=False)
-        conn = whitelist_db.wl_connect(db)
-        bundle_id = conn.execute(
-            "SELECT id FROM share_bundles ORDER BY created_at DESC LIMIT 1"
-        ).fetchone()[0]
+        # UX pass 3: bundles are created at the data layer only (legacy
+        # links keep working); the chooser route is retired.
+        bundle_id = whitelist_db.create_share_bundle(conn, 1, [work])["id"]
+        conn.commit()
         conn.close()
         return db, client, bundle_id
 
@@ -986,11 +981,16 @@ class TestF4PublicShareLinks:
         assert ">Connect</a>" in html or "/p/jasonheath/request-form" in html, \
             "F4: request-access affordance on the public page"
 
-    def test_owner_share_page_shows_public_reality(self, tmp_path):
+    def test_share_always_includes_bio(self, tmp_path):
+        """UX pass 3 ruling: sharing ALWAYS includes the bio — even when the
+        bio_visibility dropdown is set to private."""
         db, client, bundle_id = self._connected_bundle(tmp_path)
-        html = client.get(f"/owner/{_owner_token()}/share/{bundle_id}").text
-        assert "jason@waltheremc.com" not in html.split("What recipients will see")[1], \
-            "F4: the owner preview shows exactly the public reality"
+        conn = whitelist_db.wl_connect(db)
+        whitelist_db.update_bio(conn, 1, "I share, therefore I am.")
+        whitelist_db.update_bio_visibility(conn, 1, "private")
+        conn.close()
+        html = client.get(f"/s/{bundle_id}").text
+        assert "I share, therefore I am." in html, "bio never drops off a share link"
 
     def test_vcf_public_only_always(self, tmp_path):
         db, client, bundle_id = self._connected_bundle(tmp_path)

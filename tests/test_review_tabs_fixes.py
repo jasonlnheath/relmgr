@@ -81,37 +81,36 @@ def _owner_token(payload: str = "1") -> str:
 
 
 # ============================================================
-# 1. Route-level pagination (AC #3): page 1 = 50 rows, ?page= works
+# 1. Route-level pagination (AC #3): page 0 = 100 rows (UX pass 3), ?page= works
 # ============================================================
 
 class TestRoutePagination:
-    def test_page_0_shows_50_of_60(self, tmp_path):
+    def test_page_0_shows_100_of_120(self, tmp_path):
         db = _make_db(tmp_path)
-        _seed_contacts(db, 60)
+        _seed_contacts(db, 120)
         client = TestClient(create_app(db))
         html = client.get(f"/owner/{_owner_token()}").text
-        # Redesigned UI uses wl-card p-3 for contact rows
-        assert html.count('wl-card p-3') >= 50, \
-            f"page 1 must show at least 50 rows, got {html.count('wl-card p-3')}"
+        # Redesigned UI uses wl-card p-3 for contact rows; UX pass 3: 100/page
+        assert html.count('wl-card p-3') == 100, \
+            f"page 1 must show exactly 100 rows, got {html.count('wl-card p-3')}"
 
     # The list is ordered A-Z by display name (spec), so the lexicographic last
-    # contact of "Person 0".."Person 50" is "Person 9" -> p9@x.com (index 50, not
-    # index-of-creation). Page 1 = indices 0..49; page 2 = index 50 (p9 only).
-    _LAST = "p9@x.com"
+    # contact of "Person 0".."Person 119" is "Person 99" (rendered F99 L99).
+    _LAST_NAME = "F99 L99"
 
     def test_page_1_has_last_row(self, tmp_path):
         db = _make_db(tmp_path)
-        _seed_contacts(db, 51)
+        _seed_contacts(db, 120)
         client = TestClient(create_app(db))
         html = client.get(f"/owner/{_owner_token()}?page=1").text
-        assert self._LAST in html, "the sorted-last row must appear on page 2"
+        assert self._LAST_NAME in html, "the sorted-last row must appear on page 2"
 
     def test_page_0_excludes_last_row(self, tmp_path):
         db = _make_db(tmp_path)
-        _seed_contacts(db, 51)
+        _seed_contacts(db, 120)
         client = TestClient(create_app(db))
         html = client.get(f"/owner/{_owner_token()}").text
-        assert self._LAST not in html, "the sorted-last row must NOT be on page 1"
+        assert self._LAST_NAME not in html, "the sorted-last row must NOT be on page 1"
 
     def test_search_and_pagination_compose(self, tmp_path):
         db = _make_db(tmp_path)
@@ -168,7 +167,8 @@ class TestLogoLiveOnly:
         db = self._granted_fixture(tmp_path, expired=True)
         client = TestClient(create_app(db))
         html = client.get(f"/owner/{_owner_token()}").text
-        assert "grantee@test.com" in html, "expired row must stay visible in history"
+        # UX pass 3: rows render NAMES (no email sub-line).
+        assert "Grantee" in html, "expired row must stay visible in history"
         # shield path on expired grant row is a regression
         assert 'M12 2L3 7v5' not in html, "shield logo leaked on an expired grant"
         assert 'data-state="greylist"' in html, "expired grants dissolve into grey/pending-quarterly"
@@ -196,7 +196,8 @@ class TestLogoLiveOnly:
         conn.close()
         client = TestClient(create_app(db))
         html = client.get(f"/owner/{_owner_token()}").text
-        assert "grantee@test.com" in html, "revoked grant row vanished from the list"
+        # UX pass 3: rows render NAMES (no email sub-line).
+        assert "Grantee" in html, "revoked grant row vanished from the list"
 
 
 # ============================================================

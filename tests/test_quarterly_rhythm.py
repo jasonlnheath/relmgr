@@ -80,14 +80,20 @@ def db():
 # ============================================================
 
 class TestIsGrey:
-    def test_granted_not_expired_not_grey(self, db):
-        """Live quarter grant is not grey."""
+    def test_live_quarter_marker_is_grey_state(self, db):
+        """UX pass 3 bug fix (2026-09-23): grey is the STATE
+        'granted + real-timestamp marker', whether the marker has lapsed or
+        not. A badge-move to grey stamps a FUTURE quarter marker and the
+        contact card used to render it WhiteList until the marker lapsed —
+        contradicting the contact list (which has always treated
+        granted-with-marker as GreyList). The card now agrees.
+        """
         conn, owner_id, _ = db
         gid = create_grant(conn, owner_id, "a@test.com", "A")
         apply_decision(conn, gid, "approve", "quarter")
         grant = conn.execute("SELECT * FROM access_grants WHERE id = ?", (gid,)).fetchone()
         assert grant is not None
-        assert is_grey(dict(grant)) is False
+        assert is_grey(dict(grant)) is True
         conn.close()
 
     def test_lifetime_not_grey(self, db):

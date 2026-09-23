@@ -150,7 +150,8 @@ class TestGrayButtonRuling:
         html = (Path(__file__).parent.parent / "templates" / "card_editor.html").read_text()
         assert 'wl-btn-approve px-3 py-1.5' not in html.replace("\n", ""), \
             "photo save button must be the default gray (wl-btn-ink)"
-        assert 'id="photo-save"' in html
+        # UX pass 3: the cropper is slot-aware — class-based save buttons.
+        assert 'class="photo-save wl-btn-ink px-3 py-1.5 rounded text-xs"' in html
 
 
 # ============================================================
@@ -271,13 +272,16 @@ class TestContactListClickAndChips:
         conn.close()
         html = client.get(f"/owner/{token}").text
         dom = _parse_rows(html)
-        name = "Alice Anderson"
-        # structural: exactly two ROW blocks carry an anchor with this name,
-        # each deep-linking its own card, each chipped with that card's name
+        # structural: exactly two ROW blocks carry a whole-row overlay link
+        # (UX pass 3: ONE clickable row — the overlay anchor has no text,
+        # its class is 'absolute inset-0 …'), each deep-linking its own
+        # card, each chipped with that card's name
         name_rows = [r for r in dom.rows
-                     if any(a["text"].strip() == name for a in r["anchors"])]
+                     if any("absolute inset-0" in a["cls"] and
+                            f"/owner/{token}/contact/{grant_ids[0]}" in a["href"]
+                            for a in r["anchors"])]
         assert len(name_rows) == 2, \
-            f"one row per card: expected 2 rows for {name}, got {len(name_rows)}"
+            f"one row per card: expected 2 whole-row links for the contact, got {len(name_rows)}"
         linked_cards = set()
         for row in name_rows:
             card_qs = [a["href"] for a in row["anchors"] if "?card=" in a["href"]]
@@ -376,19 +380,23 @@ class TestContactDetailOneCard:
     def test_detail_card_query_param_selects_card(self, tmp_path):
         client, token, grant_ids = _granted_client(tmp_path)
         conn = whitelist_db.wl_connect(tmp_path / "test.db")
+        # UX pass 3: default pair is Personal (id 1) + Work (id 2); Work
+        # carries the seeded title/company fields.
         card_ids = [r["id"] for r in conn.execute("SELECT id FROM cards ORDER BY id")]
         conn.close()
-        identity_id, contact_id = card_ids[-1], card_ids[1]
+        identity_id, other_id = card_ids[-1], card_ids[0]
         html = client.get(f"/owner/{token}/contact/{grant_ids[0]}?card={identity_id}").text
         # the ACTIVE chip (slate fill) is the selected card — others are not
-        pos_sel = html.find(f'?card={identity_id}')
-        pos_other = html.find(f'?card={contact_id}')
-        assert pos_sel != -1 and pos_other != -1
-        sel_style = html[pos_sel:pos_sel + 400]
-        other_style = html[pos_other:pos_other + 400]
-        assert "--wl-btn-slate" in sel_style, "selected chip must wear the active fill"
-        assert "--wl-btn-slate" not in other_style, "non-selected chips must not"
-        # the selected card's own field renders (Identity carries title/company)
+        import re as _re
+        chips = _re.findall(
+            r'<a href="([^"]*card=(\d+))"[^>]*style="([^"]*)"', html)
+        style_by_card = {cid: style for href, cid, style in chips}
+        assert str(identity_id) in style_by_card
+        assert "--wl-btn-slate" in style_by_card[str(identity_id)], \
+            "selected chip must wear the active fill"
+        assert "--wl-btn-slate" not in style_by_card[str(other_id)], \
+            "non-selected chips must not"
+        # the selected card's own fields render (Work carries title/company)
         assert "Sales" in html and "Walther EMC" in html
 
     def test_detail_photo_block_belongs_to_selected_card(self, tmp_path):
@@ -396,12 +404,12 @@ class TestContactDetailOneCard:
         conn = whitelist_db.wl_connect(tmp_path / "test.db")
         card_ids = [r["id"] for r in conn.execute("SELECT id FROM cards ORDER BY id")]
         conn.close()
-        contact_id = card_ids[1]
-        html = client.get(f"/owner/{token}/contact/{grant_ids[0]}?card={contact_id}").text
-        # the selected card's picture block (initials circle for Contact —
+        personal_id = card_ids[0]
+        html = client.get(f"/owner/{token}/contact/{grant_ids[0]}?card={personal_id}").text
+        # the selected card's picture block (initials circle for Personal —
         # no photo in fixture) sits with the card heading and its fields
-        pos_initials = html.find(">CO</span>")
-        pos_heading = html.find("Contact</h2>")
+        pos_initials = html.find(">PE</span>")
+        pos_heading = html.find("Personal</h2>")
         pos_phone = html.find("555-1234")
         assert -1 not in (pos_initials, pos_heading, pos_phone)
         assert pos_initials < pos_heading < pos_phone, \
@@ -442,20 +450,18 @@ class TestReachMeRowsPerCard:
         html = client.get("/p/jasonheath?e=jason@waltheremc.com").text
         assert "Reach me" in html
         pos_reach = html.find("Reach me")
-        # Work card row: its initials circle (no photo in fixture), then
-        # its email icon
+        # UX pass 3 card order: Personal first (phone icons, initials circle),
+        # then Work (email icon) — each row led by THAT card's picture.
+        pos_personal_initials = html.find(">PE</span>", pos_reach)
+        pos_tel = html.find("tel:555-1234", pos_reach)
         pos_work_initials = html.find(">WO</span>", pos_reach)
         pos_mailto = html.find("mailto:", pos_reach)
-        # Contact card row: its initials circle, then its phone icons
-        pos_contact_initials = html.find(">CO</span>", pos_reach)
-        pos_tel = html.find("tel:555-1234", pos_reach)
-        assert -1 not in (pos_work_initials, pos_mailto, pos_contact_initials, pos_tel), \
+        assert -1 not in (pos_personal_initials, pos_tel, pos_work_initials, pos_mailto), \
             "both reachable cards render a row"
-        assert pos_reach < pos_work_initials < pos_mailto < pos_contact_initials < pos_tel, \
+        assert pos_reach < pos_personal_initials < pos_tel < pos_work_initials < pos_mailto, \
             "each card's picture leads its own row; icons follow their picture"
-        # the Identity card (title/company only) renders NO row: no third
-        # initials circle between the Contact row and the next section
-        assert html.find(">ID</span>", pos_contact_initials) == -1
+        # no third initials circle after the Work row (no other reachable card)
+        assert html.find(">PE</span>", pos_work_initials) == -1
 
 
 # ============================================================
@@ -470,12 +476,16 @@ class TestMyProfilePass:
         assert "Sales at Walther EMC" not in html, \
             "title line removed — the bio carries what people need"
 
-    def test_chooser_copy_per_spec(self, tmp_path):
+    def test_unified_share_per_spec(self, tmp_path):
+        """UX pass 3: the chooser is GONE — the QR sits between the name
+        and the Share button, and Share fires the native share popup."""
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
         html = client.get(f"/owner/{_owner_token()}/profile").text
-        assert "Choose the cards you want to share." in html
-        assert "Click next to share." in html
+        assert 'src="/qr/jasonheath"' in html, "QR renders on My Profile"
+        assert 'id="share-button"' in html
+        assert "navigator.share" in html, "native share popup is the primary path"
+        assert "Choose the cards you want to share." not in html
 
     def test_bio_has_live_maxlength(self, tmp_path):
         db = _make_db(tmp_path)
@@ -544,20 +554,31 @@ def _share_client(tmp_path):
     return client, _owner_token(), bundle["id"]
 
 
-class TestOwnerShareSheet:
-    def test_shows_actual_card_below_qr_and_link(self, tmp_path):
-        client, token, bundle_id = _share_client(tmp_path)
-        html = client.get(f"/owner/{token}/share/{bundle_id}").text
-        assert "What recipients will see" in html
-        assert "/qr/share/" in html, "QR still above the card"
-        pos_qr = html.find("/qr/share/")
-        pos_card = html.find("What recipients will see")
-        assert pos_qr < pos_card, "card renders BELOW the QR code and link"
+# ============================================================
+# Unified sharing (UX pass 3): the chooser page is RETIRED. The share
+# surface is My Profile itself (QR + native Share button + standard
+# fallbacks). Legacy /s/{bundle_id} links keep rendering for recipients.
+# ============================================================
 
-    def test_share_fallback_menu_present(self, tmp_path):
+class TestOwnerShareSheet:
+    def test_share_chooser_routes_retired(self, tmp_path):
         client, token, bundle_id = _share_client(tmp_path)
-        html = client.get(f"/owner/{token}/share/{bundle_id}").text
-        assert 'id="share-fallback"' in html
-        assert 'id="fallback-email"' in html, "forward via email"
-        assert 'id="fallback-sms"' in html, "forward via messaging"
+        assert client.post(f"/owner/{token}/share").status_code in (404, 405)
+        assert client.get(f"/owner/{token}/share/{bundle_id}").status_code == 404
+
+    def test_my_profile_carries_qr_native_share_and_fallbacks(self, tmp_path):
+        client, token, bundle_id = _share_client(tmp_path)
+        html = client.get(f"/owner/{token}/profile").text
+        assert 'src="/qr/jasonheath"' in html, "QR above the Share button"
+        assert 'id="share-button"' in html
+        assert 'id="share-fallback"' in html, "copy link / email / SMS fallback"
+        assert 'id="share-copy"' in html, "copy link"
+        assert "mailto:" in html, "forward via email"
+        assert "sms:" in html, "forward via messaging"
         assert "navigator.share" in html, "Web Share API stays the primary path"
+
+    def test_legacy_bundle_link_still_renders(self, tmp_path):
+        client, token, bundle_id = _share_client(tmp_path)
+        resp = client.get(f"/s/{bundle_id}")
+        assert resp.status_code == 200, "already-shared links keep working"
+        assert "Save to contacts" in resp.text

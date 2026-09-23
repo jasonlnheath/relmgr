@@ -4,10 +4,10 @@
 {% block content %}
 {% set placeholders = {
     'email': 'jason@example.com',
-    'phone': '+1-555-123-4567',
-    'text_number': '+1-555-123-4567',
-    'facetime_number': '+1-555-123-4567',
-    'facetime': 'name@example.com or +1-555-123-4567',
+    'phone': '+1(555)123-4567',
+    'text_number': '+1(555)123-4567',
+    'facetime_number': '+1(555)123-4567',
+    'facetime': 'name@example.com or +1(555)123-4567',
     'skype': 'live:.cid.xxxx',
     'video_app': 'App — ID, number or link',
     'messenger': 'm.me/yourname',
@@ -22,13 +22,27 @@
     'city': 'City',
     'state': 'State or province',
     'zip': 'ZIP or postal code',
+    'country': 'Country',
     'website': 'https://acme.com',
     'birthday': '',
-    'note': 'Freeform note'
+    'note': 'Freeform note',
+    'high_school': 'e.g. Lincoln High',
+    'maiden_name': 'Maiden name',
+    'nickname': 'Nickname',
+    'childhood_address1': 'Childhood street address',
+    'childhood_city': 'Childhood city',
+    'childhood_state': 'Childhood state'
 } %}
 
 {# ---- macros ---- #}
-{% set public_default_types = ['title', 'company', 'website'] %}
+{# UX pass 3 defaults ruling (2026-09-23): identity/friend-finding fields
+   default PUBLIC — title, company, website, birthday, personal history
+   (high school / maiden name / nickname) and city/state-level address
+   parts. Street-level addresses default 'granted' like everything else. #}
+{% set public_default_types = ['title', 'company', 'website', 'birthday',
+                               'high_school', 'maiden_name', 'nickname',
+                               'city', 'state',
+                               'childhood_city', 'childhood_state'] %}
 
 {% macro vis_select(name, current='') %}
 <select name="{{ name }}"
@@ -148,52 +162,61 @@
         <h1 class="wl-heading wl-heading-md mb-1">Edit Card</h1>
         <p class="text-xs wl-text-faint mb-5">{{ profile.display_name }} · {{ card.name }}</p>
 
-        {# ============ Photo: upload → circle crop / zoom / position ============ #}
-        <div class="flex flex-col sm:flex-row gap-6 mb-6 pb-6" style="border-bottom: 1px solid var(--wl-glass-border);">
+        {# ============ Photos: default + high-school (pass 3) ============ #}
+        {# UX pass 3: personal cards carry TWO picture slots — the DEFAULT
+           picture (the profile's public face) and the HIGH-SCHOOL picture.
+           Both default public. Non-personal cards keep one slot. #}
+        {% set is_personal = card.name|lower == 'personal' %}
+        {% set photo_slots = [('default', 'Photo')] if not is_personal else
+                             [('default', 'Photo'), ('hs', 'High school picture')] %}
+        {% for slot, slot_label in photo_slots %}
+        {% set slot_id = '' if slot == 'default' else '_hs' %}
+        {% set slot_photo = card.hs_photo_path if slot == 'hs' else card.photo_path %}
+        <div class="flex flex-col sm:flex-row gap-6 mb-6 pb-6" data-photo-slot="{{ slot }}"
+             style="border-bottom: 1px solid var(--wl-glass-border);">
             <div class="flex-shrink-0">
-                <p class="text-sm font-medium wl-text-sub mb-2">Photo</p>
-                {% if card.photo_path %}
+                <p class="text-sm font-medium wl-text-sub mb-2">{{ slot_label }}</p>
+                {% if slot_photo %}
                 {# UX pass (2026-09-22): the loaded photo is a button —
                    clicking it re-opens the editor with the current photo
                    loaded for re-crop. #}
-                <button type="button" id="photo-current" title="Click to edit this photo"
-                        class="block w-28 h-28 rounded-full overflow-hidden cursor-pointer p-0 border-0"
+                <button type="button" class="photo-current block w-28 h-28 rounded-full overflow-hidden cursor-pointer p-0 border-0"
+                        title="Click to edit this photo"
                         style="background: var(--wl-btn-slate);">
-                    <img src="/photos/{{ owner_id }}/{{ card.id }}"
-                         alt="{{ card.name }} photo (click to edit)"
+                    <img src="/photos/{{ owner_id }}/{{ card.id }}{{ slot_id }}"
+                         alt="{{ card.name }} {{ slot_label }} (click to edit)"
                          class="w-28 h-28 rounded-full object-cover">
                 </button>
                 {% else %}
-                <div id="photo-current" class="w-28 h-28 rounded-full flex items-center justify-center"
+                <div class="photo-current w-28 h-28 rounded-full flex items-center justify-center"
                      style="background: var(--wl-btn-slate);">
                     <span class="wl-heading wl-heading-md">{{ card.name[:2]|upper }}</span>
                 </div>
                 {% endif %}
             </div>
             <div class="flex-1 min-w-0">
-                <form id="photo-form" method="POST" action="/owner/{{ token }}/cards/{{ card.id }}/photo"
+                <form class="photo-form" method="POST" action="/owner/{{ token }}/cards/{{ card.id }}/photo{% if slot == 'hs' %}?photo_kind=hs{% endif %}"
                       enctype="multipart/form-data">
-                    <input type="hidden" name="photo_data" id="photo_data" value="">
+                    <input type="hidden" name="photo_data" class="photo_data" value="">
                     <p class="text-xs wl-text-faint mb-2">Circle crop — choose an image, then drag to position and zoom to fit.</p>
-                    <canvas id="crop-canvas" width="512" height="512"
-                            class="w-56 h-56 cursor-move hidden"
+                    <canvas class="crop-canvas w-56 h-56 cursor-move hidden" width="512" height="512"
                             style="border-radius: 50%; border: 1px solid var(--wl-glass-border); touch-action: none;
                                    background: var(--wl-surface-base);"></canvas>
-                    <div id="crop-controls" class="hidden items-center gap-3 mt-3">
+                    <div class="crop-controls hidden items-center gap-3 mt-3">
                         <span class="text-xs wl-text-sub whitespace-nowrap">Zoom</span>
-                        <input type="range" id="crop-zoom" min="100" max="400" value="100" class="flex-1">
-                        <span id="crop-zoom-val" class="text-xs wl-text-faint whitespace-nowrap w-8 text-right">1.0×</span>
+                        <input type="range" class="crop-zoom flex-1" min="100" max="400" value="100">
+                        <span class="crop-zoom-val text-xs wl-text-faint whitespace-nowrap w-8 text-right">1.0×</span>
                     </div>
                     <div class="mt-3 flex flex-wrap items-center gap-2">
                         <label class="wl-btn-ink px-3 py-1.5 rounded text-xs cursor-pointer">
                             Choose image
-                            <input type="file" id="photo-file" name="photo" accept="image/*" class="hidden">
+                            <input type="file" class="photo-file" name="photo" accept="image/*" style="display: none;">
                         </label>
-                        <button type="submit" id="photo-save" disabled
-                                class="wl-btn-ink px-3 py-1.5 rounded text-xs disabled:opacity-40">
+                        <button type="submit" class="photo-save wl-btn-ink px-3 py-1.5 rounded text-xs" disabled
+                                style="opacity: 0.4;">
                             Save photo
                         </button>
-                        {% if card.photo_path %}
+                        {% if slot_photo %}
                         <button type="submit" name="remove_photo" value="1"
                                 class="wl-btn-ink px-3 py-1.5 rounded text-xs">
                             Remove
@@ -203,6 +226,7 @@
                 </form>
             </div>
         </div>
+        {% endfor %}
 
         {# ============ vCard fields ============ #}
         <form method="POST" action="/owner/{{ token }}/cards/{{ card.id }}/edit">
@@ -323,130 +347,136 @@ function hideDeleteCard() {
     document.getElementById('delete-card-btn').classList.remove('hidden');
 }
 
-// ---- Photo cropper: hand-rolled CIRCLE canvas (crop / zoom / position) ----
+// ---- Photo cropper: hand-rolled CIRCLE canvas (crop / zoom / position).
+// UX pass 3: SLOT-AWARE — one instance per photo block (default picture
+// and, on personal cards, the high-school picture); each posts to its own
+// form (the hs form carries ?photo_kind=hs). ----
 (function () {
-    const canvas = document.getElementById('crop-canvas');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const SIZE = canvas.width; // 512 — stored display size
-    const fileInput = document.getElementById('photo-file');
-    const zoomInput = document.getElementById('crop-zoom');
-    const zoomVal = document.getElementById('crop-zoom-val');
-    const controls = document.getElementById('crop-controls');
-    const saveBtn = document.getElementById('photo-save');
-    const photoData = document.getElementById('photo_data');
-    let img = null, zoom = 1, minZoom = 1, ox = 0, oy = 0, drag = null;
+    const SIZE = 512; // stored display size
+    document.querySelectorAll('[data-photo-slot]').forEach((block) => {
+        const canvas = block.querySelector('.crop-canvas');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const fileInput = block.querySelector('.photo-file');
+        const zoomInput = block.querySelector('.crop-zoom');
+        const zoomVal = block.querySelector('.crop-zoom-val');
+        const controls = block.querySelector('.crop-controls');
+        const saveBtn = block.querySelector('.photo-save');
+        const photoData = block.querySelector('.photo_data');
+        let img = null, zoom = 1, minZoom = 1, ox = 0, oy = 0, drag = null;
 
-    function clampOffset() {
-        if (!img) return;
-        const dw = img.width * zoom, dh = img.height * zoom;
-        const mx = Math.max(0, (dw - SIZE) / 2), my = Math.max(0, (dh - SIZE) / 2);
-        ox = Math.min(mx, Math.max(-mx, ox));
-        oy = Math.min(my, Math.max(-my, oy));
-    }
+        function clampOffset() {
+            if (!img) return;
+            const dw = img.width * zoom, dh = img.height * zoom;
+            const mx = Math.max(0, (dw - SIZE) / 2), my = Math.max(0, (dh - SIZE) / 2);
+            ox = Math.min(mx, Math.max(-mx, ox));
+            oy = Math.min(my, Math.max(-my, oy));
+        }
 
-    function draw(showGuide = true) {
-        if (!img) return;
-        clampOffset();
-        // Circle crop: the photo shows through the disc only; the corners
-        // get the app backdrop so the exported JPEG carries the circle
-        // boundary (display surfaces clip to a circle regardless).
-        ctx.fillStyle = '#1A1A1C';
-        ctx.fillRect(0, 0, SIZE, SIZE);
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(SIZE / 2, SIZE / 2, SIZE / 2 - 2, 0, Math.PI * 2);
-        ctx.clip();
-        const dw = img.width * zoom, dh = img.height * zoom;
-        ctx.drawImage(img, (SIZE - dw) / 2 + ox, (SIZE - dh) / 2 + oy, dw, dh);
-        ctx.restore();
-        // Circle edge guide — EDITOR ONLY. Pairing-review F3: never bake
-        // the ring into the export (the photo travels via vCard).
-        if (showGuide) {
-            ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-            ctx.lineWidth = 2;
+        function draw(showGuide = true) {
+            if (!img) return;
+            clampOffset();
+            // Circle crop: the photo shows through the disc only; the corners
+            // get the app backdrop so the exported JPEG carries the circle
+            // boundary (display surfaces clip to a circle regardless).
+            ctx.fillStyle = '#1A1A1C';
+            ctx.fillRect(0, 0, SIZE, SIZE);
+            ctx.save();
             ctx.beginPath();
             ctx.arc(SIZE / 2, SIZE / 2, SIZE / 2 - 2, 0, Math.PI * 2);
-            ctx.stroke();
+            ctx.clip();
+            const dw = img.width * zoom, dh = img.height * zoom;
+            ctx.drawImage(img, (SIZE - dw) / 2 + ox, (SIZE - dh) / 2 + oy, dw, dh);
+            ctx.restore();
+            // Circle edge guide — EDITOR ONLY. Pairing-review F3: never bake
+            // the ring into the export (the photo travels via vCard).
+            if (showGuide) {
+                ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(SIZE / 2, SIZE / 2, SIZE / 2 - 2, 0, Math.PI * 2);
+                ctx.stroke();
+            }
         }
-    }
 
-    // Shared editor-open path for both a freshly chosen file and a click
-    // on the already-loaded photo (UX pass 2026-09-22: click-to-reopen).
-    function openEditor(image) {
-        img = image;
-        minZoom = Math.max(SIZE / img.width, SIZE / img.height);
-        // Zoom starts at 1.0× = fit. The slider is the multiplier
-        // (100 = fit, 400 = 4× fit); pixel scale derives from it, so
-        // touching the slider continues smoothly from the fit view
-        // instead of snapping to the image's natural pixel size.
-        zoom = minZoom;
-        ox = 0; oy = 0;
-        zoomInput.value = '100';
-        zoomVal.textContent = '1.0×';
-        canvas.classList.remove('hidden');
-        controls.classList.remove('hidden');
-        controls.classList.add('flex');
-        saveBtn.disabled = false;
-        draw();
-    }
+        // Shared editor-open path for both a freshly chosen file and a click
+        // on the already-loaded photo (UX pass 2026-09-22: click-to-reopen).
+        function openEditor(image) {
+            img = image;
+            minZoom = Math.max(SIZE / img.width, SIZE / img.height);
+            // Zoom starts at 1.0× = fit. The slider is the multiplier
+            // (100 = fit, 400 = 4× fit); pixel scale derives from it, so
+            // touching the slider continues smoothly from the fit view
+            // instead of snapping to the image's natural pixel size.
+            zoom = minZoom;
+            ox = 0; oy = 0;
+            zoomInput.value = '100';
+            zoomVal.textContent = '1.0×';
+            canvas.classList.remove('hidden');
+            controls.classList.remove('hidden');
+            controls.classList.add('flex');
+            saveBtn.disabled = false;
+            saveBtn.style.opacity = '1';
+            draw();
+        }
 
-    fileInput.addEventListener('change', () => {
-        const file = fileInput.files && fileInput.files[0];
-        if (!file) return;
-        const url = URL.createObjectURL(file);
-        const image = new Image();
-        image.onload = () => {
-            URL.revokeObjectURL(url);
-            openEditor(image);
-        };
-        image.src = url;
-    });
-
-    // Clicking the loaded photo re-opens the editor with it loaded.
-    const current = document.getElementById('photo-current');
-    if (current && current.tagName === 'BUTTON') {
-        current.addEventListener('click', () => {
-            const existing = current.querySelector('img');
-            if (!existing) return;
+        fileInput.addEventListener('change', () => {
+            const file = fileInput.files && fileInput.files[0];
+            if (!file) return;
+            const url = URL.createObjectURL(file);
             const image = new Image();
-            image.onload = () => openEditor(image);
-            image.src = existing.src;
+            image.onload = () => {
+                URL.revokeObjectURL(url);
+                openEditor(image);
+            };
+            image.src = url;
         });
-    }
 
-    zoomInput.addEventListener('input', () => {
-        if (!img) return;
-        // Proportional tracking: slider 100 → fit (1.0×), 400 → 4× fit.
-        // Pixel scale is minZoom × multiplier — never slider/100 alone,
-        // which jumped straight to the natural size (~4×+ on big photos).
-        const mult = parseInt(zoomInput.value, 10) / 100;
-        zoom = minZoom * mult;
-        zoomVal.textContent = mult.toFixed(1) + '×';
-        draw();
-    });
+        // Clicking the loaded photo re-opens the editor with it loaded.
+        const current = block.querySelector('.photo-current');
+        if (current && current.tagName === 'BUTTON') {
+            current.addEventListener('click', () => {
+                const existing = current.querySelector('img');
+                if (!existing) return;
+                const image = new Image();
+                image.onload = () => openEditor(image);
+                image.src = existing.src;
+            });
+        }
 
-    canvas.addEventListener('pointerdown', (e) => {
-        drag = { x: e.clientX, y: e.clientY, ox: ox, oy: oy };
-        canvas.setPointerCapture(e.pointerId);
-    });
-    canvas.addEventListener('pointermove', (e) => {
-        if (!drag || !img) return;
-        const scale = SIZE / canvas.getBoundingClientRect().width;
-        ox = drag.ox + (e.clientX - drag.x) * scale;
-        oy = drag.oy + (e.clientY - drag.y) * scale;
-        draw();
-    });
-    ['pointerup', 'pointercancel', 'pointerleave'].forEach((ev) =>
-        canvas.addEventListener(ev, () => { drag = null; }));
+        zoomInput.addEventListener('input', () => {
+            if (!img) return;
+            // Proportional tracking: slider 100 → fit (1.0×), 400 → 4× fit.
+            // Pixel scale is minZoom × multiplier — never slider/100 alone,
+            // which jumped straight to the natural size (~4×+ on big photos).
+            const mult = parseInt(zoomInput.value, 10) / 100;
+            zoom = minZoom * mult;
+            zoomVal.textContent = mult.toFixed(1) + '×';
+            draw();
+        });
 
-    // Hand the cropped circle (JPEG, 512×512, disc on the backdrop) to the
-    // server on save — the button WORKS (verified in-browser); it stays
-    // disabled until an image is in the editor.
-    saveBtn.addEventListener('click', () => {
-        if (!img) return;
-        draw(false);  // F3: export without the editor's guide ring
-        photoData.value = canvas.toDataURL('image/jpeg', 0.92);
+        canvas.addEventListener('pointerdown', (e) => {
+            drag = { x: e.clientX, y: e.clientY, ox: ox, oy: oy };
+            canvas.setPointerCapture(e.pointerId);
+        });
+        canvas.addEventListener('pointermove', (e) => {
+            if (!drag || !img) return;
+            const scale = SIZE / canvas.getBoundingClientRect().width;
+            ox = drag.ox + (e.clientX - drag.x) * scale;
+            oy = drag.oy + (e.clientY - drag.y) * scale;
+            draw();
+        });
+        ['pointerup', 'pointercancel', 'pointerleave'].forEach((ev) =>
+            canvas.addEventListener(ev, () => { drag = null; }));
+
+        // Hand the cropped circle (JPEG, 512×512, disc on the backdrop) to
+        // the server on save — the button WORKS; it stays disabled until an
+        // image is in the editor.
+        saveBtn.addEventListener('click', () => {
+            if (!img) return;
+            draw(false);  // F3: export without the editor's guide ring
+            photoData.value = canvas.toDataURL('image/jpeg', 0.92);
+        });
     });
 })();
 </script>

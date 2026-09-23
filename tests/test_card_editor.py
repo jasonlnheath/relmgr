@@ -95,8 +95,8 @@ class TestDashboardOwnsOnlyItsCards:
         db = self._two_owner_db(tmp_path)
         client = TestClient(create_app(db))
         html = client.get(f"/owner/{_owner_token()}/profile").text
-        # Own cards render…
-        for own in ("Work", "Contact", "Identity"):
+        # Own cards render… (UX pass 3: the default pair is Personal + Work)
+        for own in ("Personal", "Work"):
             assert own in html, f"own card '{own}' missing from dashboard"
         # …and nobody else's card ever does (ruling 2A made visible).
         assert "Intruder Card" not in html, "another owner's card leaked onto the dashboard"
@@ -219,7 +219,7 @@ class TestEditorSaveRoundTrip:
         tok = _owner_token()
         card_id = _first_card_id(db)
 
-        data = {"card_name": "Work", "display_name": "Jason Heath"}
+        data = {"card_name": "Personal", "display_name": "Jason Heath"}
         expectations = {
             "email": ("work@acme.com", "public"),
             "phone": ("+1-555-999-0000", "granted"),
@@ -278,14 +278,15 @@ class TestEditorSaveRoundTrip:
         tok = _owner_token()
         card_id = _first_card_id(db)
         conn = whitelist_db.wl_connect(db)
+        # UX pass 3: card 1 is PERSONAL — the seeded phone lives there.
         fid = conn.execute(
             "SELECT pf.id FROM card_fields cf JOIN profile_fields pf"
-            " ON cf.field_id = pf.id WHERE cf.card_id = ? AND pf.field_type='email'",
+            " ON cf.field_id = pf.id WHERE cf.card_id = ? AND pf.field_type='phone'",
             (card_id,),
         ).fetchone()[0]
         conn.close()
         client.post(f"/owner/{tok}/cards/{card_id}/edit",
-                    data={f"field_{fid}_value": "jason@waltheremc.com",
+                    data={f"field_{fid}_value": "555-9999",
                           f"field_{fid}_visibility": "private"})
         conn = whitelist_db.wl_connect(db)
         vis = conn.execute(
@@ -313,7 +314,9 @@ class TestEditorSaveRoundTrip:
             (card_id,),
         ).fetchall()}
         conn.close()
-        assert phones == {"+1-555-111-1111": "public",
+        # UX pass 3: card 1 is PERSONAL — the seeded phone is linked too.
+        assert phones == {"555-1234": "granted",
+                          "+1-555-111-1111": "public",
                           "+1-555-222-2222": "private"}
 
     def test_remove_field_unlinks_from_card(self, tmp_path):
@@ -403,9 +406,9 @@ class TestEditorSaveValidation:
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
         tok = _owner_token()
-        # Card 1 is 'Work'; renaming it onto the existing 'Contact' clashes.
+        # Card 1 is 'Personal'; renaming it onto the existing 'Work' clashes.
         resp = client.post(f"/owner/{tok}/cards/1/edit",
-                           data={"card_name": "Contact"})
+                           data={"card_name": "Work"})
         assert resp.status_code == 400
         assert "already exists" in resp.text
 
@@ -622,9 +625,11 @@ class TestZoomSlider:
         client = TestClient(create_app(db))
         card_id = _first_card_id(db)
         html = client.get(f"/owner/{_owner_token()}/cards/{card_id}/edit").text
-        assert 'id="crop-zoom" min="100" max="400" value="100"' in html, \
+        # UX pass 3: the cropper is slot-aware (class-based, one per photo
+        # block); the fit-relative multiplier contract is unchanged.
+        assert 'class="crop-zoom flex-1" min="100" max="400" value="100"' in html, \
             "slider must be a 100–400 multiplier starting at 1.0×"
-        assert 'id="crop-zoom-val"' in html and "1.0\u00d7" in html, \
+        assert 'crop-zoom-val' in html and "1.0\u00d7" in html, \
             "a live multiplier readout must start at 1.0×"
         assert "zoom = minZoom * mult" in html, \
             "pixel scale must be fit × multiplier (proportional tracking)"

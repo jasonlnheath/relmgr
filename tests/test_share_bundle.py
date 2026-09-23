@@ -38,8 +38,8 @@ _ISO_Z = "%Y-%m-%dT%H:%M:%SZ"
 
 
 def _make_db(tmp_path: Path) -> Path:
-    """Owner profile with cards: Work (public+granted email), Contact
-    (public+granted phone); bio; a second owner with one card."""
+    """Owner profile with cards: Work (public+granted email), Personal
+    (public+granted phone; UX pass 3 default pair); bio; a second owner."""
     db = tmp_path / "test.db"
     conn = whitelist_db.wl_connect(db)
     whitelist_db.wl_init(conn)
@@ -53,7 +53,7 @@ def _make_db(tmp_path: Path) -> Path:
     })
     whitelist_db.seed_default_cards(conn)
 
-    # Public email on the Work card, public phone on the Contact card —
+    # Public email on the Work card, public phone on the Personal card —
     # KEEPING the seeded granted fields (cards are lenses over the same
     # fields; set_card_fields replaces, so extend the existing set).
     def _field_ids(card_id):
@@ -69,13 +69,13 @@ def _make_db(tmp_path: Path) -> Path:
     work = conn.execute(
         "SELECT id FROM cards WHERE owner_profile_id = 1 AND name = 'Work'"
     ).fetchone()
-    contact = conn.execute(
-        "SELECT id FROM cards WHERE owner_profile_id = 1 AND name = 'Contact'"
+    personal = conn.execute(
+        "SELECT id FROM cards WHERE owner_profile_id = 1 AND name = 'Personal'"
     ).fetchone()
     whitelist_db.set_card_fields(
         conn, work["id"], _field_ids(work["id"]) + [pub_email["id"]])
     whitelist_db.set_card_fields(
-        conn, contact["id"], _field_ids(contact["id"]) + [pub_phone["id"]])
+        conn, personal["id"], _field_ids(personal["id"]) + [pub_phone["id"]])
 
     whitelist_db.update_bio(conn, 1, "I sell wheel bushings.")
 
@@ -110,13 +110,26 @@ def _bundle_ids_from_redirect(resp) -> str:
     return loc.rsplit("/", 1)[-1]
 
 
-def _create_bundle(client, token, card_ids) -> str:
-    """POST the chooser and return the new bundle id (no redirect follow)."""
-    resp = client.post(f"/owner/{token}/share",
-                       data={"card_ids": [str(c) for c in card_ids]},
-                       follow_redirects=False)
-    assert resp.status_code == 303, resp.text
-    return _bundle_ids_from_redirect(resp)
+def _create_bundle(client, token, card_ids, owner_profile_id: int = 1) -> str:
+    """UX pass 3: the chooser route is retired — bundles are minted at the
+    data layer; legacy /s/ links keep rendering. ``client`` and ``token``
+    stay in the signature so call sites read the same."""
+    conn = whitelist_db.wl_connect(_current_db_path(client))
+    try:
+        bundle = whitelist_db.create_share_bundle(
+            conn, owner_profile_id, list(card_ids))
+        conn.commit()
+    finally:
+        conn.close()
+    return bundle["id"]
+
+
+def _current_db_path(client) -> Path:
+    """Recover the tmp db path from the bound app's mounted state.
+
+    create_app() records its db path on the application state — see the
+    app_state hook below."""
+    return client.app.state.relmgr_db_path
 
 
 def _expire_bundle(db: Path, bundle_id: str) -> None:
@@ -135,121 +148,74 @@ def _notification_kinds(db: Path) -> list:
 
 
 # ============================================================
-# Chooser flow
+# Chooser flow — RETIRED (UX pass 3, 2026-09-23). Sharing is unified:
+# My Profile carries the QR + native Share button; no card-choosing at
+# share time (the access-grant decision lands after a Connect request).
+# Bundles exist only as data-layer minted legacy links.
 # ============================================================
 
 class TestChooserFlow:
-    def test_chooser_renders_on_my_profile(self, tmp_path):
+    def test_my_profile_unified_share_replaces_chooser(self, tmp_path):
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
         token = _owner_token()
         html = client.get(f"/owner/{token}/profile").text
-        assert 'id="share-chooser"' in html
-        assert f'action="/owner/{token}/share"' in html
-        assert f"fetch('/owner/{token}/share/preview'" in html
-        assert 'name="card_ids"' in html
-        assert "Next" in html
-        assert 'id="share-preview"' in html, "live preview panel present"
+        assert 'id="share-chooser"' not in html, "chooser eliminated"
+        assert 'src="/qr/jasonheath"' in html, "QR between name and Share"
+        assert 'id="share-button"' in html, "Share fires the native popup"
+        assert "navigator.share" in html
 
-    def test_share_creates_bundle_and_redirects(self, tmp_path):
+    def test_share_chooser_routes_retired(self, tmp_path):
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
-        work, contact = _card_id(db, "Work"), _card_id(db, "Contact")
-        bundle_id = _create_bundle(client, _owner_token(), [work, contact])
+        token = _owner_token()
+        assert client.post(f"/owner/{token}/share", data={}).status_code in (404, 405)
+        assert client.post(f"/owner/{token}/share/preview").status_code in (404, 405)
+
+    def test_data_layer_bundle_has_one_week_shelf_life(self, tmp_path):
+        db = _make_db(tmp_path)
+        client = TestClient(create_app(db))
+        work, personal = _card_id(db, "Work"), _card_id(db, "Personal")
+        bundle_id = _create_bundle(client, _owner_token(), [work, personal])
         conn = whitelist_db.wl_connect(db)
         row = conn.execute(
             "SELECT * FROM share_bundles WHERE id = ?", (bundle_id,)).fetchone()
         conn.close()
         import json
-        assert json.loads(row["card_ids"]) == [work, contact]
+        assert json.loads(row["card_ids"]) == [work, personal]
         # Shelf life: exactly one week out.
         expires = datetime.strptime(row["expires_at"], _ISO_Z).replace(
             tzinfo=timezone.utc)
         delta = expires - datetime.now(timezone.utc)
         assert timedelta(days=7) - timedelta(minutes=5) < delta < timedelta(days=7) + timedelta(minutes=5)
 
-    def test_share_requires_at_least_one_card(self, tmp_path):
+    def test_bundle_cards_resolve_live_and_personal_first(self, tmp_path):
+        """UX pass 3: a shared set renders Personal first (its picture leads)
+        and reads field values LIVE (card ids stored, not copies)."""
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
-        resp = client.post(f"/owner/{_owner_token()}/share", data={})
-        assert resp.status_code == 400
-        assert "at least one card" in resp.text
-
-    def test_share_rejects_foreign_cards(self, tmp_path):
-        db = _make_db(tmp_path)
-        client = TestClient(create_app(db))
-        foreign = _card_id(db, "Work", owner=2)
-        resp = client.post(f"/owner/{_owner_token()}/share",
-                           data={"card_ids": [str(foreign)]})
-        assert resp.status_code == 400
-
-    def test_preview_fragment_public_only(self, tmp_path):
-        """F4 ruling (2026-09-23): the chooser preview shows EXACTLY what
-        recipients get — the PUBLIC-facing page. Share links deliver public
-        data only; more access goes through the Connect flow."""
-        db = _make_db(tmp_path)
-        client = TestClient(create_app(db))
-        work = _card_id(db, "Work")
-        resp = client.post(f"/owner/{_owner_token()}/share/preview",
-                           data={"card_ids": [str(work)]})
-        assert resp.status_code == 200
-        assert "public@waltheremc.com" in resp.text
-        assert "jheath@waltheremc.com" not in resp.text, \
-            "preview matches the public-page reality (F4 ruling)"
-        assert "Work" in resp.text
-
-    def test_preview_ignores_foreign_cards(self, tmp_path):
-        """Fix-pass F1 LEAK PIN: the preview filters card_ids to the
-        owner's own cards exactly like the create route. The previous
-        pin was vacuous — it checked the display name, which never
-        renders in the fragment, while the foreign card's public field
-        content DID leak into the HTML."""
-        db = _make_db(tmp_path)
-        client = TestClient(create_app(db))
-        foreign = _card_id(db, "Work", owner=2)
-        resp = client.post(f"/owner/{_owner_token()}/share/preview",
-                           data={"card_ids": [str(foreign)]})
-        assert resp.status_code == 200
-        assert "other@example.com" not in resp.text, \
-            "foreign card field content must never render in the preview"
-        assert ">Work</h3>" not in resp.text, \
-            "a foreign card must not render a group block at all"
-        assert "Nothing shared yet." in resp.text, \
-            "foreign-only selection drops to an empty fragment"
-
-    def test_preview_mixed_ids_keeps_own_drops_foreign(self, tmp_path):
-        """Fix-pass F1: filtering keeps the owner's own cards; only the
-        foreign ids are dropped (not the whole fragment)."""
-        db = _make_db(tmp_path)
-        client = TestClient(create_app(db))
-        own = _card_id(db, "Contact")
-        foreign = _card_id(db, "Work", owner=2)
-        resp = client.post(f"/owner/{_owner_token()}/share/preview",
-                           data={"card_ids": [str(own), str(foreign)]})
-        assert resp.status_code == 200
-        assert "555-0000" in resp.text, "own card still previews"
-        assert "other@example.com" not in resp.text, \
-            "foreign card dropped from a mixed selection"
+        work, personal = _card_id(db, "Work"), _card_id(db, "Personal")
+        bundle_id = _create_bundle(client, _owner_token(), [work, personal])
+        html = client.get(f"/s/{bundle_id}").text
+        pos_personal = html.find("Personal")
+        pos_work = html.find("Work")
+        assert -1 not in (pos_personal, pos_work)
+        assert pos_personal < pos_work, "Personal leads the shared set"
+        assert "555-0000" in html, "public fields render live"
 
 
 # ============================================================
-# Owner share page: single QR + single link + native share
+# Owner share page — RETIRED; only the QR endpoint stays (legacy links)
 # ============================================================
 
 class TestOwnerSharePage:
-    def test_share_page_qr_link_and_native_share(self, tmp_path):
+    def test_owner_share_page_retired(self, tmp_path):
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
         work = _card_id(db, "Work")
         bundle_id = _create_bundle(client, _owner_token(), [work])
         resp = client.get(f"/owner/{_owner_token()}/share/{bundle_id}")
-        assert resp.status_code == 200
-        assert f"/qr/share/{bundle_id}" in resp.text
-        assert f"/s/{bundle_id}" in resp.text
-        # Exact native-share message, and the fallback pair.
-        assert "Jason Heath wants to share their WhiteList card:" in resp.text
-        assert "navigator.share" in resp.text
-        assert "copyShareLink" in resp.text
+        assert resp.status_code == 404
 
     def test_bundle_qr_serves_png(self, tmp_path):
         db = _make_db(tmp_path)
@@ -260,21 +226,12 @@ class TestOwnerSharePage:
         assert resp.status_code == 200
         assert resp.headers["content-type"] == "image/png"
 
-    def test_share_page_foreign_bundle_404(self, tmp_path):
-        db = _make_db(tmp_path)
-        client = TestClient(create_app(db))
-        work = _card_id(db, "Work")
-        bundle_id = _create_bundle(client, _owner_token(), [work])
-        resp = client.get(f"/owner/{_owner_token(2)}/share/{bundle_id}")
-        assert resp.status_code == 404
-
-
 # ============================================================
 # Shared view: chosen cards, tiers, grouped actions, no forward
 # ============================================================
 
 class TestSharedView:
-    def _bundle(self, tmp_path, names=("Work", "Contact")):
+    def _bundle(self, tmp_path, names=("Work", "Personal")):
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
         bundle_id = _create_bundle(
@@ -284,7 +241,7 @@ class TestSharedView:
     def test_renders_chosen_cards_only(self, tmp_path):
         db, client, bundle_id = self._bundle(tmp_path)
         html = client.get(f"/s/{bundle_id}").text
-        assert "Work" in html and "Contact" in html
+        assert "Work" in html and "Personal" in html
         assert "Identity" not in html, "unchosen cards must not render"
         assert "Location" not in html
         assert "Details" not in html
@@ -321,12 +278,13 @@ class TestSharedView:
         html = client.get(f"/s/{bundle_id}").text
         # No single confusing "Reach me" row anymore.
         assert "Reach me" not in html
-        # Grouped: Work heading, then its email icon, then Contact, its icons.
+        # Grouped (UX pass 3 order: Personal first): Personal heading, then
+        # its phone icons, then Work, its email icon.
+        i_personal = html.index(">Personal</h3>")
+        i_tel = html.index('href="tel:')
         i_work = html.index(">Work</h3>")
         i_mail = html.index('href="mailto:')
-        i_contact = html.index(">Contact</h3>")
-        i_tel = html.index('href="tel:')
-        assert i_work < i_mail < i_contact < i_tel, \
+        assert i_personal < i_tel < i_work < i_mail, \
             "each card's action icons must sit inside its own block"
 
     def test_each_group_header_carries_its_card_photo(self, tmp_path):
@@ -334,7 +292,7 @@ class TestSharedView:
         rendered at its own group header — photo when the card has one,
         initials circle otherwise (page-avatar pattern)."""
         db, client, bundle_id = self._bundle(tmp_path)
-        work, contact = _card_id(db, "Work"), _card_id(db, "Contact")
+        work, contact = _card_id(db, "Work"), _card_id(db, "Personal")
         conn = whitelist_db.wl_connect(db)
         whitelist_db.update_card_photo(conn, work, f"1_{work}.jpg")
         whitelist_db.update_card_photo(conn, contact, f"1_{contact}.jpg")
@@ -342,12 +300,12 @@ class TestSharedView:
         html = client.get(f"/s/{bundle_id}").text
         assert f'/photos/1/{work}' in html, "Work header must carry its photo"
         assert f'/photos/1/{contact}' in html, \
-            "Contact header must carry its photo — not just the first card"
+            "Personal header must carry its photo — not just the first card"
         # Each photo sits in its own block: card img above card heading.
         i_work_img = html.index(f'/photos/1/{work}')
         i_contact_img = html.index(f'/photos/1/{contact}')
         assert i_work_img < html.index(">Work</h3>")
-        assert i_contact_img < html.index(">Contact</h3>")
+        assert i_contact_img < html.index(">Personal</h3>")
 
     def test_photoless_cards_show_initials_not_foreign_photos(self, tmp_path):
         """The page-avatar pattern stays: no photo_path → initials circle,
@@ -355,7 +313,7 @@ class TestSharedView:
         db, client, bundle_id = self._bundle(tmp_path)
         html = client.get(f"/s/{bundle_id}").text
         assert "/photos/" not in html
-        assert ">WO<" in html and ">CO<" in html, \
+        assert ">WO<" in html and ">PE<" in html, \
             "each header falls back to its own initials circle"
 
     def test_no_forward_section(self, tmp_path):
@@ -409,7 +367,7 @@ class TestSharedView:
 # ============================================================
 
 class TestVcfDownload:
-    def _bundle(self, tmp_path, names=("Work", "Contact")):
+    def _bundle(self, tmp_path, names=("Work", "Personal")):
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
         bundle_id = _create_bundle(
@@ -451,7 +409,7 @@ class TestVcfDownload:
             "SELECT id FROM profile_fields WHERE field_value = 'public@waltheremc.com'"
         ).fetchone()
         contact = conn.execute(
-            "SELECT id FROM cards WHERE owner_profile_id = 1 AND name = 'Contact'"
+            "SELECT id FROM cards WHERE owner_profile_id = 1 AND name = 'Personal'"
         ).fetchone()
         whitelist_db.set_card_fields(conn, contact["id"], [pub["id"]])
         conn.close()
@@ -465,7 +423,7 @@ class TestVcfDownload:
             {"id": 1, "field_type": "note", "field_value": "a,b;c\nd"}]}]
         body = _build_vcard(profile, cards)
         assert "N:Jason\\, Jr;Heath\\;;;;" in body
-        assert "NOTE:a\\,b\\;c\\nd" in body
+        assert "NOTE:Note: a\\,b\\;c\\nd" in body
 
     def test_vcf_expired_for_stranger_404(self, tmp_path):
         db, client, bundle_id = self._bundle(tmp_path)
@@ -478,7 +436,7 @@ class TestVcfDownload:
 # ============================================================
 
 class TestShelfLife:
-    def _bundle(self, tmp_path, names=("Work", "Contact")):
+    def _bundle(self, tmp_path, names=("Work", "Personal")):
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
         bundle_id = _create_bundle(
@@ -529,12 +487,16 @@ class TestShelfLife:
         assert _notification_kinds(db) == [], "owner never pinged by blocked"
 
     def test_reshare_renews_same_link(self, tmp_path):
+        """UX pass 3: the owner reshare route is retired with the share page;
+        renewing a legacy link is a data-layer operation."""
         db, client, bundle_id = self._bundle(tmp_path)
         _expire_bundle(db, bundle_id)
         assert client.get(f"/s/{bundle_id}").text.count("expired") >= 1
-        resp = client.post(f"/owner/{_owner_token()}/share/{bundle_id}/reshare",
-                           follow_redirects=False)
-        assert resp.status_code == 303
+        conn = whitelist_db.wl_connect(db)
+        whitelist_db.renew_share_bundle(conn, bundle_id)
+        conn.commit()
+        conn.close()
+        assert client.get(f"/s/{bundle_id}").status_code == 200
         conn = whitelist_db.wl_connect(db)
         row = conn.execute(
             "SELECT expires_at FROM share_bundles WHERE id = ?",
@@ -552,16 +514,14 @@ class TestShelfLife:
         assert resp.status_code == 404
 
     def test_owner_share_page_flags_expiry_with_reshare(self, tmp_path):
+        """UX pass 3: the owner share page is retired; an expired legacy
+        link shows the expired page and the renew is a data-layer call."""
         db, client, bundle_id = self._bundle(tmp_path)
         _expire_bundle(db, bundle_id)
-        html = client.get(f"/owner/{_owner_token()}/share/{bundle_id}").text
+        html = client.get(f"/s/{bundle_id}").text
         assert "expired" in html.lower()
-        assert f"/owner/{_owner_token()}/share/{bundle_id}/reshare" in html
-
-
-# ============================================================
-# Badge-governed access — instant, silent
-# ============================================================
+        token = _owner_token()
+        assert client.get(f"/owner/{token}/share/{bundle_id}").status_code == 404
 
 class TestBadgeGovernedAccess:
     def _granted(self, tmp_path, email="friend@example.com"):
@@ -605,7 +565,7 @@ class TestBadgeGovernedAccess:
         conn.close()
         assert g["status"] == "revoked"
         # Blocked badge = the access governor: viewer drops to anon tier.
-        work, contact = _card_id(db, "Work"), _card_id(db, "Contact")
+        work, contact = _card_id(db, "Work"), _card_id(db, "Personal")
         bundle_id = _create_bundle(client, _owner_token(), [work, contact])
         html = client.get(f"/s/{bundle_id}?e=friend@example.com").text
         assert "jheath@waltheremc.com" not in html

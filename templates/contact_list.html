@@ -3,15 +3,11 @@
 
 {% block content %}
 <div class="max-w-2xl mx-auto py-8 px-4">
-    {# UX pass 2 (2026-09-22) layout ruling: notifications button on the
-       LEFT, 'WhiteList' title CENTERED, sign out on the right. #}
+    {# UX pass 2 layout ruling: 'WhiteList' title CENTERED, sign out on the
+       right. UX pass 3: the notifications button is GONE — the page was
+       eliminated; requests land in the amber box below. #}
     <div class="relative flex items-center justify-between mb-6">
-        <div>
-            {# Notification center (2026-09-20): unread badge on the dashboard #}
-            <a href="/owner/{{ token }}/notifications" class="wl-btn-ink text-xs py-1 px-3 rounded-lg">
-                {% if unread_notifications %}{{ unread_notifications }} {% endif %}Notifications
-            </a>
-        </div>
+        <div></div>
         <div class="absolute left-1/2 -translate-x-1/2 text-center pointer-events-none">
             <h1 class="wl-heading wl-heading-md">WhiteList</h1>
             <p class="wl-text-sub text-sm mt-1">{{ total_contacts }} entries</p>
@@ -23,27 +19,24 @@
         </div>
     </div>
 
-    {# My card — UX pass 2 layout ruling: my card sits ABOVE the search bar #}
+    {# My card — UX pass 3 ruling: NO email line, NO edit link; the whole
+       row is one click to the edit-profile page. #}
     {% if my_card %}
-    <div class="wl-card p-4 mb-4">
-        <div class="flex items-center gap-3">
-            {% if my_card.photo_path %}
-            <img src="/photos/{{ my_card.owner_id }}/{{ my_card.id }}"
-                 alt="{{ my_card.name }} photo"
-                 class="w-12 h-12 rounded-full object-cover">
-            {% else %}
-            <div class="w-12 h-12 rounded-full flex items-center justify-center"
-                 style="background: var(--wl-btn-slate);">
-                <span class="wl-text text-lg">{{ my_card.name[:2].upper() }}</span>
-            </div>
-            {% endif %}
-            <div class="flex-1">
-                <h2 class="wl-heading wl-heading-sm">{{ my_card.name }}</h2>
-                <p class="text-xs wl-text-sub">{{ my_card.email }}</p>
-            </div>
-            <a href="/owner/{{ token }}/profile" class="wl-link text-sm">Edit profile</a>
+    <a href="/owner/{{ token }}/profile" class="wl-card p-4 mb-4 flex items-center gap-3 block hover:opacity-90 transition-opacity">
+        {% if my_card.photo_path %}
+        <img src="/photos/{{ my_card.owner_id }}/{{ my_card.id }}"
+             alt="{{ my_card.name }} photo"
+             class="w-12 h-12 rounded-full object-cover">
+        {% else %}
+        <div class="w-12 h-12 rounded-full flex items-center justify-center"
+             style="background: var(--wl-btn-slate);">
+            <span class="wl-text text-lg">{{ my_card.name[:2].upper() }}</span>
         </div>
-    </div>
+        {% endif %}
+        <div class="flex-1">
+            <h2 class="wl-heading wl-heading-sm">{{ my_card.name }}</h2>
+        </div>
+    </a>
     {% endif %}
 
     {# Search bar + round + button (UX pass 2): the + searches the database
@@ -61,14 +54,108 @@
            class="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center wl-btn-ink text-xl leading-none">+</a>
     </form>
 
+    {# ============================================================
+       PENDING REQUESTS (UX pass 3, 2026-09-23): access requests land at
+       the TOP of the whitelist, directly below the search bar, in an
+       AMBER box. Buttons stay the slate-grey action style (pass-2 style
+       ruling); only the BOX wears amber.
+       ============================================================ #}
+    {% if pending_rows %}
+    <div class="rounded-xl p-4 mb-4"
+         style="background: var(--wl-amber-field); border: 1px solid var(--wl-amber);">
+        <h2 class="wl-heading wl-heading-sm wl-text mb-3">
+            Requests <span class="text-xs wl-text-sub font-sans">({{ pending_rows|length }})</span>
+        </h2>
+        <div class="space-y-3">
+        {% for row in pending_rows %}
+            <div class="wl-card p-3">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
+                         style="background: var(--wl-btn-slate);">
+                        <span class="wl-text text-sm">{{ (row.name or '?')[:2]|upper }}</span>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <a href="/owner/{{ token }}/contact/{{ row.live_grant.id }}"
+                           class="wl-heading wl-heading-sm wl-text block truncate hover:opacity-75">{{ row.name }}</a>
+                        <p class="text-xs wl-text-faint truncate">{{ row.email }}</p>
+                    </div>
+                </div>
+                <form method="POST" action="/owner/{{ token }}/decision" class="mt-3 pt-2 flex gap-2"
+                      style="border-top: 1px solid var(--wl-glass-border);">
+                    <input type="hidden" name="grant_id" value="{{ row.live_grant.id }}">
+                    <button type="submit" name="decision" value="approve"
+                            class="wl-btn-approve px-3 py-1 rounded text-xs">
+                        Approve
+                    </button>
+                    <button type="submit" name="decision" value="deny"
+                            class="wl-btn-deny px-3 py-1 rounded text-xs">
+                        Deny
+                    </button>
+                </form>
+            </div>
+        {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {# ============================================================
+       FILTER TABS (UX pass 3): picture-based round icons below the
+       search bar — the Personal card's picture, each Work card's
+       picture, then the list-badge states. MULTI-SELECT: tap tabs to
+       combine (e.g. personal + work + grey + white); tap an active tab
+       to clear it.
+       ============================================================ #}
+    {% if filter_tabs %}
+    <div class="flex flex-wrap items-center gap-2 mb-4" role="group" aria-label="Filter contacts">
+        {% for t in filter_tabs %}
+        {% set active = t.key in selected_f %}
+        {% set others = selected_f | reject('equalto', t.key) | join(',') %}
+        {% set new_f = others if active else (t.key if not others else others ~ ',' ~ t.key) %}
+        {% set qs = '' %}
+        {% if q %}{% set qs = qs ~ 'q=' ~ (q|urlencode) ~ '&' %}{% endif %}
+        {% if letter %}{% set qs = qs ~ 'letter=' ~ (letter|urlencode) ~ '&' %}{% endif %}
+        {% if new_f %}{% set qs = qs ~ 'f=' ~ (new_f|urlencode) %}{% endif %}
+        <a href="/owner/{{ token }}{% if qs %}?{{ qs }}{% endif %}"
+           title="Filter: {{ t.card.name if t.kind == 'card' else t.label }}"
+           aria-pressed="{{ 'true' if active else 'false' }}"
+           class="relative w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center transition-opacity {% if not active %}opacity-40 hover:opacity-75{% endif %}"
+           style="{% if active %}outline: 2px solid var(--wl-ink); outline-offset: 2px;{% endif %}">
+            {% if t.kind == 'card' %}
+            {% if t.card.photo_path %}
+            <img src="/photos/{{ t.card.owner_profile_id }}/{{ t.card.id }}" alt="" aria-hidden="true"
+                 class="w-10 h-10 rounded-full object-cover">
+            {% else %}
+            <span class="w-10 h-10 rounded-full flex items-center justify-center text-[10px] wl-text-muted"
+                  style="background: var(--wl-btn-slate);">{{ t.card.name[:2]|upper }}</span>
+            {% endif %}
+            {% else %}
+            <span class="w-10 h-10 rounded-full flex items-center justify-center overflow-hidden"
+                  style="background: var(--wl-badge-{{ {'whitelist': 'white', 'greylist': 'grey', 'blacklist': 'black'}[t.key] }}); border: 1px solid var(--wl-glass-edge);">
+                <img src="/static/badge-{{ t.key }}.png" alt="" aria-hidden="true" class="w-6 h-6 object-contain">
+            </span>
+            {% endif %}
+        </a>
+        {% endfor %}
+    </div>
+    {% endif %}
+
     {# Unified contact rows + fast alphabetical filter rail (UX pass
        2026-09-22): the rail on the right filters by name initial, one
-       click, letters with no entries dimmed. #}
+       click, letters with no entries dimmed. UX pass 3: rows carry NO
+       email sub-line; the whole row is ONE click target; badges are
+       ROUND and as large as the profile picture. #}
     {% if all_rows %}
     <div class="flex gap-3">
         <div class="flex-1 min-w-0 space-y-2">
         {% for row in all_rows %}
-        <div class="wl-card p-3">
+        <div class="wl-card p-3 relative">
+            {# ONE click target: an overlay link covers the whole row;
+               the badge form sits above it (z-10) so the cycle still works. #}
+            {% if row.live_grant %}
+            <a href="/owner/{{ token }}/contact/{{ row.live_grant.id }}{% if row.row_card %}?card={{ row.row_card.id }}{% endif %}"
+               class="absolute inset-0 z-0 rounded-xl"
+               aria-label="Open {{ row.name }}"></a>
+            {% endif %}
             <div class="flex items-center gap-3">
                 {# Picture / avatar #}
                 {% if row.logo_state == 'fresh' %}
@@ -82,40 +169,21 @@
                 </div>
                 {% endif %}
 
-                {# Name — UX pass ruling (2026-09-22): ONE ROW PER CARD;
-                   clicking the row opens the contact's information with
-                   THAT card selected. UX pass 2: the email sits as compact
-                   subtext — the requester identity stays visible in the
-                   condensed list (the Details expander is gone). #}
+                {# Name — UX pass 3: no email sub-line; the card chip stays
+                   (one row per card). #}
                 <div class="flex-1 min-w-0">
-                    {% if row.live_grant %}
-                    <a href="/owner/{{ token }}/contact/{{ row.live_grant.id }}{% if row.row_card %}?card={{ row.row_card.id }}{% endif %}"
-                       class="wl-heading wl-heading-sm wl-text block truncate hover:opacity-75">{{ row.name }}</a>
-                    {% else %}
                     <span class="wl-heading wl-heading-sm wl-text block truncate">{{ row.name }}</span>
+                    {% if row.row_card %}
+                    <span class="inline-block mt-0.5 text-[10px] px-1.5 py-0.5 rounded"
+                          style="background: var(--wl-glass-fill-alt); color: var(--wl-ink-muted);">{{ row.row_card.name }}</span>
                     {% endif %}
-                    <div class="mt-0.5 flex items-center gap-1.5 flex-wrap min-w-0">
-                        {% if row.email %}
-                        <span class="text-[10px] wl-text-faint truncate max-w-full">{{ row.email }}</span>
-                        {% endif %}
-                        {% if row.row_card %}
-                        <span class="text-[10px] px-1.5 py-0.5 rounded flex-shrink-0"
-                              style="background: var(--wl-glass-fill-alt); color: var(--wl-ink-muted);">{{ row.row_card.name }}</span>
-                        {% endif %}
-                    </div>
                 </div>
 
-                {# Access badges — scroll silhouette on colored button.
-                   Click cycles: WhiteList → GreyList → BlackList → WhiteList.
-                   INSTANT and ALWAYS SILENT: contact never notified. #}
-                <div class="flex flex-col items-end gap-1 flex-shrink-0">
-                    {% if row.is_pending %}
-                    <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs"
-                          style="background: rgba(110,110,118,0.25); color: var(--wl-ink-muted);">
-                        <span class="w-1.5 h-1.5 rounded-full" style="background: var(--wl-badge-grey);"></span>
-                        Pending
-                    </span>
-                    {% elif row.live_grant %}
+                {# List badge — UX pass 3: ROUND, as large as the profile
+                   picture (40px). Click cycles WhiteList → GreyList →
+                   BlackList → WhiteList. INSTANT and ALWAYS SILENT. #}
+                <div class="flex-shrink-0 z-10 relative">
+                    {% if row.live_grant %}
                     {% if row.granted and row.perm == 'permanent' %}
                     {% set badge_state, next_state = 'whitelist', 'greylist' %}
                     {% elif row.granted %}
@@ -138,36 +206,20 @@
                         <button type="submit"
                                 title="Click to change to {{ state_label }}"
                                 aria-label="Click to change to {{ state_label }}"
-                                class="wl-badge-scroll" data-state="{{ badge_state }}">
-                            <img src="/static/badge-{{ badge_state }}.png" alt="" aria-hidden="true">
+                                class="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center transition-opacity hover:opacity-80"
+                                style="background: var(--wl-badge-{{ {'whitelist': 'white', 'greylist': 'grey', 'blacklist': 'black'}[badge_state] }}); border: 1px solid var(--wl-glass-edge);">
+                            <img src="/static/badge-{{ badge_state }}.png" alt="" aria-hidden="true" class="w-6 h-6 object-contain">
                         </button>
                     </form>
                     {% else %}
-                    <span class="wl-badge-scroll" data-state="blacklist" title="BlackList" aria-label="BlackList">
-                        <img src="/static/badge-blacklist.png" alt="" aria-hidden="true">
+                    <span class="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center"
+                          style="background: var(--wl-badge-black); border: 1px solid var(--wl-glass-edge);"
+                          title="BlackList" aria-label="BlackList">
+                        <img src="/static/badge-blacklist.png" alt="" aria-hidden="true" class="w-6 h-6 object-contain">
                     </span>
                     {% endif %}
                 </div>
             </div>
-
-            {# UX pass 2: the 'Details' expander is REMOVED — a clean,
-               condensed list. Pending rows carry compact Approve/Deny
-               buttons inline so the decision never hides behind a
-               dropdown. #}
-            {% if row.is_pending %}
-            <form method="POST" action="/owner/{{ token }}/decision" class="mt-3 pt-2 flex gap-2"
-                  style="border-top: 1px solid var(--wl-glass-border);">
-                <input type="hidden" name="grant_id" value="{{ row.live_grant.id }}">
-                <button type="submit" name="decision" value="approve"
-                        class="wl-btn-approve px-3 py-1 rounded text-xs">
-                    Approve
-                </button>
-                <button type="submit" name="decision" value="deny"
-                        class="wl-btn-deny px-3 py-1 rounded text-xs">
-                    Deny
-                </button>
-            </form>
-            {% endif %}
         </div>
         {% endfor %}
         </div>
@@ -179,12 +231,12 @@
             {% for L in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'|list %}
             {% if L in available_letters %}
             {% if letter == L %}
-            <a href="?{{ ('q=' ~ q ~ '&') if q else '' }}"
+            <a href="?{{ ('q=' ~ q ~ '&') if q else '' }}{{ ('f=' ~ (selected_f|join(',')|urlencode) ~ '&') if selected_f else '' }}"
                title="Clear letter filter" aria-label="Clear letter filter ({{ L }})"
                class="text-[10px] leading-3 px-1 py-0.5 rounded wl-text font-bold"
                style="background: var(--wl-btn-slate);">{{ L }}</a>
             {% else %}
-            <a href="?{{ ('q=' ~ q ~ '&') if q else '' }}letter={{ L }}"
+            <a href="?{{ ('q=' ~ q ~ '&') if q else '' }}{{ ('f=' ~ (selected_f|join(',')|urlencode) ~ '&') if selected_f else '' }}letter={{ L }}"
                title="Show contacts starting with {{ L }}" aria-label="Filter by {{ L }}"
                class="text-[10px] leading-3 px-1 py-0.5 rounded wl-text-sub hover:opacity-70">{{ L }}</a>
             {% endif %}
@@ -196,12 +248,12 @@
                '#' bucket so every contact is reachable from the rail. #}
             {% if '#' in available_letters %}
             {% if letter == '#' %}
-            <a href="?{{ ('q=' ~ q ~ '&') if q else '' }}" title="Clear letter filter"
+            <a href="?{{ ('q=' ~ q ~ '&') if q else '' }}{{ ('f=' ~ (selected_f|join(',')|urlencode) ~ '&') if selected_f else '' }}" title="Clear letter filter"
                aria-label="Clear letter filter (non-alphabetic)"
                class="text-[10px] leading-3 px-1 py-0.5 rounded wl-text font-bold"
                style="background: var(--wl-btn-slate);">#</a>
             {% else %}
-            <a href="?{{ ('q=' ~ q ~ '&') if q else '' }}letter=%23" title="Show contacts with non-alphabetic initials"
+            <a href="?{{ ('q=' ~ q ~ '&') if q else '' }}{{ ('f=' ~ (selected_f|join(',')|urlencode) ~ '&') if selected_f else '' }}letter=%23" title="Show contacts with non-alphabetic initials"
                aria-label="Filter by non-alphabetic initials"
                class="text-[10px] leading-3 px-1 py-0.5 rounded wl-text-sub hover:opacity-70">#</a>
             {% endif %}
@@ -221,12 +273,13 @@
         <p class="text-xs wl-text-faint">Showing {{ (page * per_page) + 1 }}–{{ [page * per_page + per_page, total_rows]|min }} of {{ total_rows }}</p>
         <div class="flex gap-2">
             {% set letter_qs = ('letter=' ~ letter ~ '&') if letter else '' %}
+            {% set f_qs = ('f=' ~ (selected_f|join(',')|urlencode) ~ '&') if selected_f else '' %}
             {% if page > 0 %}
-            <a href="?{{ letter_qs }}page={{ page - 1 }}{{ '&q=' + q if q else '' }}"
+            <a href="?{{ letter_qs }}{{ f_qs }}page={{ page - 1 }}{{ '&q=' + q if q else '' }}"
                class="wl-link text-sm">← Previous</a>
             {% endif %}
             {% if (page + 1) * per_page < total_rows %}
-            <a href="?{{ letter_qs }}page={{ page + 1 }}{{ '&q=' + q if q else '' }}"
+            <a href="?{{ letter_qs }}{{ f_qs }}page={{ page + 1 }}{{ '&q=' + q if q else '' }}"
                class="wl-link text-sm">Next →</a>
             {% endif %}
         </div>
