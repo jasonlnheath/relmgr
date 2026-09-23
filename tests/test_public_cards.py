@@ -86,8 +86,11 @@ def test_anon_shows_bio_and_photo_block(tmp_path):
     client = TestClient(create_app(db))
     html = client.get("/p/jasonheath").text
     assert "I sell wheel bushings." in html, "bio must render on the public page"
-    assert "/qr/jasonheath" in html, "QR code must render (dynamic route)"
-    # round-2: per-card photos removed from public profile (only QR + bio)
+    # UX pass 2 (2026-09-22): the profile QR is REMOVED — the Connect
+    # button replaces it (the QR encoded only a profile link).
+    assert "/qr/jasonheath" not in html, "QR removed from the public profile"
+    assert "Connect" in html, "randos get a single Connect button"
+    # round-2: per-card photos removed from public profile (only bio)
 
 
 def test_granted_tier_sees_all_cards_and_fields(tmp_path):
@@ -108,6 +111,8 @@ def test_granted_tier_sees_all_cards_and_fields(tmp_path):
     # round-2: no request-access taunt; Connect button only for non-granted tier
     assert "Request access" not in html
     assert "Connect" not in html  # granted tier doesn't see Connect button
+    # UX pass 2: no QR anywhere on the profile either.
+    assert "/qr/jasonheath" not in html
 
 
 def test_owner_self_view_shows_all_cards_photos_bio(tmp_path):
@@ -125,9 +130,12 @@ def test_owner_self_view_shows_all_cards_photos_bio(tmp_path):
     assert "jheath@waltheremc.com" in me
     assert "555-1234" in me
     assert "I sell wheel bushings." in me, "bio missing from self-view"
-    assert "/qr/jasonheath" in me, "QR must render on self-view (dynamic route)"
-    assert "Request access" not in me
+    # UX pass 2: the QR is gone from the profile (Connect replaces it); a
+    # self-view (granted tier) sees neither QR nor Connect.
+    assert "/qr/jasonheath" not in me, "QR removed from the profile (UX pass 2)"
     assert "Connect" not in me  # self-view (granted tier) doesn't see Connect button
+    assert "Request access" not in me
+    assert "Forward your card" not in me, "forward section removed (UX pass 2)"
 
 
 def test_anon_still_hides_granted_fields_pin_kept(tmp_path):

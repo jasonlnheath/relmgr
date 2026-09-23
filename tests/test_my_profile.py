@@ -65,13 +65,14 @@ class TestBioEdit:
     def test_bio_over_limit_rejected(self, tmp_path):
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
-        long_bio = "x" * 2001
+        long_bio = "x" * 501
         resp = client.post(f"/owner/{_owner_token()}/bio",
                            data={"bio": long_bio})
         # q38 review: spec B2 says over-limit is REJECTED (400 page, nothing
         # saved) — this pin previously locked in truncate-and-save at 200.
+        # UX pass 2 (2026-09-22): cap lowered to 500.
         assert resp.status_code == 400
-        assert "2000 characters" in resp.text
+        assert "500 characters" in resp.text
 
     def test_bio_blank_allowed(self, tmp_path):
         db = _make_db(tmp_path)

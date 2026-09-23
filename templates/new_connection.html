@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}WhiteList — New Connection{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto py-8 px-4">
+    <div class="mb-4">
+        <a href="/owner/{{ token }}" class="wl-link text-sm">← WhiteList</a>
+    </div>
+    <div class="wl-card p-6">
+        <h1 class="wl-heading wl-heading-md mb-1">New Connection</h1>
+        <p class="text-xs wl-text-faint mb-5">Search your database for this person. If they're not in it, you can create a standard vCard for them.</p>
+
+        {# Search the database for 'new connections' #}
+        <form method="GET" action="/owner/{{ token }}/new-connection" class="mb-5">
+            <div class="flex items-center gap-2">
+                <input type="text" name="q" value="{{ q }}" autofocus
+                       placeholder="Name or email"
+                       class="flex-1 min-w-0 px-3 py-2 border border-gray-600 rounded-lg text-sm bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
+                <button type="submit" class="wl-btn-ink px-4 py-2 rounded-lg text-sm">Search</button>
+            </div>
+        </form>
+
+        {% if q %}
+        <div class="mb-5">
+            <p class="text-xs wl-text-faint mb-2">
+                {% if matches %}{{ matches|length }} match{{ '' if matches|length == 1 else 'es' }} in your database:{% else %}No matches for “{{ q }}”.{% endif %}
+            </p>
+            {% if matches %}
+            <div class="space-y-2">
+                {% for m in matches %}
+                <div class="wl-card p-3">
+                    <p class="wl-heading wl-heading-sm wl-text">{{ m.name }}</p>
+                    <p class="text-xs wl-text-sub">
+                        {% if m.email %}{{ m.email }}{% endif %}
+                        {% if m.email and m.phone %} · {% endif %}
+                        {% if m.phone %}{{ m.phone }}{% endif %}
+                        {% if (m.email or m.phone) and m.org %} · {% endif %}
+                        {% if m.org %}{{ m.org }}{% endif %}
+                    </p>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {# No hits (or fresh page) → offer to create a standard vCard #}
+        {% if not q or not matches %}
+        <div class="pt-4" style="border-top: 1px solid var(--wl-glass-border);">
+            <h2 class="wl-heading wl-heading-sm wl-text mb-1">Create a standard vCard</h2>
+            <p class="text-xs wl-text-faint mb-3">Not in your database? Add them with the conventional fields.</p>
+            {% if error %}
+            <p class="text-xs mb-2" style="color: var(--wl-danger);">{{ error }}</p>
+            {% endif %}
+            <form method="POST" action="/owner/{{ token }}/new-connection" class="space-y-3">
+                <div>
+                    <label class="text-sm font-medium wl-text-sub">Full name</label>
+                    <input type="text" name="display_name" maxlength="120" required
+                           value="{{ q if q and not matches else '' }}"
+                           class="w-full border border-gray-600 rounded-lg px-3 py-2 text-sm mt-1 bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]"
+                           placeholder="e.g. Jordan Rivers">
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-sm font-medium wl-text-sub">Phone</label>
+                        <input type="text" name="phone" maxlength="40"
+                               class="w-full border border-gray-600 rounded-lg px-3 py-2 text-sm mt-1 bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]"
+                               placeholder="+1-555-123-4567">
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium wl-text-sub">Email</label>
+                        <input type="email" name="email" maxlength="120"
+                               class="w-full border border-gray-600 rounded-lg px-3 py-2 text-sm mt-1 bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]"
+                               placeholder="them@example.com">
+                    </div>
+                </div>
+                <button type="submit" class="wl-btn-ink px-4 py-2 rounded-lg text-sm">
+                    Create vCard
+                </button>
+            </form>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

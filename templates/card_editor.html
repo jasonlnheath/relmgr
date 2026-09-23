@@ -28,6 +28,8 @@
 } %}
 
 {# ---- macros ---- #}
+{% set public_default_types = ['title', 'company', 'website'] %}
+
 {% macro vis_select(name, current='') %}
 <select name="{{ name }}"
         class="wl-select text-xs border border-gray-600 rounded px-1 py-1 focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]"
@@ -36,6 +38,29 @@
     <option value="granted" {% if current == 'granted' %}selected{% endif %}>Granted</option>
     <option value="private" {% if current == 'private' %}selected{% endif %}>Private</option>
 </select>
+{% endmacro %}
+
+{# UX pass 2 defaults ruling: every field defaults to 'granted' except
+   title, company, and website which default 'public'. #}
+{% macro default_visibility(t) %}{{ 'public' if t in public_default_types else 'granted' }}{% endmacro %}
+
+{# Phone label support (UX pass 2): Mobile / Home / Work / Custom label.
+   One select + a custom-name input revealed when Custom is chosen. #}
+{% macro phone_label_select(name, current='') %}
+{% set is_builtin = current in ('mobile', 'home', 'work') %}
+{% set is_custom = current and not is_builtin %}
+<select name="{{ name }}"
+        class="wl-select text-xs border border-gray-600 rounded px-1 py-1 phone-label-select"
+        title="Label this phone number: Mobile, Home, Work, or a custom name">
+    <option value="" {% if not current %}selected{% endif %}>Label…</option>
+    <option value="mobile" {% if current == 'mobile' %}selected{% endif %}>Mobile</option>
+    <option value="home" {% if current == 'home' %}selected{% endif %}>Home</option>
+    <option value="work" {% if current == 'work' %}selected{% endif %}>Work</option>
+    <option value="__custom" {% if is_custom %}selected{% endif %}>Custom…</option>
+</select>
+<input type="text" name="{{ name }}_custom" value="{{ current if is_custom else '' }}"
+       placeholder="Custom label name" maxlength="30"
+       class="w-28 border border-gray-600 rounded px-2 py-1 text-xs bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8] phone-label-custom {% if not is_custom %}hidden{% endif %}">
 {% endmacro %}
 
 {% macro field_input(name, t, value='', placeholder='') %}
@@ -63,7 +88,10 @@
     <div class="flex-1 min-w-0">
         {{ field_input('field_' ~ f.id ~ '_value', t, f.field_value, placeholders[t]) }}
     </div>
-    <div class="flex items-center gap-2 flex-shrink-0">
+    <div class="flex items-center gap-2 flex-shrink-0 flex-wrap">
+        {% if t == 'phone' %}
+        {{ phone_label_select('field_' ~ f.id ~ '_label', f.label or '') }}
+        {% endif %}
         {{ vis_select('field_' ~ f.id ~ '_visibility', f.visibility) }}
         {# Pairing-review F1 (2026-09-22): this button lives INSIDE the main
            editor form — a nested <form> is invalid HTML and the browser
@@ -83,7 +111,9 @@
 {% endmacro %}
 
 {# One fresh add-row slot (no-JS fallback for + Add, and the always-visible
-   dedicated slot when the card has no field of this type yet). #}
+   dedicated slot when the card has no field of this type yet). UX pass 2:
+   new rows carry the type's DEFAULT visibility (granted everywhere except
+   title/company/website = public), and phone rows carry the label select. #}
 {% macro empty_row(t, sublabel) %}
 <div class="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
     {% if sublabel %}
@@ -92,8 +122,11 @@
     <div class="flex-1 min-w-0">
         {{ field_input('new_' ~ t ~ '_value', t, '', placeholders[t]) }}
     </div>
-    <div class="flex items-center gap-2 flex-shrink-0">
-        {{ vis_select('new_' ~ t ~ '_visibility', 'private') }}
+    <div class="flex items-center gap-2 flex-shrink-0 flex-wrap">
+        {% if t == 'phone' %}
+        {{ phone_label_select('new_' ~ t ~ '_label', '') }}
+        {% endif %}
+        {{ vis_select('new_' ~ t ~ '_visibility', default_visibility(t)) }}
     </div>
 </div>
 {% endmacro %}
@@ -265,6 +298,20 @@ function addFieldRow(type) {
     const rows = section.querySelector('.rows');
     rows.appendChild(tpl.content.cloneNode(true));
 }
+
+// ---- Phone labels (UX pass 2): Custom… reveals the custom-name input ----
+function syncPhoneLabelCustom(select) {
+    const custom = select.parentElement.querySelector('.phone-label-custom');
+    if (!custom) return;
+    custom.classList.toggle('hidden', select.value !== '__custom');
+    if (select.value === '__custom') custom.focus();
+}
+document.addEventListener('change', function (e) {
+    if (e.target instanceof HTMLSelectElement &&
+        e.target.classList.contains('phone-label-select')) {
+        syncPhoneLabelCustom(e.target);
+    }
+});
 
 // ---- Danger zone: two-step delete confirm ----
 function showDeleteCard() {

@@ -481,7 +481,7 @@ class TestMyProfilePass:
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
         html = client.get(f"/owner/{_owner_token()}/profile").text
-        assert 'maxlength="2000"' in html, "live prune while typing"
+        assert 'maxlength="500"' in html, "live prune while typing (UX pass 2 cap)"
         assert 'id="bio-count"' in html
 
     def test_back_to_contact_list_link(self, tmp_path):
@@ -493,7 +493,7 @@ class TestMyProfilePass:
     def test_bio_over_limit_still_rejected_server_side(self, tmp_path):
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
-        r = client.post(f"/owner/{_owner_token()}/bio", data={"bio": "x" * 2001})
+        r = client.post(f"/owner/{_owner_token()}/bio", data={"bio": "x" * 501})
         assert r.status_code == 400, "server-side limit stays (client maxlength is UX only)"
 
 

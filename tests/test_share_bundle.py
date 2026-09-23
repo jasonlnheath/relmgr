@@ -184,6 +184,9 @@ class TestChooserFlow:
         assert resp.status_code == 400
 
     def test_preview_fragment_public_only(self, tmp_path):
+        """F4 ruling (2026-09-23): the chooser preview shows EXACTLY what
+        recipients get — the PUBLIC-facing page. Share links deliver public
+        data only; more access goes through the Connect flow."""
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
         work = _card_id(db, "Work")
@@ -192,7 +195,7 @@ class TestChooserFlow:
         assert resp.status_code == 200
         assert "public@waltheremc.com" in resp.text
         assert "jheath@waltheremc.com" not in resp.text, \
-            "preview is what an anonymous recipient sees"
+            "preview matches the public-page reality (F4 ruling)"
         assert "Work" in resp.text
 
     def test_preview_ignores_foreign_cards(self, tmp_path):
@@ -296,16 +299,22 @@ class TestSharedView:
         assert "🔒" not in html
 
     def test_respects_visibility_granted(self, tmp_path):
+        """F4 ruling (2026-09-23): share links ALWAYS deliver the
+        PUBLIC-facing page — even for a connected viewer. No granted-tier
+        links; more access goes through the Connect flow."""
         db, client, bundle_id = self._bundle(tmp_path)
-        # A connected viewer sees granted fields exactly like /p does.
+        # A connected viewer still gets the public page on a share link.
         conn = whitelist_db.wl_connect(db)
         gid = whitelist_db.create_grant(conn, 1, "friend@example.com", "Friend")
         whitelist_db.apply_decision(conn, gid, "approve", "lifetime",
                                     merge_contacts=False)
         conn.close()
         html = client.get(f"/s/{bundle_id}?e=friend@example.com").text
-        assert "jheath@waltheremc.com" in html
-        assert "555-1234" in html
+        assert "jheath@waltheremc.com" not in html, \
+            "no granted-tier links (F4): connected viewers see the public page"
+        assert "public@waltheremc.com" in html
+        assert "/p/jasonheath/request-form" in html, \
+            "the request-access affordance stays on the public page"
 
     def test_actions_live_inside_their_blocks(self, tmp_path):
         db, client, bundle_id = self._bundle(tmp_path)
@@ -421,6 +430,8 @@ class TestVcfDownload:
         assert 'TEL;TYPE=CELL:555-0000' in body
 
     def test_vcf_granted_viewer_gets_granted_fields(self, tmp_path):
+        """F4 ruling: the vcf download is PUBLIC-only for everyone — no
+        granted-tier links, ever."""
         db, client, bundle_id = self._bundle(tmp_path)
         conn = whitelist_db.wl_connect(db)
         gid = whitelist_db.create_grant(conn, 1, "friend@example.com", "Friend")
@@ -428,8 +439,9 @@ class TestVcfDownload:
                                     merge_contacts=False)
         conn.close()
         body = client.get(f"/s/{bundle_id}/card.vcf?e=friend@example.com").text
-        assert "jheath@waltheremc.com" in body
-        assert "555-1234" in body
+        assert "jheath@waltheremc.com" not in body, \
+            "vcf carries public fields only (F4)"
+        assert "555-1234" not in body
 
     def test_vcf_dedupes_fields_shared_by_cards(self, tmp_path):
         db, client, bundle_id = self._bundle(tmp_path)
@@ -487,6 +499,10 @@ class TestShelfLife:
         assert _notification_kinds(db).count("expired_link") == 1
 
     def test_expired_link_connected_viewer_outlives_it(self, tmp_path):
+        """F4 ruling: links ALWAYS deliver the public-facing page — an
+        expired link shows the expired page (with Connect) even to a
+        connected viewer; the connection lives in the owner's registry, not
+        in the link."""
         db, client, bundle_id = self._bundle(tmp_path)
         conn = whitelist_db.wl_connect(db)
         gid = whitelist_db.create_grant(conn, 1, "friend@example.com", "Friend")
@@ -495,8 +511,8 @@ class TestShelfLife:
         conn.close()
         _expire_bundle(db, bundle_id)
         html = client.get(f"/s/{bundle_id}?e=friend@example.com").text
-        assert "jheath@waltheremc.com" in html, "governed view outlives link"
-        assert _notification_kinds(db) == [], "no ping for connected viewers"
+        assert "expired" in html.lower(), "expired link expires for everyone (F4)"
+        assert "jheath@waltheremc.com" not in html, "no granted fields past expiry"
 
     def test_expired_link_blacklisted_no_ping(self, tmp_path):
         db, client, bundle_id = self._bundle(tmp_path)

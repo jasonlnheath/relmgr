@@ -63,6 +63,10 @@ def test_dashboard_shows_grant_age_not_today(tmp_path):
     round-2: contact list shows created_at[:10] (date string) instead of
     the old 'X days ago' format. The key assertion is that the date math
     doesn't fail silently (A1 bug).
+
+    UX pass 2 (2026-09-22): the contact LIST is condensed — the granted
+    date now lives on the contact-card page's Access section, so this
+    regression pins there.
     """
     from app import create_app
     from fastapi.testclient import TestClient
@@ -83,16 +87,19 @@ def test_dashboard_shows_grant_age_not_today(tmp_path):
     gid = whitelist_db.create_grant(conn, prof["id"], "aged@x.com", "Aged")
     five_days_ago = (datetime.now(timezone.utc) - timedelta(days=5)).strftime("%Y-%m-%d")
     conn.execute("UPDATE access_grants SET created_at=? WHERE id=?", (five_days_ago + " 12:00:00", gid))
+    whitelist_db.apply_decision(conn, gid, "approve", "quarter")
+    conn.execute("UPDATE access_grants SET granted_at=? WHERE id=?", (five_days_ago + "T12:00:00Z", gid))
     conn.commit()
     conn.close()
 
     client = TestClient(create_app(db))
     resp = client.get(
         f"/owner/{wl_tokens.make_token(b'test-secret', 'owner_dashboard', '1', expires_days=365)}"
+        f"/contact/{gid}"
     )
     assert resp.status_code == 200
-    # round-2: contact list shows date string from created_at[:10]
-    assert five_days_ago in resp.text, f"dashboard must show grant date; got: {resp.text[:400]}"
+    # round-2: contact card shows date string from granted_at[:10]
+    assert five_days_ago in resp.text, f"contact card must show grant date; got: {resp.text[:400]}"
 
 
 def test_profile_page_shows_verified_days(tmp_path):
