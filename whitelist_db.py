@@ -4432,6 +4432,41 @@ def save_card_editor(
     return get_card_by_id(conn, card_id)
 
 
+def remove_card_field(conn: sqlite3.Connection, card_id: int, field_id: int) -> dict:
+    """Unlink ONE field from ONE card (UX pass 5: the card-preview ✕).
+
+    Same unlink semantics as save_card_editor's field_removals — the
+    card_fields link row goes, the profile_fields row survives (cards are
+    lenses, not containers) — exposed as a narrow, form-free entry point
+    for card views that carry no editor body (the preview page). This
+    deliberately does NOT go through save_card_editor: that function
+    applies every submitted name/value/label column, and an absent editor
+    form would BLANK them (the pass-2 data-loss bug class, from the other
+    side). This touches the link row only.
+
+    Raises ValueError (→ 404 at the route layer):
+        - unknown card_id
+        - field_id doesn't exist or belongs to another profile
+          (IDOR — fail closed)
+    """
+    card = get_card_by_id(conn, card_id)
+    if card is None:
+        raise ValueError(f"card_id {card_id} not found")
+    owner_id = card["owner_profile_id"]
+    row = conn.execute(
+        "SELECT profile_id FROM profile_fields WHERE id = ?", (field_id,)
+    ).fetchone()
+    if row is None or row["profile_id"] != owner_id:
+        raise ValueError(f"field_id {field_id} not found or not owned by this profile")
+    conn.execute(
+        "DELETE FROM card_fields WHERE card_id = ? AND field_id = ?",
+        (card_id, field_id),
+    )
+    conn.execute("UPDATE cards SET updated_at = datetime('now') WHERE id = ?", (card_id,))
+    conn.commit()
+    return get_card_by_id(conn, card_id)
+
+
 # ============================================================
 # Phase A2: Contact List data layer
 # ============================================================

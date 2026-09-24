@@ -23,16 +23,31 @@
         </div>
         {% endif %}
 
-        {# Fields — UX pass 4: scoped types render with family-base labels #}
+        {# Fields — UX pass 4: scoped types render with family-base labels.
+           UX pass 5: EVERY field row (populated or not) carries an ✕ on
+           the right that removes the field from the card immediately —
+           the same unlink semantics as the editor's ✕ (the profile_fields
+           row survives; re-adding the field in the editor restores it).
+           The preview page carries no editor form, so the ✕ posts the
+           narrow preview-delete route, never the editor's apply-full-body
+           route. #}
         {% if card.fields %}
         <div class="border-t pt-4 mt-4" style="border-color: var(--wl-glass-border);">
             <h2 class="wl-heading wl-heading-sm wl-text mb-3">Fields</h2>
             <div class="space-y-2">
                 {% for f in card.fields %}
-                <div class="flex items-center wl-text-sub">
-                    <span class="w-20 text-xs wl-text-faint uppercase tracking-wide">{{ _scoped_label(f.field_type) }}</span>
-                    <span>{{ f.field_value }}</span>
-                    <span class="ml-2 text-xs wl-text-faint">({{ f.visibility }})</span>
+                <div class="flex items-center gap-2 wl-text-sub">
+                    <span class="w-20 flex-shrink-0 text-xs wl-text-faint uppercase tracking-wide">{{ _scoped_label(f.field_type) }}</span>
+                    <span class="flex-1 min-w-0 break-words">{% if f.field_type in ('phone', 'phone_personal', 'phone_work', 'text_number', 'text_number_personal', 'text_number_work', 'facetime_number', 'facetime_number_personal', 'facetime_number_work') %}{{ phone_fmt(f.field_value) }}{% else %}{{ f.field_value }}{% endif %}</span>
+                    <span class="flex-shrink-0 text-xs wl-text-faint">({{ f.visibility }})</span>
+                    <form method="post"
+                          action="/owner/{{ token }}/cards/{{ card.id }}/preview/fields/{{ f.id }}/delete"
+                          class="flex-shrink-0">
+                        <button type="submit"
+                                title="Remove this {{ _scoped_label(f.field_type)|lower }} from the card"
+                                aria-label="Remove this {{ _scoped_label(f.field_type)|lower }} from the card"
+                                class="w-6 h-6 rounded-full wl-btn-ink text-xs leading-none inline-flex items-center justify-center">✕</button>
+                    </form>
                 </div>
                 {% endfor %}
             </div>

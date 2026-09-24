@@ -1414,6 +1414,15 @@ def create_app(db_path: Path = None) -> FastAPI:
                         "refreshed_at": None,
                         "is_pending": gd["status"] == "pending",
                     })
+                # UX pass 5: the search box filters this mode too — name or
+                # email substring, the same rule list_contact_list_rows
+                # applies in contacts mode. Without this, live search
+                # silently does nothing on a pure-whitelist DB.
+                if q:
+                    q_lower = q.lower()
+                    rows = [r for r in rows
+                            if q_lower in (r["name"] or "").lower()
+                            or q_lower in (r.get("email") or "").lower()]
                 total_rows = len(rows)
 
             # Count denied grants for this owner
@@ -2542,6 +2551,48 @@ def create_app(db_path: Path = None) -> FastAPI:
             token=token,
             days_since=days_since,
         ))
+
+    @application.post("/owner/{token}/cards/{card_id}/preview/fields/{field_id}/delete")
+    async def owner_preview_field_delete(request: Request, token: str, card_id: int,
+                                         field_id: int):
+        """UX pass 5: the card PREVIEW's per-field ✕ — every field row on
+        the preview (populated or not) removes the field from the card
+        immediately and lands back on the preview.
+
+        This is a NARROW unlink through whitelist_db.remove_card_field,
+        NOT the editor's delete route: the preview page carries no editor
+        form, and the editor route MUST apply the full parsed body with
+        the removal (pass-2 data-loss ruling). Piping an empty body
+        through save_card_editor would blank the profile name columns —
+        so the preview path touches the card_fields link row only.
+        profile_fields survives (cards are lenses, not containers).
+
+        Ownership is enforced twice: token → profile must own the card
+        (checked here, same as the preview GET), and the field must belong
+        to that profile (checked in the data layer, ValueError → 404 —
+        IDOR fails closed).
+        """
+        conn = whitelist_db.wl_connect(path)
+        try:
+            result = _resolve_owner(conn, request, token, _get_secret())
+            if result[0] is None and result[2] is None:
+                return HTMLResponse("Invalid or expired link", status_code=403)
+            if result[2]:
+                return RedirectResponse(url=f"/owner/{result[2]}")
+            profile_id = result[0]
+
+            card = whitelist_db.get_card_by_id(conn, card_id)
+            if not card or card["owner_profile_id"] != profile_id:
+                return HTMLResponse("Not found", status_code=404)
+            try:
+                whitelist_db.remove_card_field(conn, card_id, field_id)
+            except ValueError:
+                return HTMLResponse("Not found", status_code=404)
+        finally:
+            conn.close()
+        # 303 back to the preview GET — the row is gone on landing.
+        return RedirectResponse(
+            url=f"/owner/{token}/profile/card/{card_id}", status_code=303)
 
     @application.get("/photos/{owner_profile_id}/{card_id}")
     async def serve_photo(owner_profile_id: int, card_id: int):
