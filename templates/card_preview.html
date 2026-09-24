@@ -2,6 +2,13 @@
 {% block title %}{{ card.name }} — WhiteList{% endblock %}
 
 {% block content %}
+{% macro _scoped_label(ft) %}
+{% set base = ft %}
+{% for s in ['_personal', '_work'] %}
+    {% if base.endswith(s) %}{% set base = base[:-len(s)] %}{% endif %}
+{% endfor %}
+{{ base|capitalize if base else ft }}
+{% endmacro %}
 <div class="max-w-2xl mx-auto py-8 px-4">
     <div class="wl-card p-6">
         <div class="flex items-center justify-between mb-4">
@@ -16,14 +23,14 @@
         </div>
         {% endif %}
 
-        {# Fields #}
+        {# Fields — UX pass 4: scoped types render with family-base labels #}
         {% if card.fields %}
         <div class="border-t pt-4 mt-4" style="border-color: var(--wl-glass-border);">
             <h2 class="wl-heading wl-heading-sm wl-text mb-3">Fields</h2>
             <div class="space-y-2">
                 {% for f in card.fields %}
                 <div class="flex items-center wl-text-sub">
-                    <span class="w-20 text-xs wl-text-faint uppercase tracking-wide">{{ f.field_type }}</span>
+                    <span class="w-20 text-xs wl-text-faint uppercase tracking-wide">{{ _scoped_label(f.field_type) }}</span>
                     <span>{{ f.field_value }}</span>
                     <span class="ml-2 text-xs wl-text-faint">({{ f.visibility }})</span>
                 </div>
@@ -35,4 +42,5 @@
         {% endif %}
     </div>
 </div>
+
 {% endblock %}

@@ -116,6 +116,19 @@
                     <input type="text" name="name" maxlength="60"
                            class="w-full border border-gray-600 rounded-lg px-3 py-2 text-sm mt-1 bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]"
                            placeholder="e.g. Sales, Partners">
+                    {# UX pass 4: scope radio (personal / work) — default personal #}
+                    <div class="flex items-center gap-3 mt-2">
+                        <label class="text-xs wl-text-sub inline-flex items-center gap-1">
+                            <input type="radio" name="scope" value="personal" checked
+                                   class="accent-gray-600">
+                            Personal
+                        </label>
+                        <label class="text-xs wl-text-sub inline-flex items-center gap-1">
+                            <input type="radio" name="scope" value="work"
+                                   class="accent-gray-600">
+                            Work
+                        </label>
+                    </div>
                     {% if new_card_error %}
                     <p class="text-xs" style="color: var(--wl-danger);">{{ new_card_error }}</p>
                     {% endif %}

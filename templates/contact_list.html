@@ -19,24 +19,34 @@
         </div>
     </div>
 
-    {# My card — UX pass 3 ruling: NO email line, NO edit link; the whole
-       row is one click to the edit-profile page. #}
+    {# My Card strip (UX pass 4): horizontal strip of ALL owner card
+       pictures + names. Each card shows its photo centered in a circle. #}
     {% if my_card %}
-    <a href="/owner/{{ token }}/profile" class="wl-card p-4 mb-4 flex items-center gap-3 block hover:opacity-90 transition-opacity">
-        {% if my_card.photo_path %}
-        <img src="/photos/{{ my_card.owner_id }}/{{ my_card.id }}"
-             alt="{{ my_card.name }} photo"
-             class="w-12 h-12 rounded-full object-cover">
-        {% else %}
-        <div class="w-12 h-12 rounded-full flex items-center justify-center"
-             style="background: var(--wl-btn-slate);">
-            <span class="wl-text text-lg">{{ my_card.name[:2].upper() }}</span>
+    <div class="wl-card p-4 mb-4">
+        <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2 flex-1 overflow-x-auto">
+                {% for mc in all_cards %}
+                {% if mc.owner_id == my_card.owner_id %}
+                <a href="/owner/{{ token }}/profile" class="flex items-center gap-2 flex-shrink-0 hover:opacity-80">
+                    {% if mc.photo_path %}
+                    <img src="/photos/{{ my_card.owner_id }}/{{ mc.id }}"
+                         alt="{{ mc.name }} photo"
+                         class="w-10 h-10 rounded-full object-cover flex-shrink-0">
+                    {% else %}
+                    <div class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
+                         style="background: var(--wl-btn-slate);">
+                        <span class="wl-text text-sm">{{ mc.name[:2].upper() }}</span>
+                    </div>
+                    {% endif %}
+                    <span class="text-xs wl-text-sub truncate">{{ mc.name }}</span>
+                </a>
+                {% endif %}
+                {% endfor %}
+            </div>
+            <a href="/owner/{{ token }}/profile"
+               class="wl-link text-xs flex-shrink-0">Edit →</a>
         </div>
-        {% endif %}
-        <div class="flex-1">
-            <h2 class="wl-heading wl-heading-sm">{{ my_card.name }}</h2>
-        </div>
-    </a>
+    </div>
     {% endif %}
 
     {# Search bar + round + button (UX pass 2): the + searches the database
@@ -157,22 +167,48 @@
                aria-label="Open {{ row.name }}"></a>
             {% endif %}
             <div class="flex items-center gap-3">
-                {# Picture / avatar #}
+                {# Picture / avatar (UX pass 4): per-card photo centered in 40px
+                   circle, initials fallback. Badge still shown for whitelist/grey/black. #}
                 {% if row.logo_state == 'fresh' %}
                 <span class="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center overflow-hidden"
                       style="background: var(--wl-badge-white); border: 1px solid var(--wl-glass-edge);">
+                    {% if row.row_card and row.row_card.get('photo_path') %}
+                    <img src="/photos/{{ row.row_card.owner_profile_id }}/{{ row.row_card.id }}"
+                         alt="" aria-hidden="true" class="w-8 h-8 rounded-full object-cover">
+                    {% else %}
                     <img src="/static/badge-whitelist.png" alt="" aria-hidden="true" class="w-6 h-6 object-contain">
+                    {% endif %}
                 </span>
                 {% elif row.logo_state == 'stale' %}
                 <span class="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center overflow-hidden"
                       style="background: var(--wl-badge-grey); border: 1px solid var(--wl-glass-edge);">
+                    {% if row.row_card and row.row_card.get('photo_path') %}
+                    <img src="/photos/{{ row.row_card.owner_profile_id }}/{{ row.row_card.id }}"
+                         alt="" aria-hidden="true" class="w-8 h-8 rounded-full object-cover">
+                    {% else %}
                     <img src="/static/badge-greylist.png" alt="" aria-hidden="true" class="w-6 h-6 object-contain">
+                    {% endif %}
                 </span>
+                {% else %}
+                {# Plain contact — show card photo or initials #}
+                {% if row.row_card and row.row_card.get('photo_path') %}
+                <div class="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center overflow-hidden"
+                     style="background: var(--wl-btn-slate);">
+                    <img src="/photos/{{ row.row_card.owner_profile_id }}/{{ row.row_card.id }}"
+                         alt="" aria-hidden="true" class="w-full h-full object-cover">
+                </div>
+                {% elif row.row_card and row.row_card.get('hs_photo_path') %}
+                <div class="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center overflow-hidden"
+                     style="background: var(--wl-btn-slate);">
+                    <img src="/photos/{{ row.row_card.owner_profile_id }}/{{ row.row_card.id }}/hs"
+                         alt="" aria-hidden="true" class="w-full h-full object-cover">
+                </div>
                 {% else %}
                 <div class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
                      style="background: var(--wl-btn-slate);">
                     <span class="wl-text text-sm">{{ row.name[:2].upper() }}</span>
                 </div>
+                {% endif %}
                 {% endif %}
 
                 {# Name — UX pass 3: no email sub-line; the card chip stays
