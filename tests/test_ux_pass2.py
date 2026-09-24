@@ -177,10 +177,10 @@ class TestVisibilityDefaults:
                 r'<option value="(\w+)" selected>(\w+)</option>', m.group(0))
             return sel.group(1) if sel else "(none)"
 
-        # Personal scope uses scoped types (email_personal, phone_personal)
-        assert _selected_default("new_email_personal_visibility", html) == "granted", \
+        # UX pass 5 purge: base type names again (email, phone).
+        assert _selected_default("new_email_visibility", html) == "granted", \
             "email add-row defaults to granted"
-        assert _selected_default("new_phone_personal_visibility", html) == "granted"
+        assert _selected_default("new_phone_visibility", html) == "granted"
         # title/company are work-only and seeded — check website add-row slot
         html_work, _ = _editor_gets(db, client, "Work")
         # Work scope uses scoped type (website_work)

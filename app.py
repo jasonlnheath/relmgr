@@ -149,6 +149,9 @@ def _make_jinja():
     # UX pass 3: +1(XXX)XXX-XXXX display formatting, one formatter for every
     # surface (stored values are never rewritten).
     jinja.env.globals["phone_fmt"] = whitelist_db.format_phone_display
+    # UX pass 5: ONE field-type label table shared by every rendering
+    # surface (scoped pass-4 variants fold to their family base).
+    jinja.env.globals["field_label_display"] = whitelist_db.field_label_display
     return jinja
 
 
@@ -398,10 +401,21 @@ def _build_vcard(profile: dict, cards: list[dict]) -> str:
     parts = display.split(" ", 1)
     first = parts[0]
     last = parts[1] if len(parts) > 1 else ""
+    # UX pass 5: name prefix/suffix fields (vCard card) slot into the N
+    # property's 4th/5th components — first occurrence wins.
+    name_prefix = ""
+    name_suffix = ""
+    for card in cards:
+        for f in card.get("visible_fields", []):
+            base = _scoped_base_type(f["field_type"])
+            if base == "name_prefix" and not name_prefix:
+                name_prefix = f["field_value"]
+            elif base == "name_suffix" and not name_suffix:
+                name_suffix = f["field_value"]
     lines = [
         "BEGIN:VCARD",
         "VERSION:3.0",
-        f"N:{_vcf_escape(last)};{_vcf_escape(first)};;;",
+        f"N:{_vcf_escape(last)};{_vcf_escape(first)};;;{_vcf_escape(name_prefix)};{_vcf_escape(name_suffix)}",
         f"FN:{_vcf_escape(display)}",
     ]
     if profile.get("title"):
@@ -476,6 +490,26 @@ def _build_vcard(profile: dict, cards: list[dict]) -> str:
                 lines.append(f"URL;TYPE=HOME:{v}")
             elif base == "messaging_app":
                 lines.append(f"URL;TYPE=HOME:{v}")
+            elif base == "department":
+                # UX pass 5: Google-parity additions with no native vCard
+                # 3.0 slot travel as labeled NOTE lines (same pattern as
+                # high_school/childhood above).
+                lines.append(f"NOTE:{_vcf_escape('Department: ' + f['field_value'])}")
+            elif base == "po_box":
+                lines.append(f"NOTE:{_vcf_escape('PO Box: ' + f['field_value'])}")
+            elif base == "related_person":
+                role = (f.get("label") or "").strip()
+                label = f"{role}: " if role else "Related: "
+                lines.append(f"NOTE:{_vcf_escape(label + f['field_value'])}")
+            elif base == "event":
+                lab = (f.get("label") or "").strip()
+                label = ("Anniversary: " if lab.lower() == "anniversary"
+                         else f"{lab}: " if lab else "Significant date: ")
+                lines.append(f"NOTE:{_vcf_escape(label + f['field_value'])}")
+            elif base == "custom_field":
+                lab = (f.get("label") or "").strip()
+                label = f"{lab}: " if lab else "Custom: "
+                lines.append(f"NOTE:{_vcf_escape(label + f['field_value'])}")
     lines.append("END:VCARD")
     return "\r\n".join(lines) + "\r\n"
 
@@ -1988,10 +2022,16 @@ def create_app(db_path: Path = None) -> FastAPI:
         scope = card.get("scope", "vcard")
         field_types = whitelist_db.CARD_EDITOR_FIELD_TYPES
         by_type = {t: [] for t in field_types}
+        # UX pass 5: stored scoped rows (email_personal, …) group under
+        # their family BASE section — the pickers are back to base type
+        # names. Rows render in stable id order so address blocks pair
+        # positionally (k-th of each component = block k).
         for f in card.get("fields", []):
-            scoped_type = whitelist_db.map_field_type_to_scope(f["field_type"], scope)
-            if scoped_type in by_type:
-                by_type[scoped_type].append(dict(f))
+            base_type = whitelist_db.scoped_to_base(f["field_type"])
+            if base_type in by_type:
+                by_type[base_type].append(dict(f))
+        for rows in by_type.values():
+            rows.sort(key=lambda f: f["id"])
         base_url = wl_env.get_secret("BASE_URL") or "https://whitelist.app"
         # UX pass 4: scoped sections, label choices, and name context.
         sections = whitelist_db.editor_sections(scope) if hasattr(whitelist_db, 'editor_sections') else whitelist_db.CARD_EDITOR_SECTIONS
@@ -2030,6 +2070,13 @@ def create_app(db_path: Path = None) -> FastAPI:
             label_choices=label_choices,
             name_context=name_context,
             public_default_types=_PUBLIC_DEFAULT_TYPES,
+            # UX pass 5: private-default set, picker-filtered sections,
+            # and the block-Address flag for vcard/personal scopes.
+            private_default_types=_PRIVATE_DEFAULT_TYPES,
+            picker_sections=whitelist_db.picker_sections(scope),
+            address_block=whitelist_db.address_blocks(scope),
+            address_block_types=whitelist_db.ADDRESS_BLOCK_TYPES,
+            event_label_choices=whitelist_db.EVENT_LABEL_CHOICES,
         ), status_code=status_code)
 
     @application.get("/owner/{token}/cards/{card_id}/edit", response_class=HTMLResponse)
@@ -2064,7 +2111,15 @@ def create_app(db_path: Path = None) -> FastAPI:
                              # UX pass 4: scoped variants
                              "city_personal", "state_personal")
 
+    # UX pass 5 (2026-09-24): the six-field Google-parity addition keeps
+    # the granted default EXCEPT custom_field — arbitrary user-defined
+    # content must not leak past an accidental share (gap-analysis
+    # report §6 item 5).
+    _PRIVATE_DEFAULT_TYPES = ("custom_field",)
+
     def _editor_default_visibility(field_type: str) -> str:
+        if field_type in _PRIVATE_DEFAULT_TYPES:
+            return "private"
         return ("public" if field_type in _PUBLIC_DEFAULT_TYPES else "granted")
 
     def _parse_editor_form(form):

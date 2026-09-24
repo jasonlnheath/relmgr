@@ -195,6 +195,15 @@ CARD_EDITOR_FIELD_TYPES = (
     'country_personal', 'country_work',
     # UX pass 4: repeatable middle-name rows
     'middle_name',
+    # UX pass 5 (2026-09-24) Google-parity six-field addition
+    # (data/whitelist-field-gap-analysis/report.md §6):
+    'department',        # Work — Organization Department
+    'po_box',            # shared address component — NOT folded into address2
+    'related_person',    # Personal — related person (label = role, free text)
+    'event',             # Personal — significant date (label = anniversary/other)
+    'custom_field',      # vCard — label+value; defaults PRIVATE (arbitrary content)
+    'name_prefix',       # vCard — Mr / Dr / …
+    'name_suffix',       # vCard — Jr. / III / …
 )
 
 # UX pass 4: 13 split families mapping base name → (personal, work) scoped types.
@@ -214,12 +223,136 @@ SCOPED_FAMILIES: dict[str, tuple[str, str]] = {
     'country': ('country_personal', 'country_work'),
 }
 
-# UX pass 4: scope templates — section layout per card scope.
+# UX pass 5 (2026-09-24): one complete address block, in the captain's
+# component order. vCard + Personal editors render these grouped BY BLOCK
+# (k-th of each component = block k) behind one '+ Add address' control;
+# the Work editor keeps the flat per-component layout.
+ADDRESS_BLOCK_TYPES: tuple[str, ...] = (
+    'address1', 'address2', 'city', 'state', 'zip', 'country',
+)
+
+# UX pass 5: card scopes whose Address section renders as grouped blocks.
+ADDRESS_BLOCK_SCOPES = ('vcard', 'personal')
+
+
+def address_blocks(scope: str) -> bool:
+    """True when this card scope's Address section renders as blocks."""
+    return scope in ADDRESS_BLOCK_SCOPES
+
+
+# UX pass 5: scoped event labels (Google's Significant-date enum).
+EVENT_LABEL_CHOICES = ('anniversary', 'other')
+
+# UX pass 5: scope templates — section layout per card scope.
 # Shape: same as CARD_EDITOR_SECTIONS: [(heading, ((type, sublabel), …)), …]
-# vcard uses LEGACY type names; personal/work use scoped types.
+# UX pass 5 PICKER PURGE: the pass-4 scoped variants (email_personal,
+# phone_work, …) are GONE from every picker — the captain ruled they
+# duplicate fields that already exist. All three scopes pick from BASE
+# type names again; scoped rows already stored stay editable (the editor
+# maps them onto their family's base section via SCOPED_TO_BASE) and stay
+# legal in the CHECK constraint.
+# Context-filtered six-field addition (gap-analysis report §6):
+#   vcard    — all six (department, po_box, related_person, event,
+#              custom_field, name prefix/suffix)
+#   personal — po_box, related_person, event
+#   work     — department, po_box
 _SCOPE_TEMPLATES: tuple[tuple[str, tuple[tuple[str, str | None], ...], ...], ...] = (
     # ── vcard (generic contact vCard — NO identity fields) ──
     ('vcard', (
+        ('Emails', (('email', None),)),
+        ('Phone numbers', (
+            ('phone', None),
+            ('text_number', 'Text number'),
+            ('facetime_number', 'FaceTime number'),
+        )),
+        ('Video apps', (
+            ('facetime', 'FaceTime'),
+            ('skype', 'Skype'),
+            ('video_app', 'Video app'),
+        )),
+        ('Messaging apps', (
+            ('messenger', 'Messenger'),
+            ('messaging_app', 'Messaging app'),
+        )),
+        ('Social', (
+            ('facebook', 'Facebook'),
+            ('instagram', 'Instagram'),
+            ('social_other', 'Social'),
+        )),
+        ('Addresses', (
+            ('address1', 'Address 1'),
+            ('address2', 'Address 2'),
+            ('city', 'City'),
+            ('state', 'State/Province'),
+            ('zip', 'Zip/Postal Code'),
+            ('country', 'Country'),
+            ('po_box', 'PO Box'),
+        )),
+        ('Name', (
+            ('name_prefix', 'Prefix'),
+            ('name_suffix', 'Suffix'),
+        )),
+        ('Title', (('title', None),)),
+        ('Company', (('company', None),)),
+        ('Department', (('department', None),)),
+        ('Website', (('website', None),)),
+        ('Birthday', (('birthday', None),)),
+        ('Significant dates', (('event', None),)),
+        ('Related people', (('related_person', None),)),
+        ('Custom fields', (('custom_field', None),)),
+        ('Note', (('note', None),)),
+    )),
+    # ── personal (NO professional — no title/company/department/website;
+    #    identity fields stay here) ──
+    ('personal', (
+        ('Emails', (('email', None),)),
+        ('Phone numbers', (
+            ('phone', None),
+            ('text_number', 'Text number'),
+            ('facetime_number', 'FaceTime number'),
+        )),
+        ('Video apps', (
+            ('facetime', 'FaceTime'),
+            ('skype', 'Skype'),
+            ('video_app', 'Video app'),
+        )),
+        ('Messaging apps', (
+            ('messenger', 'Messenger'),
+            ('messaging_app', 'Messaging app'),
+        )),
+        ('Social', (
+            ('facebook', 'Facebook'),
+            ('instagram', 'Instagram'),
+            ('social_other', 'Social'),
+        )),
+        ('Addresses', (
+            ('address1', 'Address 1'),
+            ('address2', 'Address 2'),
+            ('city', 'City'),
+            ('state', 'State/Province'),
+            ('zip', 'Zip/Postal Code'),
+            ('country', 'Country'),
+            ('po_box', 'PO Box'),
+        )),
+        ('Birthday', (('birthday', None),)),
+        ('Significant dates', (('event', None),)),
+        ('Related people', (('related_person', None),)),
+        ('Note', (('note', None),)),
+        ('Personal history', (
+            ('high_school', 'High school'),
+            ('maiden_name', 'Maiden/Surname'),
+            ('nickname', 'Nickname'),
+        )),
+        ('Childhood home', (
+            ('childhood_address1', 'Childhood address'),
+            ('childhood_city', 'Childhood city'),
+            ('childhood_state', 'Childhood state'),
+        )),
+    )),
+    # ── work (professional only — NO birthday, NO personal/childhood,
+    #    NO related people/significant dates). Address stays a FLAT
+    #    per-component section (captain: block add is vCard/Personal only). ──
+    ('work', (
         ('Emails', (('email', None),)),
         ('Phone numbers', (
             ('phone', None),
@@ -247,97 +380,20 @@ _SCOPE_TEMPLATES: tuple[tuple[str, tuple[tuple[str, str | None], ...], ...], ...
             ('state', 'State/Province'),
             ('zip', 'Zip/Postal Code'),
             ('country', 'Country'),
+            ('po_box', 'PO Box'),
         )),
         ('Title', (('title', None),)),
         ('Company', (('company', None),)),
-        ('Website', (('website', None),)),
-        ('Birthday', (('birthday', None),)),
-        ('Note', (('note', None),)),
-    )),
-    # ── personal (NO professional — no title/company/website;
-    #    identity fields stay here)
-    #    Scoped types only (F3 fix: no base-type duplicates that share
-    #    the same visible label). Legacy types are stored as-is in the DB
-    #    but the picker only offers scoped names. ──
-    ('personal', (
-        ('Emails', (('email_personal', None),)),
-        ('Phone numbers', (
-            ('phone_personal', None),
-            ('text_number_personal', 'Text number'),
-            ('facetime_number_personal', 'FaceTime number'),
-        )),
-        ('Video apps', (
-            ('facetime', 'FaceTime'),
-            ('skype', 'Skype'),
-            ('video_app', 'Video app'),
-        )),
-        ('Messaging apps', (
-            ('messenger', 'Messenger'),
-            ('messaging_app', 'Messaging app'),
-        )),
-        ('Social', (
-            ('facebook_personal', 'Facebook'),
-            ('instagram_personal', 'Instagram'),
-            ('social_other_personal', 'Social'),
-        )),
-        ('Address', (
-            ('address1_personal', 'Address 1'),
-            ('address2_personal', 'Address 2'),
-            ('city_personal', 'City'),
-            ('state_personal', 'State/Province'),
-            ('zip_personal', 'Zip/Postal Code'),
-            ('country_personal', 'Country'),
-        )),
-        ('Birthday', (('birthday', None),)),
-        ('Note', (('note', None),)),
-        ('Personal history', (
-            ('high_school', 'High school'),
-            ('maiden_name', 'Maiden/Surname'),
-            ('nickname', 'Nickname'),
-        )),
-        ('Childhood home', (
-            ('childhood_address1', 'Childhood address'),
-            ('childhood_city', 'Childhood city'),
-            ('childhood_state', 'Childhood state'),
-        )),
-    )),
-    # ── work (professional only — NO birthday, NO personal/childhood)
-    #    Scoped types only (F3 fix: no base-type duplicates).
-    ('work', (
-        ('Emails', (('email_work', None),)),
-        ('Phone numbers', (
-            ('phone_work', None),
-            ('text_number_work', 'Text number'),
-            ('facetime_number_work', 'FaceTime number'),
-        )),
-        ('Video apps', (
-            ('facetime', 'FaceTime'),
-            ('skype', 'Skype'),
-            ('video_app', 'Video app'),
-        )),
-        ('Messaging apps', (
-            ('messenger', 'Messenger'),
-            ('messaging_app', 'Messaging app'),
-        )),
-        ('Social', (
-            ('facebook_work', 'Facebook'),
-            ('instagram_work', 'Instagram'),
-            ('social_other_work', 'Social'),
-        )),
-        ('Address', (
-            ('address1_work', 'Address 1'),
-            ('address2_work', 'Address 2'),
-            ('city_work', 'City'),
-            ('state_work', 'State/Province'),
-            ('zip_work', 'Zip/Postal Code'),
-            ('country_work', 'Country'),
-        )),
-        ('Title', (('title', None),)),
-        ('Company', (('company', None),)),
+        ('Department', (('department', None),)),
         ('Website', (('website', None),)),
         ('Note', (('note', None),)),
     )),
 )
+
+# UX pass 5: the block components (po_box is a standalone single row and
+# stays in the picker) — the editor's grouped-Address rendering iterates
+# these per block.
+_EDITOR_BLOCK_COMPONENTS = tuple(ADDRESS_BLOCK_TYPES)
 
 
 def editor_sections(scope: str) -> list[tuple[str, tuple[tuple[str, str | None], ...]]]:
@@ -352,6 +408,27 @@ def editor_sections(scope: str) -> list[tuple[str, tuple[tuple[str, str | None],
             return list(sections)
     # Fallback to legacy sections for unknown scopes.
     return list(CARD_EDITOR_SECTIONS)
+
+
+def picker_sections(scope: str) -> list[tuple[str, tuple[tuple[str, str | None], ...]]]:
+    """Sections for the editor's bottom 'Add field' picker.
+
+    UX pass 5: on block scopes (vcard/personal) the six address-block
+    components are hidden from the picker — they are added via the
+    Addresses section's own '+ Add address' control, never one at a
+    time. po_box (a standalone component, NOT part of the block) stays
+    listed. Work's flat Address section lists every component as before.
+    """
+    sections = editor_sections(scope)
+    if not address_blocks(scope):
+        return sections
+    out: list[tuple[str, tuple[tuple[str, str | None], ...]]] = []
+    for heading, fields in sections:
+        if heading == 'Addresses':
+            fields = tuple((t, sub) for t, sub in fields
+                           if t not in _EDITOR_BLOCK_COMPONENTS)
+        out.append((heading, fields))
+    return out
 
 
 def allowed_types(scope: str) -> list[str]:
@@ -428,6 +505,21 @@ def map_field_type_to_scope(field_type: str, scope: str) -> str:
     return field_type
 
 
+# UX pass 5: stored scoped type → family base (email_personal → email).
+# After the picker purge the editor groups card fields under BASE section
+# keys; scoped rows already on cards must land in those sections.
+SCOPED_TO_BASE: dict[str, str] = {
+    scoped: base
+    for base, (personal, work) in SCOPED_FAMILIES.items()
+    for scoped in (personal, work)
+}
+
+
+def scoped_to_base(field_type: str) -> str:
+    """Return the family-base type for a stored scoped type (identity otherwise)."""
+    return SCOPED_TO_BASE.get(field_type, field_type)
+
+
 # UX pass 4: extend multi-types with scoped address families.
 _CARD_EDITOR_MULTI_TYPES_BASE = ('email', 'phone', 'video_app', 'messaging_app', 'social_other',
                                  'high_school', 'maiden_name', 'nickname',
@@ -442,6 +534,7 @@ _CARD_EDITOR_MULTI_TYPES_SCOPED = tuple(
 )
 CARD_EDITOR_MULTI_TYPES = tuple(set(
     _CARD_EDITOR_MULTI_TYPES_BASE + _CARD_EDITOR_MULTI_TYPES_SCOPED
+    + ('related_person', 'event', 'custom_field')
 ))
 
 CARD_EDITOR_FIELD_LABELS = {
@@ -476,6 +569,14 @@ CARD_EDITOR_FIELD_LABELS = {
     'childhood_state': 'Childhood state',
     # UX pass 4: scoped type labels (base family label for scoped types)
     'middle_name': 'Middle name',
+    # UX pass 5: Google-parity additions
+    'department': 'Department',
+    'po_box': 'PO Box',
+    'related_person': 'Related person',
+    'event': 'Significant date',
+    'custom_field': 'Custom field',
+    'name_prefix': 'Name prefix',
+    'name_suffix': 'Name suffix',
     'email_personal': 'Email', 'email_work': 'Email',
     'phone_personal': 'Phone', 'phone_work': 'Phone',
     'text_number_personal': 'Text number', 'text_number_work': 'Text number',
@@ -3184,9 +3285,23 @@ def label_display(label: str | None) -> str:
     text = (label or "").strip()
     if not text:
         return ""
-    if text in PHONE_LABEL_CHOICES:
+    if text in PHONE_LABEL_CHOICES or text in EVENT_LABEL_CHOICES:
         return text.capitalize()
     return text
+
+
+# UX pass 5: ONE field-type → display-label table for every rendering
+# surface (card preview now; profile/contact templates can adopt it
+# incrementally). Scoped pass-4 variants fold to their family base via
+# scoped_to_base so they can never drift from the base label.
+_FIELD_TYPE_LABELS = dict(CARD_EDITOR_FIELD_LABELS)
+
+
+def field_label_display(field_type: str) -> str:
+    """Human label for a stored field type ('email_personal' → 'Email',
+    'state' → 'State/Province'). Unknown types render the raw type."""
+    base = scoped_to_base(field_type or "")
+    return _FIELD_TYPE_LABELS.get(base, base)
 
 
 def ensure_card_photo_column(conn: sqlite3.Connection) -> None:
@@ -3629,6 +3744,56 @@ def ensure_profile_fields_pass4_schema(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+# UX pass 5 (2026-09-24): Google-parity six-field types (department,
+# po_box, related_person, event, custom_field, name_prefix/suffix).
+# SQLite cannot ALTER a CHECK constraint → the same row-preserving
+# table-swap heal as v2/v3/pass-4, detected by the distinctive
+# 'department' literal in the table DDL.
+def ensure_profile_fields_pass5_schema(conn: sqlite3.Connection) -> None:
+    """Migrate profile_fields CHECK to include pass-5 types (idempotent).
+
+    Detect current DDL by ABSENCE of 'department' in sqlite_master sql.
+    Row-preserving table-swap: copy rows id-preserving with explicit
+    column list; drop old, rename.
+    """
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='profile_fields'"
+    ).fetchone()
+    if row is None or not row[0]:
+        return  # table absent — wl_init creates it fresh this boot
+    if "'department'" in row[0]:
+        return  # already pass-5
+
+    conn.execute("DROP TABLE IF EXISTS profile_fields_pass5")
+    conn.execute(f"""
+        CREATE TABLE profile_fields_pass5 (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            profile_id INTEGER NOT NULL,
+            field_type TEXT NOT NULL CHECK(field_type IN {CARD_EDITOR_FIELD_TYPES!r}),
+            field_value TEXT NOT NULL,
+            visibility TEXT NOT NULL CHECK(visibility IN {_VCARD_VISIBILITY!r}),
+            label TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(profile_id, field_type, field_value),
+            FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+        )
+    """)
+    conn.execute("PRAGMA foreign_keys=OFF")
+    conn.execute("""
+        INSERT INTO profile_fields_pass5
+            (id, profile_id, field_type, field_value,
+             visibility, label, created_at, updated_at)
+        SELECT id, profile_id, field_type, field_value,
+               visibility, label, created_at, updated_at
+        FROM profile_fields
+    """)
+    conn.execute("DROP TABLE profile_fields")
+    conn.execute("ALTER TABLE profile_fields_pass5 RENAME TO profile_fields")
+    conn.execute("PRAGMA foreign_keys=ON")
+    conn.commit()
+
+
 def is_open_stub(profile_dict: dict) -> bool:
     """Check if a profile is an 'open curated stub'.
 
@@ -3797,6 +3962,7 @@ def ensure_whitelist_schema(conn: sqlite3.Connection) -> None:
     ensure_profile_name_columns(conn)
     ensure_cards_scope_column(conn)
     ensure_profile_fields_pass4_schema(conn)
+    ensure_profile_fields_pass5_schema(conn)      # UX pass 5: six-field CHECK swap
     _backfill_card_scopes(conn)
     _consolidate_open_stubs(conn)
     seed_default_cards(conn)                    # P5: seed Work/Personal cards

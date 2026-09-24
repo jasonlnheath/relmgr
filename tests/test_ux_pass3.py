@@ -171,12 +171,12 @@ class TestCountryAndPhoneFormat:
     def test_country_slot_on_every_card_editor(self, tmp_path):
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
-        # Scoped types: personal uses country_personal, work uses country_work
-        scoped = {"Personal": "country_personal", "Work": "country_work"}
-        for name, scope_type in scoped.items():
+        # UX pass 5 purge: base type names on every scope (country renders
+        # inside the grouped block on personal).
+        for name in ("Personal", "Work"):
             html = client.get(
                 f"/owner/{_owner_token()}/cards/{_card_id(db, name)}/edit").text
-            assert f'name="new_{scope_type}_value"' in html, f"{name}: country slot"
+            assert 'name="new_country_value"' in html, f"{name}: country slot"
             assert "Country" in html
 
     def test_phone_format_helper(self, tmp_path):
@@ -263,11 +263,11 @@ class TestPersonalIdentityFields:
         # key, the route falls back to the same table)
         html = client.get(
             f"/owner/{_owner_token()}/cards/{_card_id(db, 'Personal')}/edit").text
-        # Personal scope: city/state are scoped (city_personal, state_personal)
+        # UX pass 5 purge: base type names again.
         public_types = [
             "high_school", "maiden_name", "nickname",
             "childhood_city", "childhood_state", "birthday",
-            "city_personal", "state_personal",
+            "city", "state",
         ]
         for t in public_types:
             m = re.search(
@@ -275,7 +275,7 @@ class TestPersonalIdentityFields:
                 html, re.DOTALL)
             assert m and m.group(1) == "public", f"{t} defaults public"
         # Street-level addresses default granted
-        granted_types = ["childhood_address1", "address1_personal", "zip_personal"]
+        granted_types = ["childhood_address1", "address1", "zip"]
         for t in granted_types:
             m = re.search(
                 r'name="new_' + t + r'_visibility".*?<option value="(\w+)" selected>',

@@ -32,7 +32,14 @@
     'childhood_address1': 'Childhood street address',
     'childhood_city': 'Childhood city',
     'childhood_state': 'Childhood state',
-    'middle_name': 'Middle name'
+    'middle_name': 'Middle name',
+    'department': 'Engineering',
+    'po_box': 'PO Box 123',
+    'related_person': 'Name (e.g. Tessa Test)',
+    'event': '',
+    'custom_field': 'Value',
+    'name_prefix': 'Mr, Dr, Prof.',
+    'name_suffix': 'Jr., III'
 } %}
 
 {# ---- macros ---- #}
@@ -53,16 +60,19 @@
 {% endmacro %}
 
 {# UX pass 2 defaults ruling: every field defaults to 'granted' except
-   title, company, and website which default 'public'. #}
-{% macro default_visibility(t) %}{% set _pd = public_default_types if public_default_types is defined and public_default_types else () %}{{ 'public' if t in _pd else 'granted' }}{% endmacro %}
+   title, company, and website which default 'public'. UX pass 5:
+   custom_field defaults PRIVATE (arbitrary content). #}
+{% macro default_visibility(t) %}{% set _pd = public_default_types if public_default_types is defined and public_default_types else () %}{% set _pr = private_default_types if private_default_types is defined and private_default_types else () %}{{ 'private' if t in _pr else ('public' if t in _pd else 'granted') }}{% endmacro %}
 
 {# Phone label support (UX pass 2/4): labels per card scope.
-   vcard: mobile/home/work; personal: mobile/home; work: mobile/work. #}
-{% macro phone_label_select(name, current='', choices=()) %}
+   vcard: mobile/home/work; personal: mobile/home; work: mobile/work.
+   UX pass 5: general-purpose label select for other labeled types
+   (significant dates: anniversary/other). #}
+{% macro phone_label_select(name, current='', choices=(), title='Label this phone number') %}
 {% set is_custom = current and current not in choices and current != '__custom' %}
 <select name="{{ name }}"
         class="wl-select text-xs border border-gray-600 rounded px-1 py-1 phone-label-select"
-        title="Label this phone number">
+        title="{{ title }}">
     <option value="" {% if not current %}selected{% endif %}>Label…</option>
     {% for c in choices %}
     <option value="{{ c }}" {% if current == c %}selected{% endif %}>{{ c|capitalize }}</option>
@@ -87,9 +97,29 @@
 {% elif t == 'birthday' %}
 <input type="date" name="{{ name }}" value="{{ value }}"
        class="w-full border border-gray-600 rounded-lg px-3 py-2 text-sm bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
+{% elif t == 'event' %}
+<input type="date" name="{{ name }}" value="{{ value }}"
+       class="w-full border border-gray-600 rounded-lg px-3 py-2 text-sm bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
 {% else %}
 <input type="text" name="{{ name }}" value="{{ value }}" placeholder="{{ placeholder }}"
        class="w-full border border-gray-600 rounded-lg px-3 py-2 text-sm bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
+{% endif %}
+{% endmacro %}
+
+{# Per-type label editor (UX pass 5): phones keep the scoped label
+   select; significant dates get anniversary/other; related people and
+   custom fields get a free-text name (role / field name). #}
+{% macro label_editor(t, name, current='') %}
+{% if t in ('phone', 'text_number', 'facetime_number', 'phone_personal', 'phone_work', 'text_number_personal', 'text_number_work', 'facetime_number_personal', 'facetime_number_work') %}
+{{ phone_label_select(name, current, label_choices) }}
+{% elif t == 'event' %}
+{{ phone_label_select(name, current, event_label_choices, title='Label this date') }}
+{% elif t == 'related_person' %}
+<input type="text" name="{{ name }}" value="{{ current }}" placeholder="Role (e.g. Assistant)" maxlength="30"
+       class="w-28 border border-gray-600 rounded px-2 py-1 text-xs bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
+{% elif t == 'custom_field' %}
+<input type="text" name="{{ name }}" value="{{ current }}" placeholder="Field name" maxlength="30"
+       class="w-28 border border-gray-600 rounded px-2 py-1 text-xs bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
 {% endif %}
 {% endmacro %}
 
@@ -106,9 +136,7 @@
         {{ field_input('field_' ~ f.id ~ '_value', t, f.field_value, placeholders[t]) }}
     </div>
     <div class="flex items-center gap-2 flex-shrink-0 flex-wrap">
-        {% if t in ('phone', 'text_number', 'facetime_number', 'phone_personal', 'phone_work', 'text_number_personal', 'text_number_work', 'facetime_number_personal', 'facetime_number_work') %}
-        {{ phone_label_select('field_' ~ f.id ~ '_label', f.label or '', label_choices) }}
-        {% endif %}
+        {{ label_editor(t, 'field_' ~ f.id ~ '_label', f.label or '') }}
         {{ vis_select('field_' ~ f.id ~ '_visibility', f.visibility) }}
         {# Pairing-review F1 (2026-09-22): this button lives INSIDE the main
            editor form — a nested <form> is invalid HTML. The
@@ -135,9 +163,7 @@
         {{ field_input('new_' ~ t ~ '_value', t, '', placeholders[t]) }}
     </div>
     <div class="flex items-center gap-2 flex-shrink-0 flex-wrap">
-        {% if t in ('phone', 'text_number', 'facetime_number', 'phone_personal', 'phone_work', 'text_number_personal', 'text_number_work', 'facetime_number_personal', 'facetime_number_work') %}
-        {{ phone_label_select('new_' ~ t ~ '_label', '', label_choices) }}
-        {% endif %}
+        {{ label_editor(t, 'new_' ~ t ~ '_label') }}
         {{ vis_select('new_' ~ t ~ '_visibility', default_visibility(t)) }}
     </div>
 </div>
@@ -277,6 +303,60 @@
             {% for heading, types in sections %}
             <div class="mb-4 pb-4" data-section="{{ heading }}" style="border-bottom: 1px solid var(--wl-glass-border);">
                 <label class="block text-sm font-medium wl-text-sub mb-2">{{ heading }}</label>
+                {% if address_block and heading == 'Addresses' %}
+                {# UX pass 5: ADDRESSES AS BLOCKS (vcard + personal).
+                   The k-th of each component is block k; one '+ Add
+                   address' control appends a complete six-input block.
+                   po_box is a standalone component (report §6: never
+                   folded into address2, not part of the block). #}
+                {% set bt = [] %}
+                {% set pb = [] %}
+                {% for t, sub in types %}
+                    {% if t in address_block_types %}{% set _ = bt.append((t, sub)) %}{% endif %}
+                    {% if t == 'po_box' %}{% set _ = pb.append((t, sub)) %}{% endif %}
+                {% endfor %}
+                {% set nb = namespace(n=1) %}
+                {% for t, sub in bt %}
+                    {% if by_type[t]|length > nb.n %}{% set nb.n = by_type[t]|length %}{% endif %}
+                {% endfor %}
+                <div data-address-blocks class="space-y-3 mb-3">
+                    {% for k in range(nb.n) %}
+                    <div class="rounded-lg border p-3" style="border-color: var(--wl-glass-border);">
+                        <p class="text-xs wl-text-faint uppercase tracking-wide mb-2">Address {{ k + 1 }}</p>
+                        {% for t, sub in bt %}
+                            {% if by_type[t]|length > k %}
+                            {{ field_row(t, sub, by_type[t][k]) }}
+                            {% else %}
+                            {{ empty_row(t, sub) }}
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                    {% endfor %}
+                </div>
+                <template data-newblock>
+                    <div class="rounded-lg border p-3" style="border-color: var(--wl-glass-border);">
+                        <p class="text-xs wl-text-faint uppercase tracking-wide mb-2">Address</p>
+                        {% for t, sub in bt %}
+                        {{ empty_row(t, sub) }}
+                        {% endfor %}
+                    </div>
+                </template>
+                <button type="button" class="wl-btn-ink px-2 py-1 rounded text-xs mt-1"
+                        onclick="addAddressBlock()">+ Add address</button>
+                {# po_box standalone row #}
+                {% for t, sub in pb %}
+                <div data-type="po_box" class="mt-3">
+                    <div class="rows">
+                        {% for f in by_type['po_box'] %}
+                        {{ field_row(t, sub, f) }}
+                        {% endfor %}
+                        {% if not by_type['po_box'] %}
+                        {{ empty_row(t, sub) }}
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+                {% else %}
                 {% for t, sublabel in types %}
                 <div data-type="{{ t }}" class="mb-3">
                     <div class="rows">
@@ -300,6 +380,7 @@
                     {% endif %}
                 </div>
                 {% endfor %}
+                {% endif %}
             </div>
             {% endfor %}
 
@@ -309,7 +390,7 @@
                 <select id="add-field-picker"
                         class="wl-select w-full border border-gray-600 rounded-lg px-3 py-2 text-sm bg-slate-900 wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
                     <option value="">— Select a field type —</option>
-                    {% for heading, types in sections %}
+                    {% for heading, types in picker_sections %}
                     <optgroup label="{{ heading }}">
                         {% for t, sublabel in types %}
                         <option value="{{ t }}">{{ labels[t] }}{% if sublabel %} — {{ sublabel }}{% endif %}</option>
@@ -366,6 +447,25 @@ function addFieldRow(type) {
     const section = tpl.closest('[data-type]');
     const rows = section.querySelector('.rows');
     rows.appendChild(tpl.content.cloneNode(true));
+}
+
+// ---- Address blocks (UX pass 5): '+ Add address' appends a complete
+// six-input block (address1/address2/city/state/zip/country) so
+// addresses are added and grouped BY BLOCK, never by line. ----
+function addAddressBlock() {
+    const tpl = document.querySelector('template[data-newblock]');
+    const container = document.querySelector('[data-address-blocks]');
+    if (!tpl || !container) return;
+    container.appendChild(tpl.content.cloneNode(true));
+    const blocks = container.children;
+    const last = blocks[blocks.length - 1];
+    [...blocks].forEach((b, i) => {
+        const lbl = b.querySelector('p');
+        if (lbl) lbl.textContent = 'Address ' + (i + 1);
+    });
+    last.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const inp = last.querySelector('input[type="text"], input[type="date"]');
+    if (inp) inp.focus();
 }
 
 // ---- Field picker (UX pass 4): select a type, append starter row ----

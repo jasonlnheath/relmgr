@@ -135,24 +135,25 @@ class TestEditorRendersAllFieldTypes:
             "SELECT name FROM cards WHERE id = ?", (card_id,)).fetchone()[0]
         conn.close()
         if card_name.lower() == "personal":
-            # Personal: scoped types + legacy for shared categories
-            # Work-only types (title/company/website) are absent from Personal.
+            # UX pass 5 PICKER PURGE: personal picks from BASE type names
+            # again. Work-only types (title/company/website) are absent;
+            # address components render grouped in blocks (no per-type
+            # wrappers on personal).
             for t in FIELD_TYPES:
                 if t in ("title", "company", "website"):
                     assert f'data-type="{t}"' not in resp.text, \
                         f"work-only type '{t}' should not appear on Personal"
+                elif t in ("address1", "address2", "city", "state", "zip", "country"):
+                    assert 'data-address-blocks' in resp.text, \
+                        f"address component '{t}' must render in the block section"
                 else:
-                    scoped = t + "_personal"
-                    assert (f'data-type="{t}"' in resp.text or
-                            f'data-type="{scoped}"' in resp.text), \
-                        f"editor section for '{t}' or '{scoped}' missing from Personal"
+                    assert f'data-type="{t}"' in resp.text, \
+                        f"editor section for '{t}' missing from Personal"
         else:
-            # Work card: scoped types + legacy for shared categories
+            # Work card: base types (UX pass 5 purge); flat address section.
             for t in FIELD_TYPES:
-                scoped = t + "_work"
-                assert (f'data-type="{t}"' in resp.text or
-                        f'data-type="{scoped}"' in resp.text), \
-                    f"editor section for '{t}' or '{scoped}' missing"
+                assert f'data-type="{t}"' in resp.text, \
+                    f"editor section for '{t}' missing"
         for t in RETIRED_TYPES:
             assert f'data-type="{t}"' not in resp.text, \
                 f"retired type '{t}' still has its own editor section"
@@ -171,9 +172,10 @@ class TestEditorRendersAllFieldTypes:
         assert "Phone numbers" in html
         assert "Text number" in html
         assert "FaceTime number" in html
-        # …dedicated always-visible slots for both (scoped types for personal)...
-        assert 'name="new_text_number_personal_value"' in html
-        assert 'name="new_facetime_number_personal_value"' in html
+        # …dedicated always-visible slots for both (UX pass 5 purge:
+        # base type names again)...
+        assert 'name="new_text_number_value"' in html
+        assert 'name="new_facetime_number_value"' in html
         # …and each field row carries an immediate ✕ delete button
         # (UX pass 2026-09-22: the old remove-checkbox pile-up is gone —
         # the ✕ POSTs the field's delete right away).
@@ -189,16 +191,17 @@ class TestEditorRendersAllFieldTypes:
         client = TestClient(create_app(db))
         card_id = _first_card_id(db)
         html = client.get(f"/owner/{_owner_token()}/cards/{card_id}/edit").text
-        # Named slots + section headings.
-        for heading in ("Video apps", "Messaging apps", "Social", "Address"):
+        # Named slots + section headings (UX pass 5: 'Addresses' renders
+        # as grouped blocks on the personal card).
+        for heading in ("Video apps", "Messaging apps", "Social", "Addresses"):
             assert heading in html, f"section '{heading}' missing"
-        # Personal scope uses scoped types for social/phone/video fields.
+        # UX pass 5 purge: base type names everywhere.
         scoped_slots = {
-            'facetime': 'facetime',  # not scoped
-            'skype': 'skype',  # not scoped
-            'messenger': 'messenger',  # not scoped
-            'facebook': 'facebook_personal',
-            'instagram': 'instagram_personal',
+            'facetime': 'facetime',
+            'skype': 'skype',
+            'messenger': 'messenger',
+            'facebook': 'facebook',
+            'instagram': 'instagram',
         }
         for slot, scoped in scoped_slots.items():
             assert f'name="new_{scoped}_value"' in html, f"named slot '{slot}' missing"
@@ -878,5 +881,5 @@ class TestLegacyAddressMigration:
         html = client.get(f"/owner/{_owner_token()}/cards/1/edit").text
         assert 'value="123 Old Rd, Denver, CO 80014"' in html, \
             "migrated value missing from the editor"
-        assert 'data-type="address1"' in html, \
-            "migrated field must live in the address1 slot"
+        assert 'data-address-blocks' in html, \
+            "migrated field must live in the grouped address block (pass 5)"
