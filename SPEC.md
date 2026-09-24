@@ -127,7 +127,7 @@ Three access states surface in the UI, each with its own badge color and icon:
 NEVER expire.** A state change is the user's choice, made during the
 quarterly review period (or any time via the badge cycle). The quarterly
 review exists to update/confirm contact information, populate missing
-fields, and review grey/black contacts — NEVER to delete them unless the
+fields, and review GreyList/BlackList contacts — NEVER to delete them unless the
 user insists. No surface may tell the owner that a contact 'expires'.
 
 The three states map to database statuses:
@@ -138,10 +138,10 @@ The three states map to database statuses:
 
 ### Time-Bound Access
 
-**Superseded by the UX pass 2 semantics ruling (2026-09-22): grey and black
+**Superseded by the UX pass 2 semantics ruling (2026-09-22): GreyList and BlackList
 contacts never expire — state changes are the user's choice made during the
 quarterly review period.** The quarterly review exists to update/confirm
-contact information, populate missing fields, and review grey/black
+contact information, populate missing fields, and review GreyList/BlackList
 contacts — never to delete them unless the user insists. The historical
 three-duration model is retained below for the audit trail vocabulary:
 
@@ -177,7 +177,7 @@ three-duration model is retained below for the audit trail vocabulary:
 **GreyList state** is derived: a grant is GreyList when `status='granted'`
 and `expires_at` carries any real timestamp (marker lapsed OR still in the
 future — UX pass 3 bug fix, 2026-09-23: the contact card previously rendered
-a badge-moved grey contact as WhiteList until the marker lapsed, while the
+a badge-moved GreyList contact as WhiteList until the marker lapsed, while the
 contact list already showed GreyList; both now agree). The `quarter_status`
 column tracks the review cycle:
 
@@ -190,7 +190,7 @@ column tracks the review cycle:
 
 **Quarterly review email** uses the existing `notify.py` infrastructure (`build_quarterly_review()`). It groups GreyList contacts by owner, shows review status per contact, and links to the owner dashboard. No new external services or queues — the digest is built via `build_quarterly_review()`; sending machinery (SMTP/Gmail) is future work.
 
-**Grey contacts become prompt-eligible at each quarterly boundary** for their owner. No age minimums, no countdown display, no auto-expiry. The quarterly email is the sole decision mechanism.
+**GreyList contacts become prompt-eligible at each quarterly boundary** for their owner. No age minimums, no countdown display, no auto-expiry. The quarterly email is the sole decision mechanism.
 
 *The revocation path preserves audit rows (append-only). `last_reviewed_at` stamps when the owner last made a decision on a GreyList contact.*
 
@@ -257,16 +257,16 @@ The following rulings were established during development and are preserved as b
 | Field visibility defaults | **All fields default 'granted'; title, company, website, and bio default 'public'** (UX pass 2, 2026-09-22) — **backfilled onto all existing data** (F3, 2026-09-23; explicitly-private rows exempt, one-time heal). **Extended UX pass 3 (2026-09-23):** birthday, the personal-identity types (high school, maiden name, nickname), and city/state-level address parts (city, state, childhood city/state) also default **public**; street-level addresses (address1, address2, zip, childhood street) default **granted**. Defaults apply to NEW fields — existing rows are never re-flipped (the F3 heal ran once). |
 | Share links are public-facing | **Share links ALWAYS deliver the PUBLIC-facing page** (F4 ruling change, 2026-09-23) — no granted-tier links; the owner preview shows exactly that public reality; recipients who want more use the Connect request flow, and the owner grants from there. **Sharing ALWAYS includes the bio** (UX pass 3, 2026-09-23) — the bio renders on /s/ links even when the bio_visibility dropdown is private. |
 | Profile QR removed | The public profile shows ONE Connect button instead of a QR; the owner is notified in-app/email when a stranger connects (UX pass 2, 2026-09-22). |
-| Grey/black never expire | Quarterly review confirms/updates contact info and reviews grey/black contacts; it never deletes them (UX pass 2, 2026-09-22). |
+| GreyList/BlackList never expire | Quarterly review confirms/updates contact info and reviews GreyList/BlackList contacts; it never deletes them (UX pass 2, 2026-09-22). |
 | Default cards: Personal + Work | **Every profile defaults with exactly two cards — 'Personal' and 'Work', ALWAYS created (even empty)** (UX pass 3, 2026-09-23). Personal is the TOP card: it carries the default public picture and leads every surface (public profile, share sets, contact detail). Legacy default names (Identity, Contact, Location, Details, Social) are no longer seeded but still get their cascade-orphan heal. |
 | Default picture governance | ONE public default picture — the top (Personal) card's. Sharing personal only → personal picture; work only → work picture; multiple cards → personal takes precedence (UX pass 3, 2026-09-23). |
 | Unified sharing | **The 'Share your card' chooser page is ELIMINATED** (UX pass 3, 2026-09-23): My Profile shows the QR (profile link) between the name and the Share button; Share fires the NATIVE share popup (copy link / email / SMS as standard fallbacks; messenger/signal/telegram later). No card-choosing at share time — the access-grant decision lands after a contact requests access. Legacy /s/{bundle_id} links keep rendering. |
 | Phone display format | **+1(XXX)XXX-XXXX everywhere** (UX pass 3, 2026-09-23) — display-time only (`format_phone_display`); stored values are never rewritten; non-US numbers render unchanged. |
 | Personal identity fields | High School, Maiden Name, Nickname, Childhood Home Address — personal-card fields for friend-finding, MULTIPLES allowed, default PUBLIC (addresses only at city/state level; street-level defaults granted). Birthday defaults public on personal cards. A HIGH-SCHOOL picture rides on personal cards — default and HS pictures both default public (UX pass 3, 2026-09-23). |
 | Search breadth | Contact-list search matches ALL public-facing and granted fields EXCEPT bios — name, email, titles, phones, addresses (UX pass 3, 2026-09-23). |
-| Filter tabs | Picture-based round tabs under the search bar: the Personal card's picture, each Work card's picture, and the white/grey/black list badges — MULTI-SELECT combinable (card group OR, state group OR, groups AND). Rows sort card type alphabetical, then white/grey/black (UX pass 3, 2026-09-23). |
-| Requests live in the list | Access requests land at the TOP of the whitelist in an AMBER box below the search bar (UX pass 3, 2026-09-23). The notifications PAGE is eliminated (see below). |
-| Notifications page eliminated | Investigation ruled the page redundant (UX pass 3, 2026-09-23): requests/forwards live in the amber box, the quarterly review is the quarterly email plus the grey rows in the list, and expired-link pings belonged to the retired share chooser. The notifications TABLE + data layer remain (append-only event record; the email push's source of truth); the page, routes, and header button are gone. |
+| Filter tabs | Picture-based round tabs under the search bar: the Personal card's picture, each Work card's picture, and the WhiteList/GreyList/BlackList badges — MULTI-SELECT combinable (card group OR, state group OR, groups AND). Rows sort card type alphabetical, then WhiteList/GreyList/BlackList (UX pass 3, 2026-09-23). |
+| Requests live in the list | Access requests land at the TOP of the WhiteList in an AMBER box below the search bar (UX pass 3, 2026-09-23). The notifications PAGE is eliminated (see below). |
+| Notifications page eliminated | Investigation ruled the page redundant (UX pass 3, 2026-09-23): requests/forwards live in the amber box, the quarterly review is the quarterly email plus the GreyList rows in the list, and expired-link pings belonged to the retired share chooser. The notifications TABLE + data layer remain (append-only event record; the email push's source of truth); the page, routes, and header button are gone. |
 
 | Seed default cards cover all owners | **UX pass 3 (2026-09-23): the default pair is Personal + Work for every profile, always created (even empty); Personal first (top card / default picture).** Legacy names heal-only. |
 
@@ -288,7 +288,7 @@ The following rulings were established during development and are preserved as b
 | Phase | Component | Status | Files |
 |---|---|---|---|
 | **P1** | Schema, seed, QR, tiered cards, tokens, request→approve loop, verify loop | ✅ Done | `whitelist_db.py`, `wl_tokens.py`, `wl_env.py`, `app.py`, `scripts/seed_demo.py`, `scripts/notify.py`, 6 templates, 8 test files |
-| **P2** | Owner dashboard (approve list), aliases, UI polish | ✅ Done | Extended `app.py`, `templates/owner_dashboard.html`, `templates/contacts.html`, `test_owner_dashboard.py`, `test_aliases.py` |
+| **P2** | Owner dashboard (approve list), aliases, UI polish | ✅ Done | Extended `app.py`, `templates/contacts.html`, `test_owner_dashboard.py`, `test_aliases.py` |
 | **P3** | Revocation, audit logs, context registry, scan analytics | ✅ Done | Extended `whitelist_db.py`, `test_p3_revocation.py`, `test_p3_logs.py`, `test_p3_contexts.py`, `test_p3_scans.py` |
 | **Refactor** | Shared helpers, orchestrator, staleness extraction | ✅ Done | `whitelist_db.py` (R1–R4), `app.py` (`is_verified_stale`), `test_p3_refactor.py` |
 | **P4** | Category bulk operations, context routes | ✅ Done | Extended `app.py`, `test_p4_categories_bulk.py` |
@@ -420,7 +420,7 @@ This cycle repeats: Jemma writes the next handoff → QWEN36 implements → Jemm
 | `scripts/merge_and_dedup.py` | ⚠️ DANGEROUS: `DROP TABLE contacts` — never run |
 
 ### Templates (12 files)
-`base.html`, `profile.html`, `request_form.html`, `request_success.html`, `admin_review.html`, `admin_decision.html`, `verify_success.html`, `owner_dashboard.html`, `contacts.html`, `contact_list.html`, `junk.html`, `my_profile.html`, `card_preview.html`
+`base.html`, `profile.html`, `request_form.html`, `request_success.html`, `admin_review.html`, `admin_decision.html`, `verify_success.html`, `contacts.html`, `contact_list.html`, `junk.html`, `my_profile.html`, `card_preview.html`
 
 ### Test Files (36 files)
 `test_normalizer.py`, `test_whitelist_schema.py`, `test_seed.py`, `test_seed_demo.py`, `test_tiers.py`, `test_tokens.py`, `test_request_flow.py`, `test_verify.py`, `test_refactor_fixes.py`, `test_owner_dashboard.py`, `test_aliases.py`, `test_p3_*.py` (5 files), `test_p4_categories_bulk.py`, `test_p5_*.py` (7 files), `test_q36_audit.py`, `test_jemma_review.py`, `test_q38_review_fixes.py`, `test_contact_list.py`, `test_context_removed.py`, `test_my_profile.py`, `test_owner_self_view.py`, `test_public_cards.py`, `test_tabs.py`, `test_review_tabs_fixes.py`

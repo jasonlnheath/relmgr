@@ -159,9 +159,15 @@
             <div class="flex items-center gap-3">
                 {# Picture / avatar #}
                 {% if row.logo_state == 'fresh' %}
-                <svg class="w-10 h-10 rounded-full flex-shrink-0" style="background: var(--wl-btn-slate);" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L3 7v5c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z"/></svg>
+                <span class="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center overflow-hidden"
+                      style="background: var(--wl-badge-white); border: 1px solid var(--wl-glass-edge);">
+                    <img src="/static/badge-whitelist.png" alt="" aria-hidden="true" class="w-6 h-6 object-contain">
+                </span>
                 {% elif row.logo_state == 'stale' %}
-                <svg class="w-10 h-10 rounded-full flex-shrink-0" style="background: var(--wl-charcoal-deep);" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L3 7v5c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z"/></svg>
+                <span class="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center overflow-hidden"
+                      style="background: var(--wl-badge-grey); border: 1px solid var(--wl-glass-edge);">
+                    <img src="/static/badge-greylist.png" alt="" aria-hidden="true" class="w-6 h-6 object-contain">
+                </span>
                 {% else %}
                 <div class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
                      style="background: var(--wl-btn-slate);">

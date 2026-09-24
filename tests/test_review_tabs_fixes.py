@@ -183,7 +183,7 @@ class TestLogoLiveOnly:
         conn.close()
         client = TestClient(create_app(db))
         html = client.get(f"/owner/{_owner_token()}").text
-        assert "<svg" in html, "live grant must render its logo"
+        assert "badge-whitelist.png" in html, "live grant must render its logo"
 
     def test_revoked_row_stays_visible(self, tmp_path):
         """A revoked (non-merged) requester row must stay rendered, not vanish."""
