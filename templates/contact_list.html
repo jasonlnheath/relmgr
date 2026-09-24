@@ -51,12 +51,23 @@
 
     {# Search bar + round + button (UX pass 2): the + searches the database
        for 'new connections' and, on no hits, offers to create a standard
-       vCard. Hidden letter field keeps the rail filter through searches. #}
-    <form method="GET" action="/owner/{{ token }}" class="mb-4 flex items-center gap-2">
+       vCard. Hidden letter field keeps the rail filter through searches.
+       UX pass 5: LIVE filtering — every keystroke re-renders the list
+       region below (no Enter required), and an ✕ at the right of the bar
+       clears the query. Tab order is input → ✕ → + (native DOM order);
+       shift-tab walks back. #}
+    <form method="GET" action="/owner/{{ token }}" id="search-form" class="mb-4 flex items-center gap-2">
         {% if letter %}<input type="hidden" name="letter" value="{{ letter }}">{% endif %}
-        <input type="text" name="q" value="{{ q or '' }}"
-               placeholder="Search WhiteList"
-               class="flex-1 min-w-0 px-3 py-2 border border-gray-600 rounded-lg text-sm bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
+        <div class="relative flex-1 min-w-0">
+            <input type="text" name="q" value="{{ q or '' }}"
+                   placeholder="Search WhiteList"
+                   autocomplete="off"
+                   class="w-full pr-9 px-3 py-2 border border-gray-600 rounded-lg text-sm bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
+            <button type="button" id="search-clear"
+                    title="Clear search"
+                    aria-label="Clear search"
+                    class="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full wl-btn-ink text-xs leading-none items-center justify-center {% if not q %}hidden{% endif %} inline-flex">✕</button>
+        </div>
         <a href="/owner/{{ token }}/new-connection{% if q %}?q={{ q | urlencode }}{% endif %}"
            id="new-connection-link"
            title="Add a new connection"
@@ -107,6 +118,12 @@
         </div>
     </div>
     {% endif %}
+
+    {# UX pass 5: everything below the request box that DEPENDS on the
+       search query — filter tabs, rows, letter rail, empty state,
+       pagination — lives in ONE region the live filter swaps per
+       keystroke. #}
+    <div id="list-region">
 
     {# ============================================================
        FILTER TABS (UX pass 3): picture-based round icons below the
@@ -305,7 +322,13 @@
     </div>
     {% else %}
     <div class="text-center py-8">
+        {% if q %}
+        {# UX pass 5: a live search that matches nothing says so — the
+           'no entries yet' copy is only for a genuinely empty list. #}
+        <p class="wl-text-faint text-sm">No matches for “{{ q }}”</p>
+        {% else %}
         <p class="wl-text-faint text-sm">No WhiteList entries yet</p>
+        {% endif %}
     </div>
     {% endif %}
 
@@ -328,6 +351,8 @@
     </div>
     {% endif %}
 
+    </div>{# /list-region #}
+
     {# Footer: junk link #}
     {% if denied_count > 0 %}
     <div class="mt-4 pt-4" style="border-top: 1px solid var(--wl-glass-border);">
@@ -339,20 +364,83 @@
 </div>
 
 <script>
-// UX pass 2 F6: the + button must carry a typed-but-unsubmitted query —
-// clicking + without pressing Enter still lands on the DB search.
+// UX pass 5: LIVE search — every keystroke fetches this page with the
+// typed query and swaps ONLY the #list-region (filter tabs, rows, letter
+// rail, empty state, pagination). No Enter required; focus and the caret
+// stay in the input; replaceState keeps one history entry per visit. The
+// ✕ at the right of the bar clears the query (and refocuses the input);
+// Tab walks input → ✕ → + (native DOM order), shift-tab walks back.
+// The GET form stays as the no-JS fallback: Enter still submits it.
 (function () {
-    const input = document.querySelector('form input[name="q"]');
+    const form = document.getElementById('search-form');
+    const input = form ? form.querySelector('input[name="q"]') : null;
+    const clearBtn = document.getElementById('search-clear');
+    const region = document.getElementById('list-region');
     const plus = document.getElementById('new-connection-link');
-    if (!input || !plus) return;
-    function sync() {
+    if (!input) return;
+
+    let seq = 0;          // keystroke race guard — only the latest render lands
+    let timer = null;
+
+    function buildUrl(q) {
+        const params = new URLSearchParams(window.location.search);
+        if (q) { params.set('q', q); } else { params.delete('q'); }
+        params.delete('page');   // a new query starts at the first page
+        const qs = params.toString();
+        return window.location.pathname + (qs ? '?' + qs : '');
+    }
+
+    function syncPlus() {
+        if (!plus) return;
         const base = plus.href.split('?')[0];
         plus.href = input.value.trim()
             ? base + '?q=' + encodeURIComponent(input.value.trim())
             : base;
     }
-    input.addEventListener('input', sync);
-    sync();
+
+    function syncClear() {
+        if (clearBtn) clearBtn.classList.toggle('hidden', !input.value);
+    }
+
+    async function refresh(q) {
+        if (!region) return;
+        const mine = ++seq;
+        try {
+            const res = await fetch(buildUrl(q), {
+                headers: { 'X-Requested-With': 'fetch' }
+            });
+            const html = await res.text();
+            const doc = new DOMParser().parseFromString(html, 'text/html');
+            const fresh = doc.getElementById('list-region');
+            if (fresh && mine === seq) {
+                region.innerHTML = fresh.innerHTML;
+                history.replaceState(null, '', buildUrl(q));
+            }
+        } catch (e) {
+            // Network hiccup — keep the current rows; Enter still submits.
+        }
+    }
+
+    input.addEventListener('input', function () {
+        syncPlus();
+        syncClear();
+        clearTimeout(timer);
+        timer = setTimeout(function () { refresh(input.value.trim()); }, 180);
+    });
+
+    if (clearBtn) {
+        clearBtn.addEventListener('click', function () {
+            input.value = '';
+            syncPlus();
+            syncClear();
+            input.focus();
+            clearTimeout(timer);
+            refresh('');
+        });
+    }
+
+    syncPlus();
+    syncClear();
 })();
 </script>
 {% endblock %}
