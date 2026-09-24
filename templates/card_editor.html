@@ -39,11 +39,8 @@
 {# UX pass 3 defaults ruling (2026-09-23): identity/friend-finding fields
    default PUBLIC — title, company, website, birthday, personal history
    (high school / maiden name / nickname) and city/state-level address
-   parts. Street-level addresses default 'granted' like everything else. #}
-{% set public_default_types = ['title', 'company', 'website', 'birthday',
-                               'high_school', 'maiden_name', 'nickname',
-                               'city', 'state',
-                               'childhood_city', 'childhood_state'] %}
+   parts. Street-level addresses default 'granted' like everything else.
+   Controlled via app.py's public_default_types passed to render(). #}
 
 {% macro vis_select(name, current='') %}
 <select name="{{ name }}"
@@ -57,7 +54,7 @@
 
 {# UX pass 2 defaults ruling: every field defaults to 'granted' except
    title, company, and website which default 'public'. #}
-{% macro default_visibility(t) %}{{ 'public' if t in public_default_types else 'granted' }}{% endmacro %}
+{% macro default_visibility(t) %}{% set _pd = public_default_types if public_default_types is defined and public_default_types else () %}{{ 'public' if t in _pd else 'granted' }}{% endmacro %}
 
 {# Phone label support (UX pass 2/4): labels per card scope.
    vcard: mobile/home/work; personal: mobile/home; work: mobile/work. #}
@@ -109,7 +106,7 @@
         {{ field_input('field_' ~ f.id ~ '_value', t, f.field_value, placeholders[t]) }}
     </div>
     <div class="flex items-center gap-2 flex-shrink-0 flex-wrap">
-        {% if t in ('phone', 'text_number', 'facetime_number') %}
+        {% if t in ('phone', 'text_number', 'facetime_number') or t.endswith('_personal') or t.endswith('_work') %}
         {{ phone_label_select('field_' ~ f.id ~ '_label', f.label or '', label_choices) }}
         {% endif %}
         {{ vis_select('field_' ~ f.id ~ '_visibility', f.visibility) }}
@@ -138,7 +135,7 @@
         {{ field_input('new_' ~ t ~ '_value', t, '', placeholders[t]) }}
     </div>
     <div class="flex items-center gap-2 flex-shrink-0 flex-wrap">
-        {% if t in ('phone', 'text_number', 'facetime_number') %}
+        {% if t in ('phone', 'text_number', 'facetime_number') or t.endswith('_personal') or t.endswith('_work') %}
         {{ phone_label_select('new_' ~ t ~ '_label', '', label_choices) }}
         {% endif %}
         {{ vis_select('new_' ~ t ~ '_visibility', default_visibility(t)) }}

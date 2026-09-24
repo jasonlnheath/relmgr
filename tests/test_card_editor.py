@@ -171,9 +171,9 @@ class TestEditorRendersAllFieldTypes:
         assert "Phone numbers" in html
         assert "Text number" in html
         assert "FaceTime number" in html
-        # …dedicated always-visible slots for both…
-        assert 'name="new_text_number_value"' in html
-        assert 'name="new_facetime_number_value"' in html
+        # …dedicated always-visible slots for both (scoped types for personal)...
+        assert 'name="new_text_number_personal_value"' in html
+        assert 'name="new_facetime_number_personal_value"' in html
         # …and each field row carries an immediate ✕ delete button
         # (UX pass 2026-09-22: the old remove-checkbox pile-up is gone —
         # the ✕ POSTs the field's delete right away).
@@ -192,8 +192,16 @@ class TestEditorRendersAllFieldTypes:
         # Named slots + section headings.
         for heading in ("Video apps", "Messaging apps", "Social", "Address"):
             assert heading in html, f"section '{heading}' missing"
-        for slot in ("facetime", "skype", "messenger", "facebook", "instagram"):
-            assert f'name="new_{slot}_value"' in html, f"named slot '{slot}' missing"
+        # Personal scope uses scoped types for social/phone/video fields.
+        scoped_slots = {
+            'facetime': 'facetime',  # not scoped
+            'skype': 'skype',  # not scoped
+            'messenger': 'messenger',  # not scoped
+            'facebook': 'facebook_personal',
+            'instagram': 'instagram_personal',
+        }
+        for slot, scoped in scoped_slots.items():
+            assert f'name="new_{scoped}_value"' in html, f"named slot '{slot}' missing"
         # + Add affordances (generic types cover all other apps/platforms).
         for add in ("+ Add video app", "+ Add messaging app", "+ Add social",
                     "+ Add phone", "+ Add email"):

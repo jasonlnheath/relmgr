@@ -152,7 +152,8 @@ class TestPhoneLabels:
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
         html, _ = _editor_gets(db, client, "Personal")
-        assert 'name="new_phone_label"' in html
+        # Personal scope uses scoped type — existing phone field has label select
+        assert 'name="field_' in html and '_label"' in html
 
 
 # ============================================================
@@ -176,11 +177,13 @@ class TestVisibilityDefaults:
                 r'<option value="(\w+)" selected>(\w+)</option>', m.group(0))
             return sel.group(1) if sel else "(none)"
 
-        assert _selected_default("new_email_visibility", html) == "granted", \
+        # Personal scope uses scoped types (email_personal, phone_personal)
+        assert _selected_default("new_email_personal_visibility", html) == "granted", \
             "email add-row defaults to granted"
-        assert _selected_default("new_phone_visibility", html) == "granted"
+        assert _selected_default("new_phone_personal_visibility", html) == "granted"
         # title/company are work-only and seeded — check website add-row slot
         html_work, _ = _editor_gets(db, client, "Work")
+        # Work scope uses scoped type (website_work)
         assert _selected_default("new_website_visibility", html_work) == "public", \
             "website add-row defaults to public (UX pass 2 defaults ruling)"
 

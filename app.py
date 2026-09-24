@@ -1988,8 +1988,9 @@ def create_app(db_path: Path = None) -> FastAPI:
         field_types = whitelist_db.CARD_EDITOR_FIELD_TYPES
         by_type = {t: [] for t in field_types}
         for f in card.get("fields", []):
-            if f["field_type"] in by_type:
-                by_type[f["field_type"]].append(dict(f))
+            scoped_type = whitelist_db.map_field_type_to_scope(f["field_type"], scope)
+            if scoped_type in by_type:
+                by_type[scoped_type].append(dict(f))
         base_url = wl_env.get_secret("BASE_URL") or "https://whitelist.app"
         # UX pass 4: scoped sections, label choices, and name context.
         sections = whitelist_db.editor_sections(scope) if hasattr(whitelist_db, 'editor_sections') else whitelist_db.CARD_EDITOR_SECTIONS
@@ -2010,6 +2011,7 @@ def create_app(db_path: Path = None) -> FastAPI:
                 (profile["id"],),
             ).fetchall()
             name_context['middle_rows'] = [dict(r) for r in middle_rows]
+
         return HTMLResponse(jinja.get_template("card_editor.html").render(
             request=request,
             profile=profile,
@@ -2026,6 +2028,7 @@ def create_app(db_path: Path = None) -> FastAPI:
             scope=scope,
             label_choices=label_choices,
             name_context=name_context,
+            public_default_types=_PUBLIC_DEFAULT_TYPES,
         ), status_code=status_code)
 
     @application.get("/owner/{token}/cards/{card_id}/edit", response_class=HTMLResponse)
@@ -2056,6 +2059,9 @@ def create_app(db_path: Path = None) -> FastAPI:
     _PUBLIC_DEFAULT_TYPES = ("title", "company", "website", "birthday",
                              "high_school", "maiden_name", "nickname",
                              "city", "state",
+                             "childhood_city", "childhood_state",
+                             # UX pass 4: scoped variants
+                             "city_personal", "state_personal",
                              "childhood_city", "childhood_state")
 
     def _editor_default_visibility(field_type: str) -> str:

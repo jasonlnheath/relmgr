@@ -256,14 +256,15 @@ _SCOPE_TEMPLATES: tuple[tuple[str, tuple[tuple[str, str | None], ...], ...], ...
     )),
     # ── personal (NO professional — no title/company/website;
     #    identity fields stay here)
-    #    Scoped types for new fields; legacy types for existing rows
-    #    (pre-scope fields stored with legacy types). ──
+    #    Scoped types only (F3 fix: no base-type duplicates that share
+    #    the same visible label). Legacy types are stored as-is in the DB
+    #    but the picker only offers scoped names. ──
     ('personal', (
-        ('Emails', (('email_personal', None), ('email', None))),
+        ('Emails', (('email_personal', None),)),
         ('Phone numbers', (
-            ('phone_personal', None), ('phone', None),
-            ('text_number_personal', 'Text number'), ('text_number', 'Text number'),
-            ('facetime_number_personal', 'FaceTime number'), ('facetime_number', 'FaceTime number'),
+            ('phone_personal', None),
+            ('text_number_personal', 'Text number'),
+            ('facetime_number_personal', 'FaceTime number'),
         )),
         ('Video apps', (
             ('facetime', 'FaceTime'),
@@ -275,17 +276,17 @@ _SCOPE_TEMPLATES: tuple[tuple[str, tuple[tuple[str, str | None], ...], ...], ...
             ('messaging_app', 'Messaging app'),
         )),
         ('Social', (
-            ('facebook_personal', 'Facebook'), ('facebook', 'Facebook'),
-            ('instagram_personal', 'Instagram'), ('instagram', 'Instagram'),
-            ('social_other_personal', 'Social'), ('social_other', 'Social'),
+            ('facebook_personal', 'Facebook'),
+            ('instagram_personal', 'Instagram'),
+            ('social_other_personal', 'Social'),
         )),
         ('Address', (
-            ('address1_personal', 'Address 1'), ('address1', 'Address 1'),
-            ('address2_personal', 'Address 2'), ('address2', 'Address 2'),
-            ('city_personal', 'City'), ('city', 'City'),
-            ('state_personal', 'State/Province'), ('state', 'State/Province'),
-            ('zip_personal', 'Zip/Postal Code'), ('zip', 'Zip/Postal Code'),
-            ('country_personal', 'Country'), ('country', 'Country'),
+            ('address1_personal', 'Address 1'),
+            ('address2_personal', 'Address 2'),
+            ('city_personal', 'City'),
+            ('state_personal', 'State/Province'),
+            ('zip_personal', 'Zip/Postal Code'),
+            ('country_personal', 'Country'),
         )),
         ('Birthday', (('birthday', None),)),
         ('Note', (('note', None),)),
@@ -301,13 +302,13 @@ _SCOPE_TEMPLATES: tuple[tuple[str, tuple[tuple[str, str | None], ...], ...], ...
         )),
     )),
     # ── work (professional only — NO birthday, NO personal/childhood)
-    #    Scoped types for new fields; legacy types for existing rows.
+    #    Scoped types only (F3 fix: no base-type duplicates).
     ('work', (
-        ('Emails', (('email_work', None), ('email', None))),
+        ('Emails', (('email_work', None),)),
         ('Phone numbers', (
-            ('phone_work', None), ('phone', None),
-            ('text_number_work', 'Text number'), ('text_number', 'Text number'),
-            ('facetime_number_work', 'FaceTime number'), ('facetime_number', 'FaceTime number'),
+            ('phone_work', None),
+            ('text_number_work', 'Text number'),
+            ('facetime_number_work', 'FaceTime number'),
         )),
         ('Video apps', (
             ('facetime', 'FaceTime'),
@@ -319,17 +320,17 @@ _SCOPE_TEMPLATES: tuple[tuple[str, tuple[tuple[str, str | None], ...], ...], ...
             ('messaging_app', 'Messaging app'),
         )),
         ('Social', (
-            ('facebook_work', 'Facebook'), ('facebook', 'Facebook'),
-            ('instagram_work', 'Instagram'), ('instagram', 'Instagram'),
-            ('social_other_work', 'Social'), ('social_other', 'Social'),
+            ('facebook_work', 'Facebook'),
+            ('instagram_work', 'Instagram'),
+            ('social_other_work', 'Social'),
         )),
         ('Address', (
-            ('address1_work', 'Address 1'), ('address1', 'Address 1'),
-            ('address2_work', 'Address 2'), ('address2', 'Address 2'),
-            ('city_work', 'City'), ('city', 'City'),
-            ('state_work', 'State/Province'), ('state', 'State/Province'),
-            ('zip_work', 'Zip/Postal Code'), ('zip', 'Zip/Postal Code'),
-            ('country_work', 'Country'), ('country', 'Country'),
+            ('address1_work', 'Address 1'),
+            ('address2_work', 'Address 2'),
+            ('city_work', 'City'),
+            ('state_work', 'State/Province'),
+            ('zip_work', 'Zip/Postal Code'),
+            ('country_work', 'Country'),
         )),
         ('Title', (('title', None),)),
         ('Company', (('company', None),)),
@@ -378,6 +379,55 @@ def phone_label_choices(scope: str) -> tuple[str, ...]:
     return PHONE_LABEL_CHOICES
 
 
+# UX pass 4: legacy→scoped type mapping for seeded data.
+# Seeded profiles use legacy types (email, phone, etc.). The editor
+# sections for personal/work scopes use scoped variants
+# (email_personal, phone_personal, etc.). This mapping bridges the gap.
+_SCOPE_LEGACY_TO_SCOPED: dict[str, dict[str, str]] = {
+    'personal': {
+        'email': 'email_personal',
+        'phone': 'phone_personal',
+        'text_number': 'text_number_personal',
+        'facetime_number': 'facetime_number_personal',
+        'facebook': 'facebook_personal',
+        'instagram': 'instagram_personal',
+        'social_other': 'social_other_personal',
+        'address1': 'address1_personal',
+        'address2': 'address2_personal',
+        'city': 'city_personal',
+        'state': 'state_personal',
+        'zip': 'zip_personal',
+        'country': 'country_personal',
+    },
+    'work': {
+        'email': 'email_work',
+        'phone': 'phone_work',
+        'text_number': 'text_number_work',
+        'facetime_number': 'facetime_number_work',
+        'facebook': 'facebook_work',
+        'instagram': 'instagram_work',
+        'social_other': 'social_other_work',
+        'address1': 'address1_work',
+        'address2': 'address2_work',
+        'city': 'city_work',
+        'state': 'state_work',
+        'zip': 'zip_work',
+        'country': 'country_work',
+    },
+}
+
+
+def map_field_type_to_scope(field_type: str, scope: str) -> str:
+    """Map a legacy field_type to its scoped variant for the given scope.
+
+    vcard scope: identity preserved (email → email).
+    personal/work scope: legacy types → scoped variants.
+    """
+    if scope in _SCOPE_LEGACY_TO_SCOPED and field_type in _SCOPE_LEGACY_TO_SCOPED[scope]:
+        return _SCOPE_LEGACY_TO_SCOPED[scope][field_type]
+    return field_type
+
+
 # UX pass 4: extend multi-types with scoped address families.
 _CARD_EDITOR_MULTI_TYPES_BASE = ('email', 'phone', 'video_app', 'messaging_app', 'social_other',
                                  'high_school', 'maiden_name', 'nickname',
@@ -386,6 +436,9 @@ _CARD_EDITOR_MULTI_TYPES_SCOPED = tuple(
     ft for fam in SCOPED_FAMILIES.values()
     for ft in fam
     if fam[0].startswith(('address1', 'address2', 'city', 'state', 'zip', 'country'))
+    or fam[0].startswith(('facebook', 'instagram', 'social_other'))
+    or fam[0].startswith(('phone', 'text_number', 'facetime_number'))
+    or fam[0].startswith('email')
 )
 CARD_EDITOR_MULTI_TYPES = tuple(set(
     _CARD_EDITOR_MULTI_TYPES_BASE + _CARD_EDITOR_MULTI_TYPES_SCOPED
@@ -3554,6 +3607,7 @@ def ensure_profile_fields_pass4_schema(conn: sqlite3.Connection) -> None:
             field_type TEXT NOT NULL CHECK(field_type IN {CARD_EDITOR_FIELD_TYPES!r}),
             field_value TEXT NOT NULL,
             visibility TEXT NOT NULL CHECK(visibility IN {_VCARD_VISIBILITY!r}),
+            label TEXT,
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             updated_at TEXT NOT NULL DEFAULT (datetime('now')),
             UNIQUE(profile_id, field_type, field_value),
@@ -3564,9 +3618,9 @@ def ensure_profile_fields_pass4_schema(conn: sqlite3.Connection) -> None:
     conn.execute("""
         INSERT INTO profile_fields_pass4
             (id, profile_id, field_type, field_value,
-             visibility, created_at, updated_at)
+             visibility, label, created_at, updated_at)
         SELECT id, profile_id, field_type, field_value,
-               visibility, created_at, updated_at
+               visibility, label, created_at, updated_at
         FROM profile_fields
     """)
     conn.execute("DROP TABLE profile_fields")
@@ -4241,6 +4295,14 @@ def save_card_editor(
                 raise ValueError(f"invalid field type '{field_type}'")
             if visibility not in _VCARD_VISIBILITY:
                 raise ValueError(f"invalid visibility '{visibility}'")
+            # Validate phone label against card scope (F5 fix: same guard as update path).
+            if label:
+                allowed = phone_label_choices(card_scope)
+                if label in tuple(c.lower() for c in PHONE_LABEL_CHOICES):
+                    if label not in allowed:
+                        raise ValueError(
+                            f"label '{label}' not allowed for scope '{card_scope}' "
+                            f"on new field type '{field_type}'")
             value = (value or "").strip()
             if not value:
                 continue  # empty add-row slot — not content
@@ -4537,18 +4599,24 @@ def list_contact_list_rows(
     # For non-caller profiles with cards but zero produced rows,
     # emit ONE ROW PER CARD (stub convergence). Caller's own pid
     # is excluded from fallback.
+    #
+    # Scope: only profiles owned by this caller (p.owner_id = profile_id).
+    # Exclude the caller's main profile (id == profile_id).
+    # Dedupe key: "stub:<pid>:<card_id>" to avoid collisions with empty-email
+    # contacts rows.
     if profile_cards_fallback:
         other_pids = {r.get("contact_id") for r in rows if r.get("contact_id")}
-        other_pids.add(profile_id)  # exclude caller
+        other_pids.add(profile_id)  # exclude caller's main profile
         profiles_with_cards = conn.execute(
             "SELECT p.id, p.display_name, p.first_name, p.last_name, "
             "c.id as card_id, c.name as card_name, "
             "c.photo_path, c.hs_photo_path "
             "FROM profiles p "
             "LEFT JOIN cards c ON c.owner_profile_id = p.id "
-            "WHERE p.id NOT IN (" + ",".join("?" for _ in other_pids) + ") "
+            "WHERE p.owner_id = ? "
+            "AND p.id NOT IN (" + ",".join("?" for _ in other_pids) + ") "
             "AND EXISTS (SELECT 1 FROM cards WHERE owner_profile_id = p.id)",
-            list(other_pids),
+            (profile_id,) + tuple(other_pids),
         ).fetchall()
         # Group by profile_id
         from collections import defaultdict
@@ -4574,11 +4642,13 @@ def list_contact_list_rows(
                 row = {
                     "contact_id": pid,
                     "name": name_by_pid[pid],
-                    "email": "",
+                    "email": f"stub:{pid}:{card['id']}",  # unique per stub row so HTTP
+                                                          # cross-profile dedupe doesn't collapse them
                     "phone": "",
                     "org": "",
                     "granted": False,
-                    "live_grant": None,
+                    "live_grant": "stub",  # sentinel — not a real grant, but non-None so the
+                                           # contact_list template renders the overlay anchor
                     "cards": [],
                     "card_refs": [card],
                     "perm": None,

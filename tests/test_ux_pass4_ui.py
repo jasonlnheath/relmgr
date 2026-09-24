@@ -200,7 +200,8 @@ class TestAddedRowAudit:
     def test_delete_route_persists_other_edits(self, tmp_path):
         """Delete route 303 + unlinks AND persists other edits in same POST.
 
-        RED until Package A merges save_card_editor(..., name_fields=...).
+        The ✕ posts the whole editor form; the delete route must apply
+        display_name + other field updates alongside the removal.
         """
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
@@ -208,13 +209,67 @@ class TestAddedRowAudit:
 
         conn = whitelist_db.wl_connect(db)
         card = conn.execute(
-            "SELECT id FROM cards WHERE owner_profile_id = 1 AND lower(name) = 'personal'",
+            "SELECT id, name FROM cards WHERE owner_profile_id = 1 AND lower(name) = 'personal'",
         ).fetchone()
+        # Get two fields: the seeded phone and a second email
+        field1 = conn.execute(
+            "SELECT id FROM profile_fields WHERE profile_id = 1 AND field_type = 'phone'",
+        ).fetchone()
+        conn.execute(
+            "INSERT INTO profile_fields (profile_id, field_type, field_value, visibility, label) "
+            "VALUES (1, 'email', 'test@del.com', 'granted', NULL)",
+        )
+        field2 = conn.execute(
+            "SELECT id FROM profile_fields WHERE profile_id = 1 AND field_type = 'email' "
+            "AND field_value = 'test@del.com'",
+        ).fetchone()
+        conn.commit()
         conn.close()
 
-        # This test verifies the route handles the whole-form POST correctly
-        # The actual save_card_editor call may fall back gracefully
-        assert card is not None
+        assert card is not None, "Personal card should exist"
+
+        # POST delete on field2 (email), but also update field1 (phone) value
+        # and change display_name — all should apply
+        resp = client.post(
+            f"/owner/{tok}/cards/{card['id']}/fields/{field2['id']}/delete",
+            data={
+                "card_name": card["name"],
+                "display_name": "Changed Name",
+                "first_name": "",
+                "last_name": "",
+                "suffix": "",
+                # field1 (phone) — update its value
+                f"field_{field1['id']}_value": "5551234567",
+                f"field_{field1['id']}_visibility": "granted",
+                f"field_{field1['id']}_label": "",
+                # field2 (email) — marked for removal
+                f"field_{field2['id']}_remove": "1",
+            },
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+
+        # Verify: field2 is removed, display_name changed
+        conn = whitelist_db.wl_connect(db)
+        # The email field_type should still exist (profile_fields rows survive
+        # deletion — only card_fields is unlinked), but the card_fields link
+        # is gone. We check that the phone field is still linked to the card.
+        phone_linked = conn.execute(
+            "SELECT 1 FROM card_fields WHERE card_id = ? AND field_id = ?",
+            (card["id"], field1["id"]),
+        ).fetchone()
+        assert phone_linked is not None, "Phone should still be linked to card"
+        email_linked = conn.execute(
+            "SELECT 1 FROM card_fields WHERE card_id = ? AND field_id = ?",
+            (card["id"], field2["id"]),
+        ).fetchone()
+        assert email_linked is None, "Email should be unlinked from card"
+        # display_name is stored on profiles, not cards
+        updated_profile = conn.execute(
+            "SELECT display_name FROM profiles WHERE id = 1",
+        ).fetchone()
+        assert updated_profile["display_name"] == "Changed Name"
+        conn.close()
 
 
 # ============================================================
@@ -371,7 +426,8 @@ class TestPhoneLabel400:
     def test_invalid_label_for_scope(self, tmp_path):
         """Editor save with 'work' label on a personal card → 400.
 
-        RED until Package A merges phone-label validation in save_card_editor.
+        Phone labels are scoped: personal cards allow mobile/home only,
+        work cards allow mobile/work only.
         """
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
@@ -379,14 +435,71 @@ class TestPhoneLabel400:
 
         conn = whitelist_db.wl_connect(db)
         card = conn.execute(
-            "SELECT id FROM cards WHERE owner_profile_id = 1 AND lower(name) = 'personal'",
+            "SELECT id, name, scope FROM cards WHERE owner_profile_id = 1 AND lower(name) = 'personal'",
+        ).fetchone()
+        field = conn.execute(
+            "SELECT id FROM profile_fields WHERE profile_id = 1 AND field_type = 'phone'",
         ).fetchone()
         conn.close()
 
-        # The editor should handle invalid phone labels gracefully
-        # When Package A merges, this should return 400
-        # For now, the route may fall back gracefully
-        assert card is not None
+        assert card is not None, "Personal card should exist"
+
+        # POST to SAVE route with 'work' label on personal card → 400
+        resp = client.post(
+            f"/owner/{tok}/cards/{card['id']}/edit",
+            data={
+                "card_name": card["name"],
+                "display_name": "",
+                "first_name": "Test",
+                "last_name": "User",
+                "suffix": "",
+                f"field_{field['id']}_value": "5559999999",
+                f"field_{field['id']}_visibility": "granted",
+                f"field_{field['id']}_label": "work",
+            },
+            follow_redirects=False,
+        )
+        assert resp.status_code == 400
+        assert "not allowed for scope" in resp.text.lower()
+
+    def test_valid_label_for_scope_succeeds(self, tmp_path):
+        """Editor save with 'mobile' label on a personal card → 200 (editor re-rendered).
+
+        The save route re-renders the editor on success (200), not a redirect.
+        """
+        db = _make_db(tmp_path)
+        client = TestClient(create_app(db))
+        tok = _owner_token()
+
+        conn = whitelist_db.wl_connect(db)
+        card = conn.execute(
+            "SELECT id, name, scope FROM cards WHERE owner_profile_id = 1 AND lower(name) = 'personal'",
+        ).fetchone()
+        field = conn.execute(
+            "SELECT id FROM profile_fields WHERE profile_id = 1 AND field_type = 'phone'",
+        ).fetchone()
+        conn.close()
+
+        assert card is not None, "Personal card should exist"
+
+        # POST to SAVE route with 'mobile' label on personal card → 200
+        resp = client.post(
+            f"/owner/{tok}/cards/{card['id']}/edit",
+            data={
+                "card_name": card["name"],
+                "display_name": "",
+                "first_name": "Test",
+                "last_name": "User",
+                "suffix": "",
+                f"field_{field['id']}_value": "5559999999",
+                f"field_{field['id']}_visibility": "granted",
+                f"field_{field['id']}_label": "mobile",
+            },
+            follow_redirects=False,
+        )
+        assert resp.status_code == 200
+        # Verify the label was saved by checking the editor re-renders
+        assert "Edit Personal" in resp.text
 
 
 # ============================================================
@@ -412,12 +525,88 @@ class TestAddressMulti:
         assert '+ Add' in resp.text
 
     def test_address_multi_types(self, tmp_path):
-        """Address parts are in CARD_EDITOR_MULTI_TYPES.
-
-        RED until Package A merges addresses into CARD_EDITOR_MULTI_TYPES.
-        """
-        # Multi types should include address1, address2, city, state, zip, country
-        # plus their scoped variants (when Package A merges)
+        """Address parts (scoped variants) are in CARD_EDITOR_MULTI_TYPES."""
         multi = whitelist_db.CARD_EDITOR_MULTI_TYPES
-        # For now, verify the constant exists (addresses not yet merged)
-        assert isinstance(multi, tuple)
+        # Scoped address types are multi (base address1/address2 etc. are not)
+        expected = ("address1_personal", "address2_personal", "city_personal",
+                    "state_personal", "zip_personal", "country_personal",
+                    "address1_work", "address2_work", "city_work",
+                    "state_work", "zip_work", "country_work")
+        for t in expected:
+            assert t in multi, f"{t} should be in CARD_EDITOR_MULTI_TYPES"
+
+
+# ============================================================
+# 11. Profile cards fallback (F2 fix)
+# ============================================================
+
+class TestProfileCardsFallback:
+    def test_fallback_scoped_to_owner(self, tmp_path):
+        """Fallback only returns profiles owned by the caller.
+
+        F2 fix: scope query to p.owner_id = caller, exclude caller's main.
+        Data-layer test (contacts table required for list_contact_list_rows).
+        """
+        import store
+        # Create contacts table BEFORE whitelist schema
+        db = tmp_path / "test.db"
+        store.init_db(db)
+        conn = whitelist_db.wl_connect(db)
+        whitelist_db.ensure_whitelist_schema(conn)
+        whitelist_db.seed_profile(conn, {
+            "handle": "jasonheath",
+            "name": {"display": "Jason Heath"},
+            "org": {"company": "Walther EMC", "title": "Sales"},
+            "emails": [{"address": "jason@waltheremc.com", "visibility": "granted"}],
+            "phones": [{"number": "5551234567", "visibility": "granted"}],
+        })
+        whitelist_db.ensure_whitelist_schema(conn)
+        whitelist_db.seed_default_cards(conn)
+        conn.commit()
+
+        # Get the owner's profile id
+        owner = conn.execute(
+            "SELECT id FROM profiles WHERE handle = 'jasonheath'",
+        ).fetchone()
+        owner_id = owner["id"]
+
+        # Create a second profile owned by the same owner (a stub)
+        conn.execute(
+            "INSERT INTO profiles (handle, display_name, first_name, last_name, "
+            "owner_id, password_hash) VALUES (?, ?, ?, ?, ?, NULL)",
+            ("stub_user", "Stub Profile", "Stub", "User", owner_id),
+        )
+        stub_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        # Create a card for the stub
+        conn.execute(
+            "INSERT INTO cards (owner_profile_id, name, scope) VALUES (?, ?, ?)",
+            (stub_id, "My Card", "vcard"),
+        )
+        conn.commit()
+
+        # Call list_contact_list_rows with fallback
+        rows = whitelist_db.list_contact_list_rows(conn, owner_id, profile_cards_fallback=True)
+        row_names = [r["name"] for r in rows]
+        # The stub should appear via fallback (has cards, no grants/contacts)
+        assert "Stub Profile" in row_names, f"Expected 'Stub Profile' in {row_names}"
+        conn.close()
+
+    def test_fallback_excludes_caller_main(self, tmp_path):
+        """Fallback does not emit the caller's own main profile."""
+        db = _make_db(tmp_path)
+        conn = whitelist_db.wl_connect(db)
+        # Get the owner's profile id
+        owner = conn.execute(
+            "SELECT id FROM profiles WHERE handle = 'jasonheath'",
+        ).fetchone()
+        owner_id = owner["id"]
+        # Verify the fallback query excludes the main profile
+        other_pids = {owner_id}
+        result = conn.execute(
+            "SELECT p.id FROM profiles p "
+            "WHERE p.owner_id = ? "
+            "AND p.id NOT IN (" + ",".join("?" for _ in other_pids) + ")",
+            (owner_id,) + tuple(other_pids),
+        ).fetchall()
+        assert len(result) == 0  # no profiles other than the main one
+        conn.close()

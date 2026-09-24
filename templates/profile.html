@@ -196,25 +196,51 @@
 
 {% macro _field_label(field_type) %}
     {%- if field_type == 'email' -%}email
+    {%- elif field_type == 'email_personal' -%}email
+    {%- elif field_type == 'email_work' -%}email
     {%- elif field_type == 'phone' -%}phone
+    {%- elif field_type == 'phone_personal' -%}phone
+    {%- elif field_type == 'phone_work' -%}phone
     {%- elif field_type == 'text_number' -%}text number
+    {%- elif field_type == 'text_number_personal' -%}text number
+    {%- elif field_type == 'text_number_work' -%}text number
     {%- elif field_type == 'facetime_number' -%}FaceTime number
+    {%- elif field_type == 'facetime_number_personal' -%}FaceTime number
+    {%- elif field_type == 'facetime_number_work' -%}FaceTime number
     {%- elif field_type == 'facetime' -%}FaceTime
     {%- elif field_type == 'skype' -%}skype
     {%- elif field_type == 'video_app' -%}video app
     {%- elif field_type == 'messenger' -%}messenger
     {%- elif field_type == 'messaging_app' -%}messaging app
     {%- elif field_type == 'facebook' -%}facebook
+    {%- elif field_type == 'facebook_personal' -%}facebook
+    {%- elif field_type == 'facebook_work' -%}facebook
     {%- elif field_type == 'instagram' -%}instagram
+    {%- elif field_type == 'instagram_personal' -%}instagram
+    {%- elif field_type == 'instagram_work' -%}instagram
     {%- elif field_type == 'social_other' -%}social
+    {%- elif field_type == 'social_other_personal' -%}social
+    {%- elif field_type == 'social_other_work' -%}social
     {%- elif field_type == 'title' -%}title
     {%- elif field_type == 'company' -%}company
     {%- elif field_type == 'address1' -%}address 1
+    {%- elif field_type == 'address1_personal' -%}address 1
+    {%- elif field_type == 'address1_work' -%}address 1
     {%- elif field_type == 'address2' -%}address 2
+    {%- elif field_type == 'address2_personal' -%}address 2
+    {%- elif field_type == 'address2_work' -%}address 2
     {%- elif field_type == 'city' -%}city
+    {%- elif field_type == 'city_personal' -%}city
+    {%- elif field_type == 'city_work' -%}city
     {%- elif field_type == 'state' -%}state/province
+    {%- elif field_type == 'state_personal' -%}state/province
+    {%- elif field_type == 'state_work' -%}state/province
     {%- elif field_type == 'zip' -%}zip/postal code
+    {%- elif field_type == 'zip_personal' -%}zip/postal code
+    {%- elif field_type == 'zip_work' -%}zip/postal code
     {%- elif field_type == 'country' -%}country
+    {%- elif field_type == 'country_personal' -%}country
+    {%- elif field_type == 'country_work' -%}country
     {%- elif field_type == 'address' -%}address
     {%- elif field_type == 'website' -%}website
     {%- elif field_type == 'birthday' -%}birthday
@@ -235,8 +261,8 @@
    (Mobile/Home/Work or a custom name) surface instead of the plain type. #}
 {% macro _field_row(f) %}
 <div class="flex items-start wl-text-sub">
-    <span class="w-28 flex-shrink-0 text-right pr-4 text-xs wl-text-faint uppercase tracking-wide pt-0.5">{% if f.field_type == 'phone' and f.get('label') %}{{ label_display(f.label) }}{% else %}{{ _field_label(f.field_type) }}{% endif %}</span>
-    <span class="flex-1 min-w-0 wl-text break-words">{% if f.field_type in ('phone', 'text_number', 'facetime_number') %}{{ phone_fmt(f.field_value) }}{% else %}{{ f.field_value }}{% endif %}</span>
+    <span class="w-28 flex-shrink-0 text-right pr-4 text-xs wl-text-faint uppercase tracking-wide pt-0.5">{% if f.field_type in ('phone', 'phone_personal', 'phone_work') and f.get('label') %}{{ label_display(f.label) }}{% else %}{{ _field_label(f.field_type) }}{% endif %}</span>
+    <span class="flex-1 min-w-0 wl-text break-words">{% if f.field_type in ('phone', 'phone_personal', 'phone_work', 'text_number', 'text_number_personal', 'text_number_work', 'facetime_number', 'facetime_number_personal', 'facetime_number_work') %}{{ phone_fmt(f.field_value) }}{% else %}{{ f.field_value }}{% endif %}</span>
     {% if f.visibility == 'private' %}
     <span class="ml-2 text-xs wl-text-faint" title="Private field">🔒</span>
     {% endif %}
