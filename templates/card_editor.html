@@ -106,7 +106,7 @@
         {{ field_input('field_' ~ f.id ~ '_value', t, f.field_value, placeholders[t]) }}
     </div>
     <div class="flex items-center gap-2 flex-shrink-0 flex-wrap">
-        {% if t in ('phone', 'text_number', 'facetime_number') or t.endswith('_personal') or t.endswith('_work') %}
+        {% if t in ('phone', 'text_number', 'facetime_number', 'phone_personal', 'phone_work', 'text_number_personal', 'text_number_work', 'facetime_number_personal', 'facetime_number_work') %}
         {{ phone_label_select('field_' ~ f.id ~ '_label', f.label or '', label_choices) }}
         {% endif %}
         {{ vis_select('field_' ~ f.id ~ '_visibility', f.visibility) }}
@@ -135,7 +135,7 @@
         {{ field_input('new_' ~ t ~ '_value', t, '', placeholders[t]) }}
     </div>
     <div class="flex items-center gap-2 flex-shrink-0 flex-wrap">
-        {% if t in ('phone', 'text_number', 'facetime_number') or t.endswith('_personal') or t.endswith('_work') %}
+        {% if t in ('phone', 'text_number', 'facetime_number', 'phone_personal', 'phone_work', 'text_number_personal', 'text_number_work', 'facetime_number_personal', 'facetime_number_work') %}
         {{ phone_label_select('new_' ~ t ~ '_label', '', label_choices) }}
         {% endif %}
         {{ vis_select('new_' ~ t ~ '_visibility', default_visibility(t)) }}

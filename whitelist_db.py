@@ -4647,8 +4647,8 @@ def list_contact_list_rows(
                     "phone": "",
                     "org": "",
                     "granted": False,
-                    "live_grant": "stub",  # sentinel — not a real grant, but non-None so the
-                                           # contact_list template renders the overlay anchor
+                    "live_grant": None,  # stub: no real grant → renders as static BlackList
+                    "is_stub": True,     # signal for template: non-clickable, no badge form
                     "cards": [],
                     "card_refs": [card],
                     "perm": None,

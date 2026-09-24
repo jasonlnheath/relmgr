@@ -610,3 +610,78 @@ class TestProfileCardsFallback:
         ).fetchall()
         assert len(result) == 0  # no profiles other than the main one
         conn.close()
+
+    def test_http_stub_fallback_no_500(self, tmp_path):
+        """HTTP-level test: stub rows don't crash state-filter tabs (R1).
+
+        The stub fallback creates rows with live_grant=None. When a user
+        applies a state filter (e.g. ?f=whitelist), _row_state must not
+        500 on non-dict live_grant values.
+        """
+        import store
+        import os
+        os.environ["WHITELIST_SECRET"] = "test-secret"
+        from fastapi.testclient import TestClient
+        from app import create_app
+
+        # Create contacts table BEFORE whitelist schema
+        db = tmp_path / "test.db"
+        store.init_db(db)
+        conn = whitelist_db.wl_connect(db)
+        whitelist_db.ensure_whitelist_schema(conn)
+        whitelist_db.seed_profile(conn, {
+            "handle": "jasonheath",
+            "name": {"display": "Jason Heath"},
+            "org": {"company": "Walther EMC", "title": "Sales"},
+            "emails": [{"address": "jason@waltheremc.com", "visibility": "granted"}],
+            "phones": [{"number": "5551234567", "visibility": "granted"}],
+        })
+        whitelist_db.ensure_whitelist_schema(conn)
+        whitelist_db.seed_default_cards(conn)
+        conn.commit()
+
+        # Create a stub profile (curated vCard with no password)
+        owner = conn.execute(
+            "SELECT id FROM profiles WHERE handle = 'jasonheath'",
+        ).fetchone()
+        owner_id = owner["id"]
+        conn.execute(
+            "INSERT INTO profiles (handle, display_name, first_name, last_name, "
+            "owner_id, password_hash) VALUES (?, ?, ?, ?, ?, NULL)",
+            ("stub_user", "Stub Profile", "Stub", "User", owner_id),
+        )
+        stub_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        # Create personal and work cards for the stub
+        conn.execute(
+            "INSERT INTO cards (owner_profile_id, name, scope) VALUES (?, ?, ?)",
+            (stub_id, "Personal", "personal"),
+        )
+        conn.execute(
+            "INSERT INTO cards (owner_profile_id, name, scope) VALUES (?, ?, ?)",
+            (stub_id, "Work", "work"),
+        )
+        conn.commit()
+        conn.close()
+
+        # HTTP test: GET contact list with state filter should not 500
+        client = TestClient(create_app(db))
+        token = wl_tokens.make_token(
+            b"test-secret", "owner_dashboard", str(owner_id), expires_days=365
+        )
+
+        # Without filter - should succeed
+        resp = client.get(f"/owner/{token}")
+        assert resp.status_code == 200
+        assert "Stub Profile" in resp.text
+
+        # With whitelist filter - R1: this used to 500 with live_grant="stub"
+        resp = client.get(f"/owner/{token}?f=whitelist")
+        assert resp.status_code == 200
+
+        # With greylist filter
+        resp = client.get(f"/owner/{token}?f=greylist")
+        assert resp.status_code == 200
+
+        # With blacklist filter
+        resp = client.get(f"/owner/{token}?f=blacklist")
+        assert resp.status_code == 200

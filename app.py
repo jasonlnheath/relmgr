@@ -1224,8 +1224,9 @@ def create_app(db_path: Path = None) -> FastAPI:
             # fallback link — sees exactly this owner's world, nothing else.
             all_profiles = conn.execute("SELECT * FROM profiles WHERE owner_id = ? ORDER BY id", (profile_id,)).fetchall()
             all_profile_ids = [dict(p)["id"] for p in all_profiles]
-            if not all_profile_ids:
-                all_profile_ids = [profile_id]
+            # Always include the owner's own profile (owner_id may be NULL)
+            if profile_id not in all_profile_ids:
+                all_profile_ids.insert(0, profile_id)
 
             # UX pass (2026-09-22): fast alphabetical filter rail — ?letter=X
             # keeps only names STARTING with X (prefix filter, unlike the
@@ -1367,8 +1368,8 @@ def create_app(db_path: Path = None) -> FastAPI:
 
             def _row_state(r: dict) -> str:
                 gd = r.get("live_grant")
-                if not gd:
-                    return "blacklist"  # plain address-book contact: no access
+                if not gd or not isinstance(gd, dict):
+                    return "blacklist"  # plain address-book contact or stub: no access
                 if gd.get("status") != "granted":
                     return "blacklist"
                 return "whitelist" if gd.get("expires_at") is None else "greylist"
@@ -2061,8 +2062,7 @@ def create_app(db_path: Path = None) -> FastAPI:
                              "city", "state",
                              "childhood_city", "childhood_state",
                              # UX pass 4: scoped variants
-                             "city_personal", "state_personal",
-                             "childhood_city", "childhood_state")
+                             "city_personal", "state_personal")
 
     def _editor_default_visibility(field_type: str) -> str:
         return ("public" if field_type in _PUBLIC_DEFAULT_TYPES else "granted")
