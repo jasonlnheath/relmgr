@@ -57,7 +57,7 @@ def build_quarterly_review(conn) -> str | None:
 
     # Build digest
     lines = []
-    lines.append(f"WhiteList — quarter review: {total_contacts} grey contacts across {total_owners} owners")
+    lines.append(f"WhiteList — quarter review: {total_contacts} GreyList contacts across {total_owners} owners")
     lines.append("")
     lines.append("=" * 60)
     lines.append("")
