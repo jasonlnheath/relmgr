@@ -91,9 +91,10 @@ class TestCreateVCardFlow:
             "create must land in the new vCard's editor"
         editor = client.get(loc)
         assert editor.status_code == 200
-        # ALL field sections ready to populate
-        for heading in ("Emails", "Phone numbers", "Address", "Personal history",
-                        "Childhood home", "Birthday", "Note"):
+        # vCard card: has contact fields but NOT identity fields
+        # (Personal history, Childhood home are personal-card-only).
+        for heading in ("Emails", "Phone numbers", "Address",
+                        "Birthday", "Note"):
             assert heading in editor.text, f"editor missing '{heading}'"
         assert "Jane Rivers" in editor.text
 
@@ -123,8 +124,10 @@ class TestCreateVCardFlow:
         conn.commit()
         cards = whitelist_db.list_cards(conn, stub["id"])
         conn.close()
-        assert [c["name"] for c in cards] == ["Personal", "Work"], \
-            "even an empty stub defaults with Personal + Work"
+        # UX pass 4: stubs get exactly one vCard card, not Personal/Work
+        assert len(cards) == 1
+        assert cards[0]["name"] == "No Contact Info - vCard"
+        assert cards[0].get("scope") == "vcard"
 
 
 # ============================================================

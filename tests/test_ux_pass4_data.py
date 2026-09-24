@@ -557,8 +557,9 @@ class TestCreateContactVCard:
         profile = whitelist_db.create_contact_vcard(conn, 1, "Jane Rivers")
         cards = whitelist_db.list_cards(conn, profile["id"])
         names = [c["name"] for c in cards]
-        assert "Personal" in names
-        assert "Work" in names
+        # UX pass 4: exactly ONE vCard card, no Personal/Work seeding.
+        assert len(cards) == 1
+        assert "Jane Rivers - vCard" in names
         conn.close()
 
     def test_uses_own_owner_id(self, tmp_path):

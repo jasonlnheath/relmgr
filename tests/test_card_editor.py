@@ -126,9 +126,33 @@ class TestEditorRendersAllFieldTypes:
         card_id = _first_card_id(db)
         resp = client.get(f"/owner/{_owner_token()}/cards/{card_id}/edit")
         assert resp.status_code == 200
-        for t in FIELD_TYPES:
-            assert f'data-type="{t}"' in resp.text, \
-                f"editor section for '{t}' missing"
+        # UX pass 4: scoped sections — Personal card shows scoped types
+        # (email_personal, phone_personal, …) alongside legacy types for
+        # rows that pre-date scoping; work-only types (title/company/website)
+        # are absent from Personal.
+        conn = whitelist_db.wl_connect(db)
+        card_name = conn.execute(
+            "SELECT name FROM cards WHERE id = ?", (card_id,)).fetchone()[0]
+        conn.close()
+        if card_name.lower() == "personal":
+            # Personal: scoped types + legacy for shared categories
+            # Work-only types (title/company/website) are absent from Personal.
+            for t in FIELD_TYPES:
+                if t in ("title", "company", "website"):
+                    assert f'data-type="{t}"' not in resp.text, \
+                        f"work-only type '{t}' should not appear on Personal"
+                else:
+                    scoped = t + "_personal"
+                    assert (f'data-type="{t}"' in resp.text or
+                            f'data-type="{scoped}"' in resp.text), \
+                        f"editor section for '{t}' or '{scoped}' missing from Personal"
+        else:
+            # Work card: scoped types + legacy for shared categories
+            for t in FIELD_TYPES:
+                scoped = t + "_work"
+                assert (f'data-type="{t}"' in resp.text or
+                        f'data-type="{scoped}"' in resp.text), \
+                    f"editor section for '{t}' or '{scoped}' missing"
         for t in RETIRED_TYPES:
             assert f'data-type="{t}"' not in resp.text, \
                 f"retired type '{t}' still has its own editor section"
@@ -220,6 +244,9 @@ class TestEditorSaveRoundTrip:
         card_id = _first_card_id(db)
 
         data = {"card_name": "Personal", "display_name": "Jason Heath"}
+        # UX pass 4: scoped sections — Personal card accepts legacy types
+        # (for existing rows) and scoped types (for new rows). Work-only types
+        # (title/company/website) are absent from Personal sections.
         expectations = {
             "email": ("work@acme.com", "public"),
             "phone": ("+1-555-999-0000", "granted"),
@@ -233,14 +260,12 @@ class TestEditorSaveRoundTrip:
             "facebook": ("facebook.com/jason.heath", "public"),
             "instagram": ("@jasonheath", "public"),
             "social_other": ("YouTube @heathtech", "public"),
-            "title": ("VP Engineering", "granted"),
-            "company": ("Acme Inc.", "private"),
+            # title/company/website are work-only — skip for Personal card
             "address1": ("123 Main St", "public"),
             "address2": ("Suite 400", "public"),
             "city": ("Denver", "public"),
             "state": ("CO", "public"),
             "zip": ("80014", "public"),
-            "website": ("https://acme.com", "granted"),
             "birthday": ("1985-06-15", "private"),
             "note": ("Met at the conference.", "private"),
         }
@@ -268,6 +293,9 @@ class TestEditorSaveRoundTrip:
                 f"{t}: expected {(value, vis)}, got {rows.get(t)}"
 
         # Re-render: the editor shows the saved values back.
+        # UX pass 4: scoped sections — Personal card renders scoped types
+        # alongside legacy types for shared categories; work-only types
+        # (title/company/website) are absent from Personal sections.
         html = client.get(f"/owner/{tok}/cards/{card_id}/edit").text
         for t, (value, _) in expectations.items():
             assert value in html, f"{t} value not shown after save"
