@@ -259,7 +259,7 @@
                            class="border border-gray-600 rounded-lg px-3 py-1.5 text-sm bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8] middle-name-input">
                     {% endfor %}
                     <button type="button" id="add-middle-btn"
-                            class="wl-link text-xs">+ Another</button>
+                            class="wl-btn-ink px-2 py-1 rounded text-xs">+ Another</button>
                 </div>
                 {# Display name with auto hint #}
                 <div class="mt-3">
@@ -292,7 +292,7 @@
                         {% endif %}
                     </div>
                     {% if t in multi_types %}
-                    <button type="button" class="wl-link text-xs mt-1"
+                    <button type="button" class="wl-btn-ink px-2 py-1 rounded text-xs mt-1"
                             onclick="addFieldRow('{{ t }}')">+ Add {{ labels[t]|lower }}</button>
                     <template data-newrow="{{ t }}">
                         {{ empty_row(t, sublabel) }}
@@ -331,7 +331,7 @@
         {# ============ Danger zone: delete card (two-step confirm) ============ #}
         <div class="mt-6 pt-4" style="border-top: 1px solid var(--wl-glass-border);">
             <button type="button" id="delete-card-btn" onclick="showDeleteCard()"
-                    class="wl-link text-xs" style="color: var(--wl-danger);">
+                    class="wl-btn-deny px-2 py-1 rounded text-xs">
                 Delete card
             </button>
             <form id="delete-card-form" method="POST"
