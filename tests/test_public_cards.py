@@ -114,9 +114,15 @@ def test_granted_tier_sees_all_cards_and_fields(tmp_path):
     # Granted-visibility fields now visible.
     assert "jheath@waltheremc.com" in html
     assert "555-1234" in html
-    # round-2: no request-access taunt; Connect button only for non-granted tier
+    # round-2: no request-access taunt; the plain request-form Connect
+    # button is only for non-granted tier.
     assert "Request access" not in html
-    assert "Connect" not in html  # granted tier doesn't see Connect button
+    assert "/request-form" not in html
+    # UX pass 5 (John Doe flow): granted viewers get the SCOPED connect
+    # buttons — ask for the other scope's card information — but only for
+    # scopes the owner has cards for (seed has personal + work).
+    assert "Connect personally" in html
+    assert "Connect professionally" in html
     # UX pass 2: no QR anywhere on the profile either.
     assert "/qr/jasonheath" not in html
 

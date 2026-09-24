@@ -20,13 +20,17 @@
     </div>
 
     {# My Card strip (UX pass 4): horizontal strip of ALL owner card
-       pictures + names. Each card shows its photo centered in a circle. #}
+       pictures + names. Each card shows its photo centered in a circle.
+       UX pass 5 (captain ruling): the 'Edit →' link is GONE — the whole
+       card IS the click target to that page. Bug fix: cards carry
+       owner_profile_id (not owner_id) — the wrong key made every chip
+       fail the filter, so the strip rendered no names and no pictures. #}
     {% if my_card %}
     <div class="wl-card p-4 mb-4">
         <div class="flex items-center gap-3">
             <div class="flex items-center gap-2 flex-1 overflow-x-auto">
                 {% for mc in all_cards %}
-                {% if mc.owner_id == my_card.owner_id %}
+                {% if mc.owner_profile_id == my_card.owner_id %}
                 <a href="/owner/{{ token }}/profile" class="flex items-center gap-2 flex-shrink-0 hover:opacity-80">
                     {% if mc.photo_path %}
                     <img src="/photos/{{ my_card.owner_id }}/{{ mc.id }}"
@@ -43,8 +47,6 @@
                 {% endif %}
                 {% endfor %}
             </div>
-            <a href="/owner/{{ token }}/profile"
-               class="wl-link text-xs flex-shrink-0">Edit →</a>
         </div>
     </div>
     {% endif %}
@@ -88,8 +90,55 @@
                         <a href="/owner/{{ token }}/contact/{{ row.live_grant.id }}"
                            class="wl-heading wl-heading-sm wl-text block truncate hover:opacity-75">{{ row.name }}</a>
                         <p class="text-xs wl-text-faint truncate">{{ row.email }}</p>
+                        {# Pass-5 scoped connect ask (John Doe flow): show
+                           WHAT is being asked when the request carries a
+                           scope (access_grants.context). #}
+                        {% if row.live_grant.get('context') == 'personal' %}
+                        <p class="text-xs wl-text-sub mt-0.5">Asks for: personal contact information</p>
+                        {% elif row.live_grant.get('context') == 'professional' %}
+                        <p class="text-xs wl-text-sub mt-0.5">Asks for: professional contact information</p>
+                        {% endif %}
                     </div>
                 </div>
+                {% if row.live_grant.get('context') in ('personal', 'professional') %}
+                {# Scoped ask → approve WITH the matching cards picked.
+                   Checkboxes pre-select the requested scope (personal →
+                   personal-scope cards, professional → work-scope); the
+                   owner can adjust before confirming. Posts to the
+                   card-assignment approve route. #}
+                {% set wanted_scope = 'personal' if row.live_grant.get('context') == 'personal' else 'work' %}
+                <details class="mt-3 pt-2" style="border-top: 1px solid var(--wl-glass-border);">
+                    <summary class="text-xs wl-text-sub cursor-pointer select-none">Approve with cards…</summary>
+                    <form method="POST" action="/owner/{{ token }}/approve" class="mt-2">
+                        <input type="hidden" name="grant_id" value="{{ row.live_grant.id }}">
+                        <input type="hidden" name="decision" value="approve">
+                        <input type="hidden" name="access" value="quarter">
+                        <div class="flex flex-wrap gap-3 mb-2">
+                            {% for c in owner_cards %}
+                            <label class="text-xs wl-text-sub inline-flex items-center gap-1.5">
+                                <input type="checkbox" name="card_ids" value="{{ c.id }}"
+                                       {% if c.get('scope', 'vcard') == wanted_scope %}checked{% endif %}
+                                       class="accent-gray-600">
+                                {{ c.name }}
+                            </label>
+                            {% endfor %}
+                        </div>
+                        <div class="flex gap-2">
+                            <button type="submit"
+                                    class="wl-btn-approve px-3 py-1 rounded text-xs">
+                                Confirm approve
+                            </button>
+                        </div>
+                    </form>
+                </details>
+                <form method="POST" action="/owner/{{ token }}/decision" class="mt-2 flex gap-2">
+                    <input type="hidden" name="grant_id" value="{{ row.live_grant.id }}">
+                    <button type="submit" name="decision" value="deny"
+                            class="wl-btn-deny px-3 py-1 rounded text-xs">
+                        Deny
+                    </button>
+                </form>
+                {% else %}
                 <form method="POST" action="/owner/{{ token }}/decision" class="mt-3 pt-2 flex gap-2"
                       style="border-top: 1px solid var(--wl-glass-border);">
                     <input type="hidden" name="grant_id" value="{{ row.live_grant.id }}">
@@ -102,6 +151,7 @@
                         Deny
                     </button>
                 </form>
+                {% endif %}
             </div>
         {% endfor %}
         </div>

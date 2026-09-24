@@ -1399,6 +1399,101 @@ def create_grant(
     return grant_id
 
 
+# UX pass 5 (2026-09-24): scoped connect asks (John Doe flow). A granted
+# contact can request the OTHER scope's card information — 'personal' or
+# 'professional'. The ask rides the existing access_grants.context column
+# (never a new enum value), so no schema heal is needed.
+_CONNECT_SCOPES = ('personal', 'professional')
+
+
+def create_scope_request(
+    conn: sqlite3.Connection,
+    profile_id: int,
+    requester_email: str,
+    requester_name: str,
+    owner_id: Optional[int] = None,
+    scope: str = "",
+) -> tuple[str, bool]:
+    """Create (or adopt) a PENDING grant that asks for a specific card scope.
+
+    Unlike create_grant — which dedupes against any admitting grant and
+    would silently return the already-granted row — a scoped connect ask
+    must mint a NEW pending row even when the requester already holds a
+    granted grant: the whole point is requesting MORE access.
+
+    Dedupe rules among pending rows for the same profile+email:
+    - a pending row with the SAME context → reuse it (idempotent re-click);
+    - a context-LESS pending row (a plain connection request) → adopt it
+      (its ask is upgraded to this scope, no duplicate stacks up);
+    - a pending row with a DIFFERENT context → mint another (both asks are
+      real and distinct).
+
+    Returns (grant_id, created) — created=False when an existing pending
+    row was reused/adopted.
+    """
+    if scope not in _CONNECT_SCOPES:
+        raise ValueError(f"unknown connect scope: {scope!r}")
+
+    row = conn.execute(
+        """SELECT id, context FROM access_grants
+           WHERE profile_id = ? AND LOWER(requester_email) = LOWER(?)
+             AND status = 'pending'
+           ORDER BY created_at DESC LIMIT 1""",
+        (profile_id, requester_email),
+    ).fetchone()
+    if row is not None:
+        if (row["context"] or "") == scope:
+            return row["id"], False
+        if not row["context"]:
+            conn.execute(
+                "UPDATE access_grants SET context = ?, updated_at = datetime('now') WHERE id = ?",
+                (scope, row["id"]),
+            )
+            _log_action(conn, row["id"], profile_id, "created")
+            conn.commit()
+            return row["id"], False
+
+    grant_id = str(uuid.uuid4())
+    if owner_id is None:
+        owner_id = profile_id
+    conn.execute(
+        """INSERT INTO access_grants (id, profile_id, requester_email,
+                                      requester_name, status, context, owner_id)
+           VALUES (?, ?, ?, ?, 'pending', ?, ?)""",
+        (grant_id, profile_id, requester_email, requester_name, scope, owner_id),
+    )
+    _log_action(conn, grant_id, profile_id, "created")
+    conn.commit()
+    return grant_id, True
+
+
+def granted_card_ids_for_viewer(
+    conn: sqlite3.Connection,
+    profile_id: int,
+    viewer_email: Optional[str],
+) -> list[int]:
+    """Union of card ids the viewer's ADMITTING grants are scoped to.
+
+    Pass-5 connect flow: an approved grant may carry card assignments
+    (grant_cards) — the owner picked exactly which cards to share at
+    approve time. A granted viewer sees the UNION of the assignments
+    across all their admitting grants. Returns [] when the viewer holds
+    no admitting grant with assignments (including owner self-view) —
+    the caller then shows every card (legacy unscoped behaviour).
+    """
+    if viewer_email is None:
+        return []
+    rows = conn.execute(
+        f"""SELECT DISTINCT gc.card_id
+            FROM grant_cards gc
+            JOIN access_grants g ON g.id = gc.grant_id
+            WHERE g.profile_id = ? AND LOWER(g.requester_email) = LOWER(?)
+              AND g.status = 'granted' AND {_ADMITTED_EXPIRY_SQL}""",
+        (profile_id, viewer_email, _now_iso()),
+    ).fetchall()
+    return [r["card_id"] for r in rows]
+
+
 def update_grant_status(
     conn: sqlite3.Connection,
     grant_id: str,

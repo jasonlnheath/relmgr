@@ -852,6 +852,14 @@ def create_app(db_path: Path = None) -> FastAPI:
 
             stale = is_verified_stale(profile.get("verified_at"))
 
+            # Pass-5 connect flow: a granted viewer may have asked for a
+            # specific scope (personal / professional) from the profile
+            # page — surface the confirmation banner on redirect back.
+            requested = (request.query_params.get("requested") or "")
+            if requested not in ("", "personal", "professional"):
+                requested = ""
+            requested_fresh = request.query_params.get("fresh") == "1"
+
             # B4: the public page renders cards. Profiles with NO cards at
             # all (seed_default_cards only auto-attaches for jasonheath) keep
             # the legacy flat field list — a card-less profile must not
@@ -859,12 +867,49 @@ def create_app(db_path: Path = None) -> FastAPI:
             cards = whitelist_db.cards_for_public_view(
                 conn, profile["id"], tier)
 
+            # Pass-5 scoped sharing (John Doe flow): when the viewer's
+            # admitting grants carry card assignments, they see exactly
+            # those cards — nothing more. Empty (legacy grants, owner
+            # self-view) keeps the unscoped behaviour.
+            scope_ids = set()
+            if not viewer_is_owner:
+                scope_ids = set(whitelist_db.granted_card_ids_for_viewer(
+                    conn, profile["id"], viewer_email))
+            if scope_ids:
+                cards = [c for c in cards if c["id"] in scope_ids]
+
+            # Pass-5 connect buttons: a granted contact can ask for the
+            # other scope's card information. Only offer a scope the owner
+            # has cards for, and hide a scope once THIS viewer's grant
+            # assignments already cover all of that scope's cards (the
+            # not-yet-granted scopes are the ones worth asking for).
+            owner_cards = whitelist_db.list_cards(conn, profile["id"])
+            owner_card_scopes = {c.get("scope", "vcard") for c in owner_cards}
+
+            def _scope_fully_granted(s: str) -> bool:
+                cards_of_scope = [c for c in owner_cards
+                                  if c.get("scope", "vcard") == s and c.get("fields")]
+                if not cards_of_scope:
+                    return True  # nothing of this scope exists to ask for
+                if not scope_ids:
+                    return False  # unscoped legacy grant — keep offering
+                return all(c["id"] in scope_ids for c in cards_of_scope)
+
+            has_personal_cards = ("personal" in owner_card_scopes
+                                  and not _scope_fully_granted("personal"))
+            has_work_cards = ("work" in owner_card_scopes
+                              and not _scope_fully_granted("work"))
+
             bio_visibility = whitelist_db.get_bio_visibility(conn, profile["id"])
 
             return HTMLResponse(jinja.get_template("profile.html").render(
                 request=request, profile=profile, tier=tier, stale=stale,
                 cards=cards, bio_visibility=bio_visibility, days_since=days_since,
-                viewer_is_owner=viewer_is_owner, owner_token=owner_token))
+                viewer_is_owner=viewer_is_owner, owner_token=owner_token,
+                viewer_email=viewer_email,
+                requested=requested, requested_fresh=requested_fresh,
+                has_personal_cards=has_personal_cards,
+                has_work_cards=has_work_cards))
         finally:
             conn.close()
 
@@ -928,6 +973,80 @@ def create_app(db_path: Path = None) -> FastAPI:
             _send_connection_request_email, path, grant_id)
         return HTMLResponse(jinja.get_template("request_success.html").render(
             request=request, profile=profile, grant_id=grant_id),
+            background=background)
+
+    @application.post("/p/{handle}/connect")
+    async def connect_scope_request(request: Request, handle: str):
+        """Pass-5 connect buttons (John Doe flow): an ALREADY-granted contact
+        asks for the other scope's card information — 'personal' or
+        'professional'. Mints (or adopts) a pending grant tagged with the
+        ask in access_grants.context; the owner sees it in the amber
+        request box, approves it with the matching cards picked, and the
+        viewer's next visit shows the extra cards (granted_card_ids_for_viewer
+        filter above). Silent for blacklisted senders per the 2026-09-20
+        ruling — same quarantine path as a plain request.
+        """
+        form = await request.form()
+        scope = (form.get("scope") or "").strip()
+        e = (form.get("e") or "").strip()
+        if scope not in whitelist_db._CONNECT_SCOPES:
+            return HTMLResponse("Unknown request type", status_code=400)
+
+        conn = whitelist_db.wl_connect(path)
+        try:
+            profile = whitelist_db.resolve_handle(conn, handle)
+            if not profile:
+                return HTMLResponse("Profile not found", status_code=404)
+            if not e:
+                return HTMLResponse(
+                    "Connect requests need your access link (?e=…)",
+                    status_code=403)
+            tier = whitelist_db.effective_tier(conn, profile["id"], e)
+            if tier != "granted":
+                return HTMLResponse(
+                    "This button is for approved contacts — use Connect above.",
+                    status_code=403)
+
+            created = False
+            background = None
+            if whitelist_db.is_blacklisted(conn, profile["id"], e):
+                # Silence rule: indistinguishable success, quarantined
+                # request, no notification, no email.
+                whitelist_db.quarantine_request(conn, profile["id"], e, "")
+            else:
+                # Carry the name from the requester's most recent grant.
+                row = conn.execute(
+                    """SELECT requester_name FROM access_grants
+                       WHERE profile_id = ? AND LOWER(requester_email) = LOWER(?)
+                       ORDER BY created_at DESC LIMIT 1""",
+                    (profile["id"], e),
+                ).fetchone()
+                name = (row["requester_name"] if row and row["requester_name"] else e)
+                grant_id, created = whitelist_db.create_scope_request(
+                    conn, profile["id"], e, name,
+                    profile.get("owner_id"), scope)
+                if created:
+                    grant = whitelist_db.get_grant(conn, grant_id)
+                    owner_id = grant["owner_id"] or profile["id"]
+                    ask = "personal" if scope == "personal" else "professional"
+                    whitelist_db.create_notification(
+                        conn, owner_id, "connection_request",
+                        title=(f"{name or e} asks for your {ask} "
+                               f"contact information"),
+                        grant_id=grant_id,
+                        dedupe_key=f"grant:{grant_id}")
+                    background = BackgroundTask(
+                        _send_connection_request_email, path, grant_id)
+                else:
+                    background = None
+        finally:
+            conn.close()
+
+        from urllib.parse import quote
+        fresh = "&fresh=1" if created else ""
+        return RedirectResponse(
+            url=f"/p/{handle}?e={quote(e)}&requested={scope}{fresh}",
+            status_code=303,
             background=background)
 
     @application.post("/p/{handle}/forward")
@@ -1429,6 +1548,9 @@ def create_app(db_path: Path = None) -> FastAPI:
 
             # Fetch all cards for approve forms (pending rows) — use first profile
             all_cards = whitelist_db.list_cards(conn, all_profile_ids[0] if all_profile_ids else profile_id)
+            # Pass-5 scoped connect asks: the amber-box "approve with cards"
+            # picker offers the OWNER's own cards (scopes: personal/work/vcard).
+            owner_cards = whitelist_db.list_cards(conn, profile_id)
 
             return HTMLResponse(jinja.get_template("contact_list.html").render(
                 request=request,
@@ -1436,6 +1558,7 @@ def create_app(db_path: Path = None) -> FastAPI:
                 pending_rows=pending_rows,
                 my_card=my_card,
                 all_cards=all_cards,
+                owner_cards=owner_cards,
                 filter_tabs=filter_tabs,
                 selected_f=selected_f,
                 token=token,
@@ -2532,16 +2655,10 @@ def create_app(db_path: Path = None) -> FastAPI:
                     card["visible_fields"] = card["fields"]
                 else:
                     card["visible_fields"] = []
-            # UX pass (2026-09-22): the detail view shows ONE card at a
-            # time (captain's pass), with a chip switcher when the contact
-            # has several. ?card=<id> selects; default is the first card.
-            try:
-                selected_card_id = int(request.query_params.get("card", ""))
-            except ValueError:
-                selected_card_id = None
-            selected_card = next(
-                (c for c in cards if c["id"] == selected_card_id),
-                cards[0] if cards else None)
+            # UX pass 5 (captain ruling): the per-card chip switcher is
+            # GONE — this page now shows ALL the shared cards at once,
+            # laid out like the view-profile page (reach badges per card
+            # included); the Access section below is unchanged.
             stale = is_verified_stale(profile.get("verified_at"))
             # Determine tier for this grant
             if grant["status"] == "granted":
@@ -2555,7 +2672,6 @@ def create_app(db_path: Path = None) -> FastAPI:
 
         return HTMLResponse(jinja.get_template("contact_card.html").render(
             request=request, profile=profile, grant=grant, cards=cards,
-            selected_card=selected_card,
             tier=tier, stale=stale, days_since=days_since, token=token,
             grant_id=grant_id, is_grey=whitelist_db.is_grey(grant)))
 

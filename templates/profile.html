@@ -97,7 +97,7 @@
             <div class="space-y-3">
                 {% for card in cards %}
                 {% set reach = namespace(has=false) %}
-                {% for f in card.visible_fields %}{% if f.field_type in ('phone', 'email') %}{% set reach.has = true %}{% endif %}{% endfor %}
+                {% for f in card.visible_fields %}{% if f.field_type in ('phone', 'phone_personal', 'phone_work', 'email', 'email_personal', 'email_work') %}{% set reach.has = true %}{% endif %}{% endfor %}
                 {% if reach.has %}
                 <div class="flex items-center gap-3">
                     {% if card.photo_path %}
@@ -189,6 +189,51 @@
             {% endfor %}
         </div>
         {% endif %}
+        {% endif %}
+
+        {# ========================================================
+           PASS 5 CONNECT BUTTONS (John Doe flow): a granted contact can
+           ask for the OTHER scope's card information — e.g. approved for
+           professional info asks for personal later, and vice versa.
+           Each button mints a scoped pending request; the owner approves
+           it from the amber request box with the matching cards picked.
+           Only offered when this isn't the owner's own view and the
+           owner actually has cards of that scope.
+           ======================================================== #}
+        {% if requested %}
+        <div class="mt-6 p-3 rounded-lg text-sm wl-text"
+             style="background: rgba(255,255,255,0.05); border: 1px solid var(--wl-glass-edge);">
+            {% if requested_fresh %}Request sent — {% else %}You've already asked — {% endif %}{{ profile.display_name }} will review your request for
+            {% if requested == 'personal' %}personal{% else %}professional{% endif %}
+            contact information.
+        </div>
+        {% endif %}
+        {% if tier == 'granted' and not viewer_is_owner and (has_personal_cards or has_work_cards) %}
+        <div class="mt-6 pt-4" style="border-top: 1px solid var(--wl-glass-border);">
+            <p class="text-xs wl-text-faint mb-2">Want more of {{ profile.display_name }}'s information? Send a request:</p>
+            <div class="flex flex-wrap gap-2">
+                {% if has_personal_cards %}
+                <form method="POST" action="/p/{{ profile.handle }}/connect" class="inline">
+                    <input type="hidden" name="scope" value="personal">
+                    <input type="hidden" name="e" value="{{ viewer_email or '' }}">
+                    <button type="submit"
+                            class="wl-btn-ink px-4 py-2 rounded-lg text-sm">
+                        Connect personally
+                    </button>
+                </form>
+                {% endif %}
+                {% if has_work_cards %}
+                <form method="POST" action="/p/{{ profile.handle }}/connect" class="inline">
+                    <input type="hidden" name="scope" value="professional">
+                    <input type="hidden" name="e" value="{{ viewer_email or '' }}">
+                    <button type="submit"
+                            class="wl-btn-ink px-4 py-2 rounded-lg text-sm">
+                        Connect professionally
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
         {% endif %}
     </div>
 </div>
