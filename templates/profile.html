@@ -296,6 +296,14 @@
     {%- elif field_type == 'childhood_address1' -%}childhood address
     {%- elif field_type == 'childhood_city' -%}childhood city
     {%- elif field_type == 'childhood_state' -%}childhood state
+    {#- UX pass 5: Google-parity six-field addition -#}
+    {%- elif field_type == 'department' -%}department
+    {%- elif field_type == 'po_box' -%}PO Box
+    {%- elif field_type == 'related_person' -%}related person
+    {%- elif field_type == 'event' -%}significant date
+    {%- elif field_type == 'custom_field' -%}custom field
+    {%- elif field_type == 'name_prefix' -%}name prefix
+    {%- elif field_type == 'name_suffix' -%}name suffix
     {%- else -%}{{ field_type }}
     {%- endif -%}
 {% endmacro %}
