@@ -658,6 +658,45 @@ class TestNewConnection:
         assert ("email", "casey@new.com", "granted") in fields
         assert cards >= 2, "default cards seeded for the new vCard"
 
+    def test_create_vcard_redirects_to_work_when_email(self, tmp_path):
+        """BUG FIX (pass 9): email→Work card, so redirect must go to Work
+        when email was provided, otherwise the email field is invisible.
+        Phone-only should still go to Personal."""
+        db = _make_db(tmp_path)
+        client = TestClient(create_app(db))
+
+        # With email → redirect to Work card
+        resp = client.post(f"/owner/{_owner_token()}/new-connection",
+                           data={"display_name": "Eve Mail",
+                                 "phone": "+1-555-000-1111",
+                                 "email": "eve@mail.com"},
+                           follow_redirects=False)
+        assert resp.status_code == 303
+        loc = resp.headers.get("location", "")
+        assert "/cards/" in loc and "/edit" in loc
+        # The Work card for the NEW profile (id=2) should be targeted
+        conn = whitelist_db.wl_connect(db)
+        cards = whitelist_db.list_cards(conn, 2)  # new profile id
+        work_id = next(c["id"] for c in cards if c["name"].lower() == "work")
+        conn.close()
+        assert f"{work_id}/edit" in loc, (
+            f"Expected redirect to Work card {work_id}, got {loc}")
+
+        # Phone-only → redirect to Personal card
+        resp = client.post(f"/owner/{_owner_token()}/new-connection",
+                           data={"display_name": "Bob Phone",
+                                 "phone": "+1-555-000-2222",
+                                 "email": ""},
+                           follow_redirects=False)
+        assert resp.status_code == 303
+        loc = resp.headers.get("location", "")
+        conn = whitelist_db.wl_connect(db)
+        cards = whitelist_db.list_cards(conn, 3)  # new profile id
+        personal_id = next(c["id"] for c in cards if c["name"].lower() == "personal")
+        conn.close()
+        assert f"{personal_id}/edit" in loc, (
+            f"Expected redirect to Personal card {personal_id}, got {loc}")
+
     def test_create_requires_name(self, tmp_path):
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
