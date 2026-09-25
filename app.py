@@ -149,9 +149,6 @@ def _make_jinja():
     # UX pass 3: +1(XXX)XXX-XXXX display formatting, one formatter for every
     # surface (stored values are never rewritten).
     jinja.env.globals["phone_fmt"] = whitelist_db.format_phone_display
-    # UX pass 5: ONE field-type label table shared by every rendering
-    # surface (scoped pass-4 variants fold to their family base).
-    jinja.env.globals["field_label_display"] = whitelist_db.field_label_display
     return jinja
 
 
@@ -377,14 +374,6 @@ def _vcf_escape(value: str) -> str:
             .replace(",", "\\,").replace("\r\n", "\\n").replace("\n", "\\n"))
 
 
-def _scoped_base_type(field_type: str) -> str:
-    """Strip _personal/_work scope suffix to get the base family type."""
-    for suffix in ('_personal', '_work'):
-        if field_type.endswith(suffix):
-            return field_type[:-len(suffix)]
-    return field_type
-
-
 def _build_vcard(profile: dict, cards: list[dict]) -> str:
     """vCard 3.0 built from EXACTLY the fields the viewer can see.
 
@@ -393,29 +382,15 @@ def _build_vcard(profile: dict, cards: list[dict]) -> str:
     cards arrive as cards_for_share_bundle output (visible_fields only).
     Fields are deduped by id (cards are lenses: one field can sit in
     several chosen cards). CRLF line endings per the vCard spec.
-
-    UX pass 4: scoped field types (email_personal, phone_work, etc.)
-    are mapped to their base type via _scoped_base_type.
     """
     display = profile.get("display_name") or "Unknown"
     parts = display.split(" ", 1)
     first = parts[0]
     last = parts[1] if len(parts) > 1 else ""
-    # UX pass 5: name prefix/suffix fields (vCard card) slot into the N
-    # property's 4th/5th components — first occurrence wins.
-    name_prefix = ""
-    name_suffix = ""
-    for card in cards:
-        for f in card.get("visible_fields", []):
-            base = _scoped_base_type(f["field_type"])
-            if base == "name_prefix" and not name_prefix:
-                name_prefix = f["field_value"]
-            elif base == "name_suffix" and not name_suffix:
-                name_suffix = f["field_value"]
     lines = [
         "BEGIN:VCARD",
         "VERSION:3.0",
-        f"N:{_vcf_escape(last)};{_vcf_escape(first)};;;{_vcf_escape(name_prefix)};{_vcf_escape(name_suffix)}",
+        f"N:{_vcf_escape(last)};{_vcf_escape(first)};;;",
         f"FN:{_vcf_escape(display)}",
     ]
     if profile.get("title"):
@@ -431,85 +406,33 @@ def _build_vcard(profile: dict, cards: list[dict]) -> str:
             seen.add(fid)
             v = _vcf_escape(f["field_value"])
             t = f["field_type"]
-            base = _scoped_base_type(t)
-            if base == "email":
+            if t == "email":
                 lines.append(f"EMAIL;TYPE=INTERNET:{v}")
-            elif base == "phone":
+            elif t == "phone":
                 lines.append(f"TEL;TYPE=CELL:{v}")
-            elif base == "text_number":
-                lines.append(f"TEL;TYPE=CELL:{v}")
-            elif base == "facetime_number":
-                lines.append(f"TEL;TYPE=CELL:{v}")
-            elif base == "address1":
-                lines.append(f"ADR;TYPE=HOME:;;{_vcf_escape(v)};;;")
-            elif base == "address2":
-                lines.append(f"ADR;TYPE=HOME:;;{_vcf_escape(v)};;;")
-            elif base == "city":
-                lines.append(f"ADR;TYPE=HOME:;;{_vcf_escape(v)};;;")
-            elif base == "state":
-                lines.append(f"ADR;TYPE=HOME:;;{_vcf_escape(v)};;;")
-            elif base == "zip":
-                lines.append(f"ADR;TYPE=HOME:;;{_vcf_escape(v)};;;")
-            elif base == "country":
-                lines.append(f"ADR;TYPE=HOME:;;{_vcf_escape(v)};;;")
-            elif base == "website":
+            elif t == "address":
+                lines.append(f"ADR;TYPE=HOME:;;{v};;;")
+            elif t == "website":
                 lines.append(f"URL:{v}")
-            elif base == "birthday":
+            elif t == "birthday":
                 lines.append(f"BDAY:{v}")
-            elif base == "nickname":
+            elif t == "nickname":
                 lines.append(f"NICKNAME:{v}")
-            elif base in ("note", "high_school", "maiden_name",
-                          "childhood_address1", "childhood_city",
-                          "childhood_state", "middle_name"):
-                # UX pass 3/4: personal-history + country + middle_name
-                # travel as labeled NOTE lines (vCard has no native slots).
-                label = ("High school" if base == "high_school"
-                         else "Maiden/Surname" if base == "maiden_name"
-                         else "Childhood home" if base.startswith("childhood_")
-                         else "Country" if base == "country"
-                         else "Middle name" if base == "middle_name"
+            elif t in ("note", "high_school", "maiden_name",
+                       "childhood_address1", "childhood_city",
+                       "childhood_state", "country"):
+                # UX pass 3: personal-history + country fields travel as
+                # labeled NOTE lines (vCard has no native slots for them).
+                label = ("High school" if t == "high_school"
+                         else "Maiden name" if t == "maiden_name"
+                         else "Childhood home" if t.startswith("childhood_")
+                         else "Country" if t == "country"
                          else "Note")
                 lines.append(f"NOTE:{_vcf_escape(label + ': ' + f['field_value'])}")
-            elif base == "title":
+            elif t == "title":
                 lines.append(f"TITLE:{v}")
-            elif base == "company":
+            elif t == "company":
                 lines.append(f"ORG:{v}")
-            elif base == "facebook":
-                lines.append(f"URL;TYPE=HOME:{v}")
-            elif base == "instagram":
-                lines.append(f"X-SOCIALPROFILE:{v}")
-            elif base == "social_other":
-                lines.append(f"URL;TYPE=HOME:{v}")
-            elif base == "facetime":
-                lines.append(f"URL;TYPE=HOME:{v}")
-            elif base == "skype":
-                lines.append(f"URL;TYPE=HOME:{v}")
-            elif base == "video_app":
-                lines.append(f"URL;TYPE=HOME:{v}")
-            elif base == "messenger":
-                lines.append(f"URL;TYPE=HOME:{v}")
-            elif base == "messaging_app":
-                lines.append(f"URL;TYPE=HOME:{v}")
-            elif base == "department":
-                # UX pass 5: Google-parity additions with no native vCard
-                # 3.0 slot travel as labeled NOTE lines (same pattern as
-                # high_school/childhood above).
-                lines.append(f"NOTE:{_vcf_escape('Department: ' + f['field_value'])}")
-            elif base == "po_box":
-                lines.append(f"NOTE:{_vcf_escape('PO Box: ' + f['field_value'])}")
-            elif base == "related_person":
-                role = (f.get("label") or "").strip()
-                label = f"{role}: " if role else "Related: "
-                lines.append(f"NOTE:{_vcf_escape(label + f['field_value'])}")
-            elif base == "event":
-                lab = (f.get("label") or "").strip()
-                label = ("Anniversary: " if lab.lower() == "anniversary"
-                         else f"{lab}: " if lab else "Significant date: ")
-                lines.append(f"NOTE:{_vcf_escape(label + f['field_value'])}")
-            elif base == "custom_field":
-                lab = (f.get("label") or "").strip()
-                label = f"{lab}: " if lab else "Custom: "
-                lines.append(f"NOTE:{_vcf_escape(label + f['field_value'])}")
     lines.append("END:VCARD")
     return "\r\n".join(lines) + "\r\n"
 
@@ -886,14 +809,6 @@ def create_app(db_path: Path = None) -> FastAPI:
 
             stale = is_verified_stale(profile.get("verified_at"))
 
-            # Pass-5 connect flow: a granted viewer may have asked for a
-            # specific scope (personal / professional) from the profile
-            # page — surface the confirmation banner on redirect back.
-            requested = (request.query_params.get("requested") or "")
-            if requested not in ("", "personal", "professional"):
-                requested = ""
-            requested_fresh = request.query_params.get("fresh") == "1"
-
             # B4: the public page renders cards. Profiles with NO cards at
             # all (seed_default_cards only auto-attaches for jasonheath) keep
             # the legacy flat field list — a card-less profile must not
@@ -901,49 +816,12 @@ def create_app(db_path: Path = None) -> FastAPI:
             cards = whitelist_db.cards_for_public_view(
                 conn, profile["id"], tier)
 
-            # Pass-5 scoped sharing (John Doe flow): when the viewer's
-            # admitting grants carry card assignments, they see exactly
-            # those cards — nothing more. Empty (legacy grants, owner
-            # self-view) keeps the unscoped behaviour.
-            scope_ids = set()
-            if not viewer_is_owner:
-                scope_ids = set(whitelist_db.granted_card_ids_for_viewer(
-                    conn, profile["id"], viewer_email))
-            if scope_ids:
-                cards = [c for c in cards if c["id"] in scope_ids]
-
-            # Pass-5 connect buttons: a granted contact can ask for the
-            # other scope's card information. Only offer a scope the owner
-            # has cards for, and hide a scope once THIS viewer's grant
-            # assignments already cover all of that scope's cards (the
-            # not-yet-granted scopes are the ones worth asking for).
-            owner_cards = whitelist_db.list_cards(conn, profile["id"])
-            owner_card_scopes = {c.get("scope", "vcard") for c in owner_cards}
-
-            def _scope_fully_granted(s: str) -> bool:
-                cards_of_scope = [c for c in owner_cards
-                                  if c.get("scope", "vcard") == s and c.get("fields")]
-                if not cards_of_scope:
-                    return True  # nothing of this scope exists to ask for
-                if not scope_ids:
-                    return False  # unscoped legacy grant — keep offering
-                return all(c["id"] in scope_ids for c in cards_of_scope)
-
-            has_personal_cards = ("personal" in owner_card_scopes
-                                  and not _scope_fully_granted("personal"))
-            has_work_cards = ("work" in owner_card_scopes
-                              and not _scope_fully_granted("work"))
-
             bio_visibility = whitelist_db.get_bio_visibility(conn, profile["id"])
 
             return HTMLResponse(jinja.get_template("profile.html").render(
                 request=request, profile=profile, tier=tier, stale=stale,
                 cards=cards, bio_visibility=bio_visibility, days_since=days_since,
-                viewer_is_owner=viewer_is_owner, owner_token=owner_token,
-                viewer_email=viewer_email,
-                requested=requested, requested_fresh=requested_fresh,
-                has_personal_cards=has_personal_cards,
-                has_work_cards=has_work_cards))
+                viewer_is_owner=viewer_is_owner, owner_token=owner_token))
         finally:
             conn.close()
 
@@ -1007,80 +885,6 @@ def create_app(db_path: Path = None) -> FastAPI:
             _send_connection_request_email, path, grant_id)
         return HTMLResponse(jinja.get_template("request_success.html").render(
             request=request, profile=profile, grant_id=grant_id),
-            background=background)
-
-    @application.post("/p/{handle}/connect")
-    async def connect_scope_request(request: Request, handle: str):
-        """Pass-5 connect buttons (John Doe flow): an ALREADY-granted contact
-        asks for the other scope's card information — 'personal' or
-        'professional'. Mints (or adopts) a pending grant tagged with the
-        ask in access_grants.context; the owner sees it in the amber
-        request box, approves it with the matching cards picked, and the
-        viewer's next visit shows the extra cards (granted_card_ids_for_viewer
-        filter above). Silent for blacklisted senders per the 2026-09-20
-        ruling — same quarantine path as a plain request.
-        """
-        form = await request.form()
-        scope = (form.get("scope") or "").strip()
-        e = (form.get("e") or "").strip()
-        if scope not in whitelist_db._CONNECT_SCOPES:
-            return HTMLResponse("Unknown request type", status_code=400)
-
-        conn = whitelist_db.wl_connect(path)
-        try:
-            profile = whitelist_db.resolve_handle(conn, handle)
-            if not profile:
-                return HTMLResponse("Profile not found", status_code=404)
-            if not e:
-                return HTMLResponse(
-                    "Connect requests need your access link (?e=…)",
-                    status_code=403)
-            tier = whitelist_db.effective_tier(conn, profile["id"], e)
-            if tier != "granted":
-                return HTMLResponse(
-                    "This button is for approved contacts — use Connect above.",
-                    status_code=403)
-
-            created = False
-            background = None
-            if whitelist_db.is_blacklisted(conn, profile["id"], e):
-                # Silence rule: indistinguishable success, quarantined
-                # request, no notification, no email.
-                whitelist_db.quarantine_request(conn, profile["id"], e, "")
-            else:
-                # Carry the name from the requester's most recent grant.
-                row = conn.execute(
-                    """SELECT requester_name FROM access_grants
-                       WHERE profile_id = ? AND LOWER(requester_email) = LOWER(?)
-                       ORDER BY created_at DESC LIMIT 1""",
-                    (profile["id"], e),
-                ).fetchone()
-                name = (row["requester_name"] if row and row["requester_name"] else e)
-                grant_id, created = whitelist_db.create_scope_request(
-                    conn, profile["id"], e, name,
-                    profile.get("owner_id"), scope)
-                if created:
-                    grant = whitelist_db.get_grant(conn, grant_id)
-                    owner_id = grant["owner_id"] or profile["id"]
-                    ask = "personal" if scope == "personal" else "professional"
-                    whitelist_db.create_notification(
-                        conn, owner_id, "connection_request",
-                        title=(f"{name or e} asks for your {ask} "
-                               f"contact information"),
-                        grant_id=grant_id,
-                        dedupe_key=f"grant:{grant_id}")
-                    background = BackgroundTask(
-                        _send_connection_request_email, path, grant_id)
-                else:
-                    background = None
-        finally:
-            conn.close()
-
-        from urllib.parse import quote
-        fresh = "&fresh=1" if created else ""
-        return RedirectResponse(
-            url=f"/p/{handle}?e={quote(e)}&requested={scope}{fresh}",
-            status_code=303,
             background=background)
 
     @application.post("/p/{handle}/forward")
@@ -1377,9 +1181,8 @@ def create_app(db_path: Path = None) -> FastAPI:
             # fallback link — sees exactly this owner's world, nothing else.
             all_profiles = conn.execute("SELECT * FROM profiles WHERE owner_id = ? ORDER BY id", (profile_id,)).fetchall()
             all_profile_ids = [dict(p)["id"] for p in all_profiles]
-            # Always include the owner's own profile (owner_id may be NULL)
-            if profile_id not in all_profile_ids:
-                all_profile_ids.insert(0, profile_id)
+            if not all_profile_ids:
+                all_profile_ids = [profile_id]
 
             # UX pass (2026-09-22): fast alphabetical filter rail — ?letter=X
             # keeps only names STARTING with X (prefix filter, unlike the
@@ -1398,11 +1201,7 @@ def create_app(db_path: Path = None) -> FastAPI:
                 all_rows: list[dict] = []
                 seen_emails: set[str] = set()
                 for pid in all_profile_ids:
-                    try:
-                        profile_rows = whitelist_db.list_contact_list_rows(conn, pid, q=q, page=0, per_page=999999, profile_cards_fallback=True)
-                    except TypeError:
-                        # Package A data layer not yet merged.
-                        profile_rows = whitelist_db.list_contact_list_rows(conn, pid, q=q, page=0, per_page=999999)
+                    profile_rows = whitelist_db.list_contact_list_rows(conn, pid, q=q, page=0, per_page=999999)
                     for r in profile_rows:
                         email = (r.get("email") or "").lower()
                         if email not in seen_emails:
@@ -1448,15 +1247,6 @@ def create_app(db_path: Path = None) -> FastAPI:
                         "refreshed_at": None,
                         "is_pending": gd["status"] == "pending",
                     })
-                # UX pass 5: the search box filters this mode too — name or
-                # email substring, the same rule list_contact_list_rows
-                # applies in contacts mode. Without this, live search
-                # silently does nothing on a pure-whitelist DB.
-                if q:
-                    q_lower = q.lower()
-                    rows = [r for r in rows
-                            if q_lower in (r["name"] or "").lower()
-                            or q_lower in (r.get("email") or "").lower()]
                 total_rows = len(rows)
 
             # Count denied grants for this owner
@@ -1530,8 +1320,8 @@ def create_app(db_path: Path = None) -> FastAPI:
 
             def _row_state(r: dict) -> str:
                 gd = r.get("live_grant")
-                if not gd or not isinstance(gd, dict):
-                    return "blacklist"  # plain address-book contact or stub: no access
+                if not gd:
+                    return "blacklist"  # plain address-book contact: no access
                 if gd.get("status") != "granted":
                     return "blacklist"
                 return "whitelist" if gd.get("expires_at") is None else "greylist"
@@ -1546,12 +1336,13 @@ def create_app(db_path: Path = None) -> FastAPI:
                     return card_ok and state_ok
                 all_rows = [r for r in all_rows if _matches(r)]
 
-            # UX pass 4 sort ruling: plain alphabetical by name, then
-            # card name (keeps Personal/Work cards adjacent for one
-            # contact). Filters still hide-only; order is untouched.
+            # UX pass 3 sort ruling: card type alphabetical, then the state
+            # white/grey/black, then name.
+            _STATE_RANK = {"whitelist": 0, "greylist": 1, "blacklist": 2}
             all_rows.sort(key=lambda r: (
+                (r.get("row_card") or {}).get("name", "") or "",
+                _STATE_RANK[_row_state(r)],
                 (r.get("name") or "").lower(),
-                (r.get("row_card") or {}).get("name", ""),
             ))
 
             # UX pass (2026-09-22): the A–Z rail + prefix filter run on the
@@ -1591,9 +1382,6 @@ def create_app(db_path: Path = None) -> FastAPI:
 
             # Fetch all cards for approve forms (pending rows) — use first profile
             all_cards = whitelist_db.list_cards(conn, all_profile_ids[0] if all_profile_ids else profile_id)
-            # Pass-5 scoped connect asks: the amber-box "approve with cards"
-            # picker offers the OWNER's own cards (scopes: personal/work/vcard).
-            owner_cards = whitelist_db.list_cards(conn, profile_id)
 
             return HTMLResponse(jinja.get_template("contact_list.html").render(
                 request=request,
@@ -1601,7 +1389,6 @@ def create_app(db_path: Path = None) -> FastAPI:
                 pending_rows=pending_rows,
                 my_card=my_card,
                 all_cards=all_cards,
-                owner_cards=owner_cards,
                 filter_tabs=filter_tabs,
                 selected_f=selected_f,
                 token=token,
@@ -1994,9 +1781,6 @@ def create_app(db_path: Path = None) -> FastAPI:
     async def owner_create_card(request: Request, token: str):
         form = await request.form()
         name = (form.get("name") or "").strip()
-        scope = (form.get("scope") or "personal").strip()
-        if scope not in ("personal", "work"):
-            scope = "personal"
         name_error = None
         if not name:
             name_error = "Card name is required."
@@ -2014,17 +1798,9 @@ def create_app(db_path: Path = None) -> FastAPI:
 
             if not name_error:
                 try:
-                    whitelist_db.create_card(conn, profile_id, name, [], scope=scope)
-                except (ValueError, TypeError):
-                    # TypeError = create_card doesn't accept scope yet (Package A).
-                    try:
-                        whitelist_db.create_card(conn, profile_id, name, [])
-                    except ValueError:
-                        name_error = "A card with this name already exists."
-                    else:
-                        name_error = None
-                else:
-                    name_error = None
+                    whitelist_db.create_card(conn, profile_id, name, [])
+                except ValueError:
+                    name_error = "A card with this name already exists."
 
             profile = whitelist_db.get_profile_by_id(conn, profile_id)
             if not profile:
@@ -2151,46 +1927,18 @@ def create_app(db_path: Path = None) -> FastAPI:
         the success re-render) and POST /cards/{id}/photo all answer
         through here so the editor page can never drift between routes.
         """
-        scope = card.get("scope", "vcard")
         field_types = whitelist_db.CARD_EDITOR_FIELD_TYPES
         by_type = {t: [] for t in field_types}
-        # UX pass 5: stored scoped rows (email_personal, …) group under
-        # their family BASE section — the pickers are back to base type
-        # names. Rows render in stable id order so address blocks pair
-        # positionally (k-th of each component = block k).
         for f in card.get("fields", []):
-            base_type = whitelist_db.scoped_to_base(f["field_type"])
-            if base_type in by_type:
-                by_type[base_type].append(dict(f))
-        for rows in by_type.values():
-            rows.sort(key=lambda f: f["id"])
+            if f["field_type"] in by_type:
+                by_type[f["field_type"]].append(dict(f))
         base_url = wl_env.get_secret("BASE_URL") or "https://whitelist.app"
-        # UX pass 4: scoped sections, label choices, and name context.
-        sections = whitelist_db.editor_sections(scope) if hasattr(whitelist_db, 'editor_sections') else whitelist_db.CARD_EDITOR_SECTIONS
-        label_choices = whitelist_db.phone_label_choices(scope) if hasattr(whitelist_db, 'phone_label_choices') else ('mobile', 'home', 'work')
-        # Name context: first/last/suffix, middle rows id-ordered, display + auto.
-        name_context = {
-            'first_name': profile.get('first_name', ''),
-            'last_name': profile.get('last_name', ''),
-            'suffix': profile.get('suffix', ''),
-            'display_name': profile.get('display_name', ''),
-            'auto_display': whitelist_db.auto_display_name(profile) if hasattr(whitelist_db, 'auto_display_name') else '',
-            'middle_rows': [],
-        }
-        # Middle name rows (id-ordered).
-        if hasattr(whitelist_db, 'auto_display_name'):
-            middle_rows = conn.execute(
-                "SELECT id, field_value FROM profile_fields WHERE profile_id = ? AND field_type = 'middle_name' ORDER BY id",
-                (profile["id"],),
-            ).fetchall()
-            name_context['middle_rows'] = [dict(r) for r in middle_rows]
-
         return HTMLResponse(jinja.get_template("card_editor.html").render(
             request=request,
             profile=profile,
             card=card,
             by_type=by_type,
-            sections=sections,
+            sections=whitelist_db.CARD_EDITOR_SECTIONS,
             labels=whitelist_db.CARD_EDITOR_FIELD_LABELS,
             field_types=field_types,
             multi_types=whitelist_db.CARD_EDITOR_MULTI_TYPES,
@@ -2198,17 +1946,6 @@ def create_app(db_path: Path = None) -> FastAPI:
             owner_id=profile["id"],
             error=error,
             BASE_URL=base_url,
-            scope=scope,
-            label_choices=label_choices,
-            name_context=name_context,
-            public_default_types=_PUBLIC_DEFAULT_TYPES,
-            # UX pass 5: private-default set, picker-filtered sections,
-            # and the block-Address flag for vcard/personal scopes.
-            private_default_types=_PRIVATE_DEFAULT_TYPES,
-            picker_sections=whitelist_db.picker_sections(scope),
-            address_block=whitelist_db.address_blocks(scope),
-            address_block_types=whitelist_db.ADDRESS_BLOCK_TYPES,
-            event_label_choices=whitelist_db.EVENT_LABEL_CHOICES,
         ), status_code=status_code)
 
     @application.get("/owner/{token}/cards/{card_id}/edit", response_class=HTMLResponse)
@@ -2239,19 +1976,9 @@ def create_app(db_path: Path = None) -> FastAPI:
     _PUBLIC_DEFAULT_TYPES = ("title", "company", "website", "birthday",
                              "high_school", "maiden_name", "nickname",
                              "city", "state",
-                             "childhood_city", "childhood_state",
-                             # UX pass 4: scoped variants
-                             "city_personal", "state_personal")
-
-    # UX pass 5 (2026-09-24): the six-field Google-parity addition keeps
-    # the granted default EXCEPT custom_field — arbitrary user-defined
-    # content must not leak past an accidental share (gap-analysis
-    # report §6 item 5).
-    _PRIVATE_DEFAULT_TYPES = ("custom_field",)
+                             "childhood_city", "childhood_state")
 
     def _editor_default_visibility(field_type: str) -> str:
-        if field_type in _PRIVATE_DEFAULT_TYPES:
-            return "private"
         return ("public" if field_type in _PUBLIC_DEFAULT_TYPES else "granted")
 
     def _parse_editor_form(form):
@@ -2263,19 +1990,12 @@ def create_app(db_path: Path = None) -> FastAPI:
         the pass-2 data-loss bug (deleting a field used to drop edits).
 
         Returns (display_name, card_name, updates, labels, removals,
-        new_fields, name_fields) where name_fields = {'first':str, 'last':str,
-        'suffix':str, 'middles':[str,...], 'display':str_or_None}.
+        new_fields) where updates are (fid, value, visibility), labels map
+        fid → raw label submission, and new_fields are
+        (type, value, visibility[, label]) 4-tuples.
         """
         display_name = (form.get("display_name") or "").strip()
         card_name = (form.get("card_name") or "").strip()
-        # UX pass 4: name components.
-        name_fields = {
-            'first': (form.get("first_name") or "").strip(),
-            'last': (form.get("last_name") or "").strip(),
-            'suffix': (form.get("suffix") or "").strip(),
-            'middles': [v for v in (form.getlist("middle_names") or []) if v.strip()],
-            'display': display_name if display_name else None,
-        }
 
         # Existing rows: field_{id}_value (+ _visibility, + _label +
         # _label_custom, + _remove). Collect all key kinds first — a row
@@ -2328,7 +2048,7 @@ def create_app(db_path: Path = None) -> FastAPI:
                         label = custom_labels[i]
                 new_fields.append((t, value, visibility, label))
 
-        return display_name, card_name, updates, labels, removals, new_fields, name_fields
+        return display_name, card_name, updates, labels, removals, new_fields
 
     @application.post("/owner/{token}/cards/{card_id}/edit", response_class=HTMLResponse)
     async def owner_card_edit_save(request: Request, token: str, card_id: int):
@@ -2340,7 +2060,7 @@ def create_app(db_path: Path = None) -> FastAPI:
                 return err
 
             (display_name, card_name, updates, labels, removals,
-             new_fields, name_fields) = _parse_editor_form(form)
+             new_fields) = _parse_editor_form(form)
 
             try:
                 whitelist_db.save_card_editor(
@@ -2349,34 +2069,12 @@ def create_app(db_path: Path = None) -> FastAPI:
                     field_updates=updates, field_labels=labels,
                     field_removals=removals,
                     new_fields=new_fields,
-                    name_fields=name_fields,
                 )
-            except (ValueError, TypeError) as exc:
-                # TypeError = save_card_editor doesn't accept name_fields yet
-                # (Package A data layer not yet merged).
-                if isinstance(exc, TypeError):
-                    # Fall back to the old signature.
-                    try:
-                        whitelist_db.save_card_editor(
-                            conn, card_id,
-                            display_name=display_name, card_name=card_name,
-                            field_updates=updates, field_labels=labels,
-                            field_removals=removals,
-                            new_fields=new_fields,
-                        )
-                    except ValueError as exc2:
-                        profile = whitelist_db.get_profile_by_id(conn, card["owner_profile_id"])
-                        card = whitelist_db.get_card_by_id(conn, card_id)
-                        return _card_editor_html(conn, request, token, profile, card,
-                                                 error=str(exc2), status_code=400)
-                    card = whitelist_db.get_card_by_id(conn, card_id)
-                    profile = whitelist_db.get_profile_by_id(conn, card["owner_profile_id"])
-                    return _card_editor_html(conn, request, token, profile, card)
-                else:
-                    profile = whitelist_db.get_profile_by_id(conn, card["owner_profile_id"])
-                    card = whitelist_db.get_card_by_id(conn, card_id)
-                    return _card_editor_html(conn, request, token, profile, card,
-                                             error=str(exc), status_code=400)
+            except ValueError as exc:
+                profile = whitelist_db.get_profile_by_id(conn, card["owner_profile_id"])
+                card = whitelist_db.get_card_by_id(conn, card_id)
+                return _card_editor_html(conn, request, token, profile, card,
+                                         error=str(exc), status_code=400)
 
             card = whitelist_db.get_card_by_id(conn, card_id)
             profile = whitelist_db.get_profile_by_id(conn, card["owner_profile_id"])
@@ -2409,7 +2107,7 @@ def create_app(db_path: Path = None) -> FastAPI:
                 return err
 
             (display_name, card_name, updates, labels, removals,
-             new_fields, name_fields) = _parse_editor_form(form)
+             new_fields) = _parse_editor_form(form)
             removals.append(field_id)  # the ✕'s own removal
             updates = [(fid, v, vis) for fid, v, vis in updates
                        if fid != field_id]
@@ -2421,45 +2119,21 @@ def create_app(db_path: Path = None) -> FastAPI:
                     field_updates=updates, field_labels=labels,
                     field_removals=removals,
                     new_fields=new_fields,
-                    name_fields=name_fields,
                 )
-            except (ValueError, TypeError) as exc:
-                if isinstance(exc, TypeError):
-                    # save_card_editor doesn't accept name_fields yet.
-                    try:
-                        whitelist_db.save_card_editor(
-                            conn, card_id,
-                            display_name=display_name, card_name=card_name,
-                            field_updates=updates, field_labels=labels,
-                            field_removals=removals,
-                            new_fields=new_fields,
-                        )
-                    except ValueError as exc2:
-                        row = conn.execute(
-                            "SELECT profile_id FROM profile_fields WHERE id = ?",
-                            (field_id,),
-                        ).fetchone()
-                        if row is None or row["profile_id"] != profile_id:
-                            return HTMLResponse("Not found", status_code=404)
-                        profile = whitelist_db.get_profile_by_id(conn, profile_id)
-                        card = whitelist_db.get_card_by_id(conn, card_id)
-                        return _card_editor_html(conn, request, token, profile, card,
-                                                 error=str(exc2), status_code=400)
-                    return RedirectResponse(
-                        url=f"/owner/{token}/cards/{card_id}/edit", status_code=303)
-                else:
-                    # A foreign field id stays a 404 (IDOR, fail closed);
-                    # any other save error re-renders the editor.
-                    row = conn.execute(
-                        "SELECT profile_id FROM profile_fields WHERE id = ?",
-                        (field_id,),
-                    ).fetchone()
-                    if row is None or row["profile_id"] != profile_id:
-                        return HTMLResponse("Not found", status_code=404)
-                    profile = whitelist_db.get_profile_by_id(conn, profile_id)
-                    card = whitelist_db.get_card_by_id(conn, card_id)
-                    return _card_editor_html(conn, request, token, profile, card,
-                                             error=str(exc), status_code=400)
+            except ValueError as exc:
+                # A foreign field id stays a 404 (IDOR, fail closed); any
+                # other save error (duplicate value, …) re-renders the
+                # editor with the message so keyed data survives.
+                row = conn.execute(
+                    "SELECT profile_id FROM profile_fields WHERE id = ?",
+                    (field_id,),
+                ).fetchone()
+                if row is None or row["profile_id"] != profile_id:
+                    return HTMLResponse("Not found", status_code=404)
+                profile = whitelist_db.get_profile_by_id(conn, profile_id)
+                card = whitelist_db.get_card_by_id(conn, card_id)
+                return _card_editor_html(conn, request, token, profile, card,
+                                         error=str(exc), status_code=400)
             # 303 back to the editor GET — the row is gone on landing.
             return RedirectResponse(
                 url=f"/owner/{token}/cards/{card_id}/edit", status_code=303)
@@ -2607,48 +2281,6 @@ def create_app(db_path: Path = None) -> FastAPI:
             days_since=days_since,
         ))
 
-    @application.post("/owner/{token}/cards/{card_id}/preview/fields/{field_id}/delete")
-    async def owner_preview_field_delete(request: Request, token: str, card_id: int,
-                                         field_id: int):
-        """UX pass 5: the card PREVIEW's per-field ✕ — every field row on
-        the preview (populated or not) removes the field from the card
-        immediately and lands back on the preview.
-
-        This is a NARROW unlink through whitelist_db.remove_card_field,
-        NOT the editor's delete route: the preview page carries no editor
-        form, and the editor route MUST apply the full parsed body with
-        the removal (pass-2 data-loss ruling). Piping an empty body
-        through save_card_editor would blank the profile name columns —
-        so the preview path touches the card_fields link row only.
-        profile_fields survives (cards are lenses, not containers).
-
-        Ownership is enforced twice: token → profile must own the card
-        (checked here, same as the preview GET), and the field must belong
-        to that profile (checked in the data layer, ValueError → 404 —
-        IDOR fails closed).
-        """
-        conn = whitelist_db.wl_connect(path)
-        try:
-            result = _resolve_owner(conn, request, token, _get_secret())
-            if result[0] is None and result[2] is None:
-                return HTMLResponse("Invalid or expired link", status_code=403)
-            if result[2]:
-                return RedirectResponse(url=f"/owner/{result[2]}")
-            profile_id = result[0]
-
-            card = whitelist_db.get_card_by_id(conn, card_id)
-            if not card or card["owner_profile_id"] != profile_id:
-                return HTMLResponse("Not found", status_code=404)
-            try:
-                whitelist_db.remove_card_field(conn, card_id, field_id)
-            except ValueError:
-                return HTMLResponse("Not found", status_code=404)
-        finally:
-            conn.close()
-        # 303 back to the preview GET — the row is gone on landing.
-        return RedirectResponse(
-            url=f"/owner/{token}/profile/card/{card_id}", status_code=303)
-
     @application.get("/photos/{owner_profile_id}/{card_id}")
     async def serve_photo(owner_profile_id: int, card_id: int):
         upload_dir = Path(__file__).parent / "uploads"
@@ -2761,10 +2393,16 @@ def create_app(db_path: Path = None) -> FastAPI:
                     card["visible_fields"] = card["fields"]
                 else:
                     card["visible_fields"] = []
-            # UX pass 5 (captain ruling): the per-card chip switcher is
-            # GONE — this page now shows ALL the shared cards at once,
-            # laid out like the view-profile page (reach badges per card
-            # included); the Access section below is unchanged.
+            # UX pass (2026-09-22): the detail view shows ONE card at a
+            # time (captain's pass), with a chip switcher when the contact
+            # has several. ?card=<id> selects; default is the first card.
+            try:
+                selected_card_id = int(request.query_params.get("card", ""))
+            except ValueError:
+                selected_card_id = None
+            selected_card = next(
+                (c for c in cards if c["id"] == selected_card_id),
+                cards[0] if cards else None)
             stale = is_verified_stale(profile.get("verified_at"))
             # Determine tier for this grant
             if grant["status"] == "granted":
@@ -2778,6 +2416,7 @@ def create_app(db_path: Path = None) -> FastAPI:
 
         return HTMLResponse(jinja.get_template("contact_card.html").render(
             request=request, profile=profile, grant=grant, cards=cards,
+            selected_card=selected_card,
             tier=tier, stale=stale, days_since=days_since, token=token,
             grant_id=grant_id, is_grey=whitelist_db.is_grey(grant)))
 

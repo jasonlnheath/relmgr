@@ -19,57 +19,34 @@
         </div>
     </div>
 
-    {# My Card strip (UX pass 4): horizontal strip of ALL owner card
-       pictures + names. Each card shows its photo centered in a circle.
-       UX pass 5 (captain ruling): the 'Edit →' link is GONE — the whole
-       card IS the click target to that page. Bug fix: cards carry
-       owner_profile_id (not owner_id) — the wrong key made every chip
-       fail the filter, so the strip rendered no names and no pictures. #}
+    {# My card — UX pass 3 ruling: NO email line, NO edit link; the whole
+       row is one click to the edit-profile page. #}
     {% if my_card %}
-    <div class="wl-card p-4 mb-4">
-        <div class="flex items-center gap-3">
-            <div class="flex items-center gap-2 flex-1 overflow-x-auto">
-                {% for mc in all_cards %}
-                {% if mc.owner_profile_id == my_card.owner_id %}
-                <a href="/owner/{{ token }}/profile" class="flex items-center gap-2 flex-shrink-0 hover:opacity-80">
-                    {% if mc.photo_path %}
-                    <img src="/photos/{{ my_card.owner_id }}/{{ mc.id }}"
-                         alt="{{ mc.name }} photo"
-                         class="w-10 h-10 rounded-full object-cover flex-shrink-0">
-                    {% else %}
-                    <div class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
-                         style="background: var(--wl-btn-slate);">
-                        <span class="wl-text text-sm">{{ mc.name[:2].upper() }}</span>
-                    </div>
-                    {% endif %}
-                    <span class="text-xs wl-text-sub truncate">{{ mc.name }}</span>
-                </a>
-                {% endif %}
-                {% endfor %}
-            </div>
+    <a href="/owner/{{ token }}/profile" class="wl-card p-4 mb-4 flex items-center gap-3 block hover:opacity-90 transition-opacity">
+        {% if my_card.photo_path %}
+        <img src="/photos/{{ my_card.owner_id }}/{{ my_card.id }}"
+             alt="{{ my_card.name }} photo"
+             class="w-12 h-12 rounded-full object-cover">
+        {% else %}
+        <div class="w-12 h-12 rounded-full flex items-center justify-center"
+             style="background: var(--wl-btn-slate);">
+            <span class="wl-text text-lg">{{ my_card.name[:2].upper() }}</span>
         </div>
-    </div>
+        {% endif %}
+        <div class="flex-1">
+            <h2 class="wl-heading wl-heading-sm">{{ my_card.name }}</h2>
+        </div>
+    </a>
     {% endif %}
 
     {# Search bar + round + button (UX pass 2): the + searches the database
        for 'new connections' and, on no hits, offers to create a standard
-       vCard. Hidden letter field keeps the rail filter through searches.
-       UX pass 5: LIVE filtering — every keystroke re-renders the list
-       region below (no Enter required), and an ✕ at the right of the bar
-       clears the query. Tab order is input → ✕ → + (native DOM order);
-       shift-tab walks back. #}
-    <form method="GET" action="/owner/{{ token }}" id="search-form" class="mb-4 flex items-center gap-2">
+       vCard. Hidden letter field keeps the rail filter through searches. #}
+    <form method="GET" action="/owner/{{ token }}" class="mb-4 flex items-center gap-2">
         {% if letter %}<input type="hidden" name="letter" value="{{ letter }}">{% endif %}
-        <div class="relative flex-1 min-w-0">
-            <input type="text" name="q" value="{{ q or '' }}"
-                   placeholder="Search WhiteList"
-                   autocomplete="off"
-                   class="w-full pr-9 px-3 py-2 border border-gray-600 rounded-lg text-sm bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
-            <button type="button" id="search-clear"
-                    title="Clear search"
-                    aria-label="Clear search"
-                    class="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full wl-btn-ink text-xs leading-none items-center justify-center {% if not q %}hidden{% endif %} inline-flex">✕</button>
-        </div>
+        <input type="text" name="q" value="{{ q or '' }}"
+               placeholder="Search WhiteList"
+               class="flex-1 min-w-0 px-3 py-2 border border-gray-600 rounded-lg text-sm bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
         <a href="/owner/{{ token }}/new-connection{% if q %}?q={{ q | urlencode }}{% endif %}"
            id="new-connection-link"
            title="Add a new connection"
@@ -101,55 +78,8 @@
                         <a href="/owner/{{ token }}/contact/{{ row.live_grant.id }}"
                            class="wl-heading wl-heading-sm wl-text block truncate hover:opacity-75">{{ row.name }}</a>
                         <p class="text-xs wl-text-faint truncate">{{ row.email }}</p>
-                        {# Pass-5 scoped connect ask (John Doe flow): show
-                           WHAT is being asked when the request carries a
-                           scope (access_grants.context). #}
-                        {% if row.live_grant.get('context') == 'personal' %}
-                        <p class="text-xs wl-text-sub mt-0.5">Asks for: personal contact information</p>
-                        {% elif row.live_grant.get('context') == 'professional' %}
-                        <p class="text-xs wl-text-sub mt-0.5">Asks for: professional contact information</p>
-                        {% endif %}
                     </div>
                 </div>
-                {% if row.live_grant.get('context') in ('personal', 'professional') %}
-                {# Scoped ask → approve WITH the matching cards picked.
-                   Checkboxes pre-select the requested scope (personal →
-                   personal-scope cards, professional → work-scope); the
-                   owner can adjust before confirming. Posts to the
-                   card-assignment approve route. #}
-                {% set wanted_scope = 'personal' if row.live_grant.get('context') == 'personal' else 'work' %}
-                <details class="mt-3 pt-2" style="border-top: 1px solid var(--wl-glass-border);">
-                    <summary class="text-xs wl-text-sub cursor-pointer select-none">Approve with cards…</summary>
-                    <form method="POST" action="/owner/{{ token }}/approve" class="mt-2">
-                        <input type="hidden" name="grant_id" value="{{ row.live_grant.id }}">
-                        <input type="hidden" name="decision" value="approve">
-                        <input type="hidden" name="access" value="quarter">
-                        <div class="flex flex-wrap gap-3 mb-2">
-                            {% for c in owner_cards %}
-                            <label class="text-xs wl-text-sub inline-flex items-center gap-1.5">
-                                <input type="checkbox" name="card_ids" value="{{ c.id }}"
-                                       {% if c.get('scope', 'vcard') == wanted_scope %}checked{% endif %}
-                                       class="accent-gray-600">
-                                {{ c.name }}
-                            </label>
-                            {% endfor %}
-                        </div>
-                        <div class="flex gap-2">
-                            <button type="submit"
-                                    class="wl-btn-approve px-3 py-1 rounded text-xs">
-                                Confirm approve
-                            </button>
-                        </div>
-                    </form>
-                </details>
-                <form method="POST" action="/owner/{{ token }}/decision" class="mt-2 flex gap-2">
-                    <input type="hidden" name="grant_id" value="{{ row.live_grant.id }}">
-                    <button type="submit" name="decision" value="deny"
-                            class="wl-btn-deny px-3 py-1 rounded text-xs">
-                        Deny
-                    </button>
-                </form>
-                {% else %}
                 <form method="POST" action="/owner/{{ token }}/decision" class="mt-3 pt-2 flex gap-2"
                       style="border-top: 1px solid var(--wl-glass-border);">
                     <input type="hidden" name="grant_id" value="{{ row.live_grant.id }}">
@@ -162,18 +92,11 @@
                         Deny
                     </button>
                 </form>
-                {% endif %}
             </div>
         {% endfor %}
         </div>
     </div>
     {% endif %}
-
-    {# UX pass 5: everything below the request box that DEPENDS on the
-       search query — filter tabs, rows, letter rail, empty state,
-       pagination — lives in ONE region the live filter swaps per
-       keystroke. #}
-    <div id="list-region">
 
     {# ============================================================
        FILTER TABS (UX pass 3): picture-based round icons below the
@@ -234,48 +157,22 @@
                aria-label="Open {{ row.name }}"></a>
             {% endif %}
             <div class="flex items-center gap-3">
-                {# Picture / avatar (UX pass 4): per-card photo centered in 40px
-                   circle, initials fallback. Badge still shown for whitelist/grey/black. #}
+                {# Picture / avatar #}
                 {% if row.logo_state == 'fresh' %}
                 <span class="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center overflow-hidden"
                       style="background: var(--wl-badge-white); border: 1px solid var(--wl-glass-edge);">
-                    {% if row.row_card and row.row_card.get('photo_path') %}
-                    <img src="/photos/{{ row.row_card.owner_profile_id }}/{{ row.row_card.id }}"
-                         alt="" aria-hidden="true" class="w-8 h-8 rounded-full object-cover">
-                    {% else %}
                     <img src="/static/badge-whitelist.png" alt="" aria-hidden="true" class="w-6 h-6 object-contain">
-                    {% endif %}
                 </span>
                 {% elif row.logo_state == 'stale' %}
                 <span class="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center overflow-hidden"
                       style="background: var(--wl-badge-grey); border: 1px solid var(--wl-glass-edge);">
-                    {% if row.row_card and row.row_card.get('photo_path') %}
-                    <img src="/photos/{{ row.row_card.owner_profile_id }}/{{ row.row_card.id }}"
-                         alt="" aria-hidden="true" class="w-8 h-8 rounded-full object-cover">
-                    {% else %}
                     <img src="/static/badge-greylist.png" alt="" aria-hidden="true" class="w-6 h-6 object-contain">
-                    {% endif %}
                 </span>
-                {% else %}
-                {# Plain contact — show card photo or initials #}
-                {% if row.row_card and row.row_card.get('photo_path') %}
-                <div class="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center overflow-hidden"
-                     style="background: var(--wl-btn-slate);">
-                    <img src="/photos/{{ row.row_card.owner_profile_id }}/{{ row.row_card.id }}"
-                         alt="" aria-hidden="true" class="w-full h-full object-cover">
-                </div>
-                {% elif row.row_card and row.row_card.get('hs_photo_path') %}
-                <div class="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center overflow-hidden"
-                     style="background: var(--wl-btn-slate);">
-                    <img src="/photos/{{ row.row_card.owner_profile_id }}/{{ row.row_card.id }}/hs"
-                         alt="" aria-hidden="true" class="w-full h-full object-cover">
-                </div>
                 {% else %}
                 <div class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
                      style="background: var(--wl-btn-slate);">
                     <span class="wl-text text-sm">{{ row.name[:2].upper() }}</span>
                 </div>
-                {% endif %}
                 {% endif %}
 
                 {# Name — UX pass 3: no email sub-line; the card chip stays
@@ -372,13 +269,7 @@
     </div>
     {% else %}
     <div class="text-center py-8">
-        {% if q %}
-        {# UX pass 5: a live search that matches nothing says so — the
-           'no entries yet' copy is only for a genuinely empty list. #}
-        <p class="wl-text-faint text-sm">No matches for “{{ q }}”</p>
-        {% else %}
         <p class="wl-text-faint text-sm">No WhiteList entries yet</p>
-        {% endif %}
     </div>
     {% endif %}
 
@@ -401,8 +292,6 @@
     </div>
     {% endif %}
 
-    </div>{# /list-region #}
-
     {# Footer: junk link #}
     {% if denied_count > 0 %}
     <div class="mt-4 pt-4" style="border-top: 1px solid var(--wl-glass-border);">
@@ -414,83 +303,20 @@
 </div>
 
 <script>
-// UX pass 5: LIVE search — every keystroke fetches this page with the
-// typed query and swaps ONLY the #list-region (filter tabs, rows, letter
-// rail, empty state, pagination). No Enter required; focus and the caret
-// stay in the input; replaceState keeps one history entry per visit. The
-// ✕ at the right of the bar clears the query (and refocuses the input);
-// Tab walks input → ✕ → + (native DOM order), shift-tab walks back.
-// The GET form stays as the no-JS fallback: Enter still submits it.
+// UX pass 2 F6: the + button must carry a typed-but-unsubmitted query —
+// clicking + without pressing Enter still lands on the DB search.
 (function () {
-    const form = document.getElementById('search-form');
-    const input = form ? form.querySelector('input[name="q"]') : null;
-    const clearBtn = document.getElementById('search-clear');
-    const region = document.getElementById('list-region');
+    const input = document.querySelector('form input[name="q"]');
     const plus = document.getElementById('new-connection-link');
-    if (!input) return;
-
-    let seq = 0;          // keystroke race guard — only the latest render lands
-    let timer = null;
-
-    function buildUrl(q) {
-        const params = new URLSearchParams(window.location.search);
-        if (q) { params.set('q', q); } else { params.delete('q'); }
-        params.delete('page');   // a new query starts at the first page
-        const qs = params.toString();
-        return window.location.pathname + (qs ? '?' + qs : '');
-    }
-
-    function syncPlus() {
-        if (!plus) return;
+    if (!input || !plus) return;
+    function sync() {
         const base = plus.href.split('?')[0];
         plus.href = input.value.trim()
             ? base + '?q=' + encodeURIComponent(input.value.trim())
             : base;
     }
-
-    function syncClear() {
-        if (clearBtn) clearBtn.classList.toggle('hidden', !input.value);
-    }
-
-    async function refresh(q) {
-        if (!region) return;
-        const mine = ++seq;
-        try {
-            const res = await fetch(buildUrl(q), {
-                headers: { 'X-Requested-With': 'fetch' }
-            });
-            const html = await res.text();
-            const doc = new DOMParser().parseFromString(html, 'text/html');
-            const fresh = doc.getElementById('list-region');
-            if (fresh && mine === seq) {
-                region.innerHTML = fresh.innerHTML;
-                history.replaceState(null, '', buildUrl(q));
-            }
-        } catch (e) {
-            // Network hiccup — keep the current rows; Enter still submits.
-        }
-    }
-
-    input.addEventListener('input', function () {
-        syncPlus();
-        syncClear();
-        clearTimeout(timer);
-        timer = setTimeout(function () { refresh(input.value.trim()); }, 180);
-    });
-
-    if (clearBtn) {
-        clearBtn.addEventListener('click', function () {
-            input.value = '';
-            syncPlus();
-            syncClear();
-            input.focus();
-            clearTimeout(timer);
-            refresh('');
-        });
-    }
-
-    syncPlus();
-    syncClear();
+    input.addEventListener('input', sync);
+    sync();
 })();
 </script>
 {% endblock %}

@@ -159,13 +159,11 @@ _ADMITTED_EXPIRY_SQL = (
 # - structured address block: address1/address2/city/state/zip
 #   replacing the single-line 'address' type (migrated 1:1 → address1)
 CARD_EDITOR_FIELD_TYPES = (
-    # Legacy / shared types (all three scopes):
     'email', 'phone', 'text_number', 'facetime_number',
     'facetime', 'skype', 'video_app',
     'messenger', 'messaging_app',
     'facebook', 'instagram', 'social_other',
-    'title', 'company',
-    'address1', 'address2', 'city', 'state', 'zip',
+    'title', 'company', 'address1', 'address2', 'city', 'state', 'zip',
     'country',
     'website', 'birthday', 'note',
     # UX pass 3 (2026-09-23) personal-identity fields for friend-finding:
@@ -173,369 +171,7 @@ CARD_EDITOR_FIELD_TYPES = (
     # public by default (street-level childhood address defaults granted).
     'high_school', 'maiden_name', 'nickname',
     'childhood_address1', 'childhood_city', 'childhood_state',
-    # UX pass 4 (2026-09-24) scoped types — 13 split families × 2 scopes:
-    # email
-    'email_personal', 'email_work',
-    # phone
-    'phone_personal', 'phone_work',
-    # text_number
-    'text_number_personal', 'text_number_work',
-    # facetime_number
-    'facetime_number_personal', 'facetime_number_work',
-    # social: facebook, instagram, social_other
-    'facebook_personal', 'facebook_work',
-    'instagram_personal', 'instagram_work',
-    'social_other_personal', 'social_other_work',
-    # address parts
-    'address1_personal', 'address1_work',
-    'address2_personal', 'address2_work',
-    'city_personal', 'city_work',
-    'state_personal', 'state_work',
-    'zip_personal', 'zip_work',
-    'country_personal', 'country_work',
-    # UX pass 4: repeatable middle-name rows
-    'middle_name',
-    # UX pass 5 (2026-09-24) Google-parity six-field addition
-    # (data/whitelist-field-gap-analysis/report.md §6):
-    'department',        # Work — Organization Department
-    'po_box',            # shared address component — NOT folded into address2
-    'related_person',    # Personal — related person (label = role, free text)
-    'event',             # Personal — significant date (label = anniversary/other)
-    'custom_field',      # vCard — label+value; defaults PRIVATE (arbitrary content)
-    'name_prefix',       # vCard — Mr / Dr / …
-    'name_suffix',       # vCard — Jr. / III / …
 )
-
-# UX pass 4: 13 split families mapping base name → (personal, work) scoped types.
-SCOPED_FAMILIES: dict[str, tuple[str, str]] = {
-    'email': ('email_personal', 'email_work'),
-    'phone': ('phone_personal', 'phone_work'),
-    'text_number': ('text_number_personal', 'text_number_work'),
-    'facetime_number': ('facetime_number_personal', 'facetime_number_work'),
-    'facebook': ('facebook_personal', 'facebook_work'),
-    'instagram': ('instagram_personal', 'instagram_work'),
-    'social_other': ('social_other_personal', 'social_other_work'),
-    'address1': ('address1_personal', 'address1_work'),
-    'address2': ('address2_personal', 'address2_work'),
-    'city': ('city_personal', 'city_work'),
-    'state': ('state_personal', 'state_work'),
-    'zip': ('zip_personal', 'zip_work'),
-    'country': ('country_personal', 'country_work'),
-}
-
-# UX pass 5 (2026-09-24): one complete address block, in the captain's
-# component order. vCard + Personal editors render these grouped BY BLOCK
-# (k-th of each component = block k) behind one '+ Add address' control;
-# the Work editor keeps the flat per-component layout.
-ADDRESS_BLOCK_TYPES: tuple[str, ...] = (
-    'address1', 'address2', 'city', 'state', 'zip', 'country',
-)
-
-# UX pass 5: card scopes whose Address section renders as grouped blocks.
-ADDRESS_BLOCK_SCOPES = ('vcard', 'personal')
-
-
-def address_blocks(scope: str) -> bool:
-    """True when this card scope's Address section renders as blocks."""
-    return scope in ADDRESS_BLOCK_SCOPES
-
-
-# UX pass 5: scoped event labels (Google's Significant-date enum).
-EVENT_LABEL_CHOICES = ('anniversary', 'other')
-
-# UX pass 5: scope templates — section layout per card scope.
-# Shape: same as CARD_EDITOR_SECTIONS: [(heading, ((type, sublabel), …)), …]
-# UX pass 5 PICKER PURGE: the pass-4 scoped variants (email_personal,
-# phone_work, …) are GONE from every picker — the captain ruled they
-# duplicate fields that already exist. All three scopes pick from BASE
-# type names again; scoped rows already stored stay editable (the editor
-# maps them onto their family's base section via SCOPED_TO_BASE) and stay
-# legal in the CHECK constraint.
-# Context-filtered six-field addition (gap-analysis report §6):
-#   vcard    — all six (department, po_box, related_person, event,
-#              custom_field, name prefix/suffix)
-#   personal — po_box, related_person, event
-#   work     — department, po_box
-_SCOPE_TEMPLATES: tuple[tuple[str, tuple[tuple[str, str | None], ...], ...], ...] = (
-    # ── vcard (generic contact vCard — NO identity fields) ──
-    ('vcard', (
-        ('Emails', (('email', None),)),
-        ('Phone numbers', (
-            ('phone', None),
-            ('text_number', 'Text number'),
-            ('facetime_number', 'FaceTime number'),
-        )),
-        ('Video apps', (
-            ('facetime', 'FaceTime'),
-            ('skype', 'Skype'),
-            ('video_app', 'Video app'),
-        )),
-        ('Messaging apps', (
-            ('messenger', 'Messenger'),
-            ('messaging_app', 'Messaging app'),
-        )),
-        ('Social', (
-            ('facebook', 'Facebook'),
-            ('instagram', 'Instagram'),
-            ('social_other', 'Social'),
-        )),
-        ('Addresses', (
-            ('address1', 'Address 1'),
-            ('address2', 'Address 2'),
-            ('city', 'City'),
-            ('state', 'State/Province'),
-            ('zip', 'Zip/Postal Code'),
-            ('country', 'Country'),
-            ('po_box', 'PO Box'),
-        )),
-        ('Name', (
-            ('name_prefix', 'Prefix'),
-            ('name_suffix', 'Suffix'),
-        )),
-        ('Title', (('title', None),)),
-        ('Company', (('company', None),)),
-        ('Department', (('department', None),)),
-        ('Website', (('website', None),)),
-        ('Birthday', (('birthday', None),)),
-        ('Significant dates', (('event', None),)),
-        ('Related people', (('related_person', None),)),
-        ('Custom fields', (('custom_field', None),)),
-        ('Note', (('note', None),)),
-    )),
-    # ── personal (NO professional — no title/company/department/website;
-    #    identity fields stay here) ──
-    ('personal', (
-        ('Emails', (('email', None),)),
-        ('Phone numbers', (
-            ('phone', None),
-            ('text_number', 'Text number'),
-            ('facetime_number', 'FaceTime number'),
-        )),
-        ('Video apps', (
-            ('facetime', 'FaceTime'),
-            ('skype', 'Skype'),
-            ('video_app', 'Video app'),
-        )),
-        ('Messaging apps', (
-            ('messenger', 'Messenger'),
-            ('messaging_app', 'Messaging app'),
-        )),
-        ('Social', (
-            ('facebook', 'Facebook'),
-            ('instagram', 'Instagram'),
-            ('social_other', 'Social'),
-        )),
-        ('Addresses', (
-            ('address1', 'Address 1'),
-            ('address2', 'Address 2'),
-            ('city', 'City'),
-            ('state', 'State/Province'),
-            ('zip', 'Zip/Postal Code'),
-            ('country', 'Country'),
-            ('po_box', 'PO Box'),
-        )),
-        ('Birthday', (('birthday', None),)),
-        ('Significant dates', (('event', None),)),
-        ('Related people', (('related_person', None),)),
-        ('Note', (('note', None),)),
-        ('Personal history', (
-            ('high_school', 'High school'),
-            ('maiden_name', 'Maiden/Surname'),
-            ('nickname', 'Nickname'),
-        )),
-        ('Childhood home', (
-            ('childhood_address1', 'Childhood address'),
-            ('childhood_city', 'Childhood city'),
-            ('childhood_state', 'Childhood state'),
-        )),
-    )),
-    # ── work (professional only — NO birthday, NO personal/childhood,
-    #    NO related people/significant dates). Address stays a FLAT
-    #    per-component section (captain: block add is vCard/Personal only). ──
-    ('work', (
-        ('Emails', (('email', None),)),
-        ('Phone numbers', (
-            ('phone', None),
-            ('text_number', 'Text number'),
-            ('facetime_number', 'FaceTime number'),
-        )),
-        ('Video apps', (
-            ('facetime', 'FaceTime'),
-            ('skype', 'Skype'),
-            ('video_app', 'Video app'),
-        )),
-        ('Messaging apps', (
-            ('messenger', 'Messenger'),
-            ('messaging_app', 'Messaging app'),
-        )),
-        ('Social', (
-            ('facebook', 'Facebook'),
-            ('instagram', 'Instagram'),
-            ('social_other', 'Social'),
-        )),
-        ('Address', (
-            ('address1', 'Address 1'),
-            ('address2', 'Address 2'),
-            ('city', 'City'),
-            ('state', 'State/Province'),
-            ('zip', 'Zip/Postal Code'),
-            ('country', 'Country'),
-            ('po_box', 'PO Box'),
-        )),
-        ('Title', (('title', None),)),
-        ('Company', (('company', None),)),
-        ('Department', (('department', None),)),
-        ('Website', (('website', None),)),
-        ('Note', (('note', None),)),
-    )),
-)
-
-# UX pass 5: the block components (po_box is a standalone single row and
-# stays in the picker) — the editor's grouped-Address rendering iterates
-# these per block.
-_EDITOR_BLOCK_COMPONENTS = tuple(ADDRESS_BLOCK_TYPES)
-
-
-def editor_sections(scope: str) -> list[tuple[str, tuple[tuple[str, str | None], ...]]]:
-    """Return the section table for a given card scope.
-
-    Returns the same shape as CARD_EDITOR_SECTIONS:
-    ``[(heading, ((type, sublabel_or_None), …)), …]`` in §1.1 order.
-    vcard card sections use LEGACY type names.
-    """
-    for key, sections in _SCOPE_TEMPLATES:
-        if key == scope:
-            return list(sections)
-    # Fallback to legacy sections for unknown scopes.
-    return list(CARD_EDITOR_SECTIONS)
-
-
-def picker_sections(scope: str) -> list[tuple[str, tuple[tuple[str, str | None], ...]]]:
-    """Sections for the editor's bottom 'Add field' picker.
-
-    UX pass 5: on block scopes (vcard/personal) the six address-block
-    components are hidden from the picker — they are added via the
-    Addresses section's own '+ Add address' control, never one at a
-    time. po_box (a standalone component, NOT part of the block) stays
-    listed. Work's flat Address section lists every component as before.
-    """
-    sections = editor_sections(scope)
-    if not address_blocks(scope):
-        return sections
-    out: list[tuple[str, tuple[tuple[str, str | None], ...]]] = []
-    for heading, fields in sections:
-        if heading == 'Addresses':
-            fields = tuple((t, sub) for t, sub in fields
-                           if t not in _EDITOR_BLOCK_COMPONENTS)
-        out.append((heading, fields))
-    return out
-
-
-def allowed_types(scope: str) -> list[str]:
-    """Return every type appearing in that scope's sections, section-order preserved."""
-    types: list[str] = []
-    for _heading, fields in editor_sections(scope):
-        for ft, _sub in fields:
-            if ft not in types:
-                types.append(ft)
-    return types
-
-
-def phone_label_choices(scope: str) -> tuple[str, ...]:
-    """Return built-in phone label choices for a card scope.
-
-    vcard: ('mobile','home','work'); personal: ('mobile','home');
-    work: ('mobile','work').
-    """
-    if scope == 'vcard':
-        return ('mobile', 'home', 'work')
-    if scope == 'personal':
-        return ('mobile', 'home')
-    if scope == 'work':
-        return ('mobile', 'work')
-    return PHONE_LABEL_CHOICES
-
-
-# UX pass 4: legacy→scoped type mapping for seeded data.
-# Seeded profiles use legacy types (email, phone, etc.). The editor
-# sections for personal/work scopes use scoped variants
-# (email_personal, phone_personal, etc.). This mapping bridges the gap.
-_SCOPE_LEGACY_TO_SCOPED: dict[str, dict[str, str]] = {
-    'personal': {
-        'email': 'email_personal',
-        'phone': 'phone_personal',
-        'text_number': 'text_number_personal',
-        'facetime_number': 'facetime_number_personal',
-        'facebook': 'facebook_personal',
-        'instagram': 'instagram_personal',
-        'social_other': 'social_other_personal',
-        'address1': 'address1_personal',
-        'address2': 'address2_personal',
-        'city': 'city_personal',
-        'state': 'state_personal',
-        'zip': 'zip_personal',
-        'country': 'country_personal',
-    },
-    'work': {
-        'email': 'email_work',
-        'phone': 'phone_work',
-        'text_number': 'text_number_work',
-        'facetime_number': 'facetime_number_work',
-        'facebook': 'facebook_work',
-        'instagram': 'instagram_work',
-        'social_other': 'social_other_work',
-        'address1': 'address1_work',
-        'address2': 'address2_work',
-        'city': 'city_work',
-        'state': 'state_work',
-        'zip': 'zip_work',
-        'country': 'country_work',
-    },
-}
-
-
-def map_field_type_to_scope(field_type: str, scope: str) -> str:
-    """Map a legacy field_type to its scoped variant for the given scope.
-
-    vcard scope: identity preserved (email → email).
-    personal/work scope: legacy types → scoped variants.
-    """
-    if scope in _SCOPE_LEGACY_TO_SCOPED and field_type in _SCOPE_LEGACY_TO_SCOPED[scope]:
-        return _SCOPE_LEGACY_TO_SCOPED[scope][field_type]
-    return field_type
-
-
-# UX pass 5: stored scoped type → family base (email_personal → email).
-# After the picker purge the editor groups card fields under BASE section
-# keys; scoped rows already on cards must land in those sections.
-SCOPED_TO_BASE: dict[str, str] = {
-    scoped: base
-    for base, (personal, work) in SCOPED_FAMILIES.items()
-    for scoped in (personal, work)
-}
-
-
-def scoped_to_base(field_type: str) -> str:
-    """Return the family-base type for a stored scoped type (identity otherwise)."""
-    return SCOPED_TO_BASE.get(field_type, field_type)
-
-
-# UX pass 4: extend multi-types with scoped address families.
-_CARD_EDITOR_MULTI_TYPES_BASE = ('email', 'phone', 'video_app', 'messaging_app', 'social_other',
-                                 'high_school', 'maiden_name', 'nickname',
-                                 'childhood_address1', 'childhood_city', 'childhood_state')
-_CARD_EDITOR_MULTI_TYPES_SCOPED = tuple(
-    ft for fam in SCOPED_FAMILIES.values()
-    for ft in fam
-    if fam[0].startswith(('address1', 'address2', 'city', 'state', 'zip', 'country'))
-    or fam[0].startswith(('facebook', 'instagram', 'social_other'))
-    or fam[0].startswith(('phone', 'text_number', 'facetime_number'))
-    or fam[0].startswith('email')
-)
-CARD_EDITOR_MULTI_TYPES = tuple(set(
-    _CARD_EDITOR_MULTI_TYPES_BASE + _CARD_EDITOR_MULTI_TYPES_SCOPED
-    + ('related_person', 'event', 'custom_field')
-))
 
 CARD_EDITOR_FIELD_LABELS = {
     'email': 'Email',
@@ -562,34 +198,11 @@ CARD_EDITOR_FIELD_LABELS = {
     'birthday': 'Birthday',
     'note': 'Note',
     'high_school': 'High school',
-    'maiden_name': 'Maiden/Surname',
+    'maiden_name': 'Maiden name',
     'nickname': 'Nickname',
     'childhood_address1': 'Childhood address',
     'childhood_city': 'Childhood city',
     'childhood_state': 'Childhood state',
-    # UX pass 4: scoped type labels (base family label for scoped types)
-    'middle_name': 'Middle name',
-    # UX pass 5: Google-parity additions
-    'department': 'Department',
-    'po_box': 'PO Box',
-    'related_person': 'Related person',
-    'event': 'Significant date',
-    'custom_field': 'Custom field',
-    'name_prefix': 'Name prefix',
-    'name_suffix': 'Name suffix',
-    'email_personal': 'Email', 'email_work': 'Email',
-    'phone_personal': 'Phone', 'phone_work': 'Phone',
-    'text_number_personal': 'Text number', 'text_number_work': 'Text number',
-    'facetime_number_personal': 'FaceTime number', 'facetime_number_work': 'FaceTime number',
-    'facebook_personal': 'Facebook', 'facebook_work': 'Facebook',
-    'instagram_personal': 'Instagram', 'instagram_work': 'Instagram',
-    'social_other_personal': 'Social', 'social_other_work': 'Social',
-    'address1_personal': 'Address 1', 'address1_work': 'Address 1',
-    'address2_personal': 'Address 2', 'address2_work': 'Address 2',
-    'city_personal': 'City', 'city_work': 'City',
-    'state_personal': 'State/Province', 'state_work': 'State/Province',
-    'zip_personal': 'Zip/Postal Code', 'zip_work': 'Zip/Postal Code',
-    'country_personal': 'Country', 'country_work': 'Country',
 }
 
 # Editor sections in render order: (heading, ((field_type, sublabel), …)).
@@ -617,7 +230,7 @@ CARD_EDITOR_SECTIONS = (
         ('instagram', 'Instagram'),
         ('social_other', 'Social'),
     )),
-    ('Address', (
+    ('Address Block 1', (
         ('address1', 'Address 1'),
         ('address2', 'Address 2'),
         ('city', 'City'),
@@ -645,6 +258,11 @@ CARD_EDITOR_SECTIONS = (
         ('childhood_state', 'Childhood state'),
     )),
 )
+
+# Repeatable types that get a "+ Add …" row button in the editor.
+CARD_EDITOR_MULTI_TYPES = ('email', 'phone', 'video_app', 'messaging_app', 'social_other',
+                           'high_school', 'maiden_name', 'nickname',
+                           'childhood_address1', 'childhood_city', 'childhood_state')
 
 # ============================================================
 # Card ordering + kind (UX pass 3, 2026-09-23): Personal is THE default
@@ -1498,101 +1116,6 @@ def create_grant(
     _log_action(conn, grant_id, profile_id, "created")
     conn.commit()
     return grant_id
-
-
-# UX pass 5 (2026-09-24): scoped connect asks (John Doe flow). A granted
-# contact can request the OTHER scope's card information — 'personal' or
-# 'professional'. The ask rides the existing access_grants.context column
-# (never a new enum value), so no schema heal is needed.
-_CONNECT_SCOPES = ('personal', 'professional')
-
-
-def create_scope_request(
-    conn: sqlite3.Connection,
-    profile_id: int,
-    requester_email: str,
-    requester_name: str,
-    owner_id: Optional[int] = None,
-    scope: str = "",
-) -> tuple[str, bool]:
-    """Create (or adopt) a PENDING grant that asks for a specific card scope.
-
-    Unlike create_grant — which dedupes against any admitting grant and
-    would silently return the already-granted row — a scoped connect ask
-    must mint a NEW pending row even when the requester already holds a
-    granted grant: the whole point is requesting MORE access.
-
-    Dedupe rules among pending rows for the same profile+email:
-    - a pending row with the SAME context → reuse it (idempotent re-click);
-    - a context-LESS pending row (a plain connection request) → adopt it
-      (its ask is upgraded to this scope, no duplicate stacks up);
-    - a pending row with a DIFFERENT context → mint another (both asks are
-      real and distinct).
-
-    Returns (grant_id, created) — created=False when an existing pending
-    row was reused/adopted.
-    """
-    if scope not in _CONNECT_SCOPES:
-        raise ValueError(f"unknown connect scope: {scope!r}")
-
-    row = conn.execute(
-        """SELECT id, context FROM access_grants
-           WHERE profile_id = ? AND LOWER(requester_email) = LOWER(?)
-             AND status = 'pending'
-           ORDER BY created_at DESC LIMIT 1""",
-        (profile_id, requester_email),
-    ).fetchone()
-    if row is not None:
-        if (row["context"] or "") == scope:
-            return row["id"], False
-        if not row["context"]:
-            conn.execute(
-                "UPDATE access_grants SET context = ?, updated_at = datetime('now') WHERE id = ?",
-                (scope, row["id"]),
-            )
-            _log_action(conn, row["id"], profile_id, "created")
-            conn.commit()
-            return row["id"], False
-
-    grant_id = str(uuid.uuid4())
-    if owner_id is None:
-        owner_id = profile_id
-    conn.execute(
-        """INSERT INTO access_grants (id, profile_id, requester_email,
-                                      requester_name, status, context, owner_id)
-           VALUES (?, ?, ?, ?, 'pending', ?, ?)""",
-        (grant_id, profile_id, requester_email, requester_name, scope, owner_id),
-    )
-    _log_action(conn, grant_id, profile_id, "created")
-    conn.commit()
-    return grant_id, True
-
-
-def granted_card_ids_for_viewer(
-    conn: sqlite3.Connection,
-    profile_id: int,
-    viewer_email: Optional[str],
-) -> list[int]:
-    """Union of card ids the viewer's ADMITTING grants are scoped to.
-
-    Pass-5 connect flow: an approved grant may carry card assignments
-    (grant_cards) — the owner picked exactly which cards to share at
-    approve time. A granted viewer sees the UNION of the assignments
-    across all their admitting grants. Returns [] when the viewer holds
-    no admitting grant with assignments (including owner self-view) —
-    the caller then shows every card (legacy unscoped behaviour).
-    """
-    if viewer_email is None:
-        return []
-    rows = conn.execute(
-        f"""SELECT DISTINCT gc.card_id
-            FROM grant_cards gc
-            JOIN access_grants g ON g.id = gc.grant_id
-            WHERE g.profile_id = ? AND LOWER(g.requester_email) = LOWER(?)
-              AND g.status = 'granted' AND {_ADMITTED_EXPIRY_SQL}""",
-        (profile_id, viewer_email, _now_iso()),
-    ).fetchall()
-    return [r["card_id"] for r in rows]
 
 
 def update_grant_status(
@@ -2784,7 +2307,6 @@ def ensure_cards_schema(conn: sqlite3.Connection) -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             owner_profile_id INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
             name TEXT NOT NULL,
-            scope TEXT NOT NULL DEFAULT 'vcard',
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             updated_at TEXT NOT NULL DEFAULT (datetime('now')),
             UNIQUE(owner_profile_id, name)
@@ -2806,27 +2328,23 @@ def ensure_cards_schema(conn: sqlite3.Connection) -> None:
 
 
 def create_card(conn: sqlite3.Connection, owner_profile_id: int,
-                name: str, field_ids: list[int], scope: str = 'vcard') -> dict:
+                name: str, field_ids: list[int]) -> dict:
     """Create a card (named field-group) for an owner profile.
 
     Contract:
     - empty card allowed (field_ids can be [])
     - unknown field_id → ValueError (field must exist in profile_fields)
     - duplicate name for same owner → ValueError
-    - scope must be one of 'personal', 'work', 'vcard'
 
     Args:
         conn: database connection.
         owner_profile_id: the profile that owns this card.
         name: card name (e.g., "Work", "Personal").
         field_ids: list of profile_fields.id to include.
-        scope: card scope — 'personal', 'work', or 'vcard'.
 
     Returns:
         The created card as dict.
     """
-    if scope not in ('personal', 'work', 'vcard'):
-        raise ValueError(f"invalid card scope '{scope}'")
     # Validate all field_ids exist and belong to this owner
     for fid in field_ids:
         row = conn.execute(
@@ -2839,8 +2357,8 @@ def create_card(conn: sqlite3.Connection, owner_profile_id: int,
     now = _now_iso()
     try:
         cur = conn.execute(
-            "INSERT INTO cards (owner_profile_id, name, scope, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-            (owner_profile_id, name, scope, now, now),
+            "INSERT INTO cards (owner_profile_id, name, created_at, updated_at) VALUES (?, ?, ?, ?)",
+            (owner_profile_id, name, now, now),
         )
     except sqlite3.IntegrityError:
         raise ValueError(f"duplicate card name '{name}' for profile {owner_profile_id}")
@@ -3380,23 +2898,9 @@ def label_display(label: str | None) -> str:
     text = (label or "").strip()
     if not text:
         return ""
-    if text in PHONE_LABEL_CHOICES or text in EVENT_LABEL_CHOICES:
+    if text in PHONE_LABEL_CHOICES:
         return text.capitalize()
     return text
-
-
-# UX pass 5: ONE field-type → display-label table for every rendering
-# surface (card preview now; profile/contact templates can adopt it
-# incrementally). Scoped pass-4 variants fold to their family base via
-# scoped_to_base so they can never drift from the base label.
-_FIELD_TYPE_LABELS = dict(CARD_EDITOR_FIELD_LABELS)
-
-
-def field_label_display(field_type: str) -> str:
-    """Human label for a stored field type ('email_personal' → 'Email',
-    'state' → 'State/Province'). Unknown types render the raw type."""
-    base = scoped_to_base(field_type or "")
-    return _FIELD_TYPE_LABELS.get(base, base)
 
 
 def ensure_card_photo_column(conn: sqlite3.Connection) -> None:
@@ -3746,272 +3250,6 @@ def ensure_contacts_owner(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-# ============================================================
-# UX pass 4: name columns, scope column, CHECK swap, stubs
-# ============================================================
-
-
-def ensure_profile_name_columns(conn: sqlite3.Connection) -> None:
-    """Add first_name, last_name, suffix columns to profiles (additive)."""
-    cols = [r["name"] for r in conn.execute("PRAGMA table_info(profiles)").fetchall()]
-    for col in ("first_name", "last_name", "suffix"):
-        if col not in cols:
-            conn.execute(f"ALTER TABLE profiles ADD COLUMN {col} TEXT")
-    conn.commit()
-
-
-def ensure_cards_scope_column(conn: sqlite3.Connection) -> None:
-    """Add scope column to cards for existing DBs (fresh DDL has it)."""
-    cols = [r["name"] for r in conn.execute("PRAGMA table_info(cards)").fetchall()]
-    if "scope" not in cols:
-        conn.execute("ALTER TABLE cards ADD COLUMN scope TEXT NOT NULL DEFAULT 'vcard'")
-        conn.commit()
-
-
-def _backfill_card_scopes(conn: sqlite3.Connection) -> None:
-    """One-shot: set scope on seeded cards (Personal→personal, Work→work)."""
-    conn.execute(
-        """CREATE TABLE IF NOT EXISTS whitelist_meta (
-               key TEXT PRIMARY KEY,
-               value TEXT NOT NULL
-           )"""
-    )
-    done = conn.execute(
-        "SELECT value FROM whitelist_meta WHERE key = 'pass4_scope_backfill'"
-    ).fetchone()
-    if done:
-        return
-    conn.execute(
-        """UPDATE cards SET scope = CASE
-               WHEN lower(name) = 'personal' THEN 'personal'
-               WHEN lower(name) = 'work' THEN 'work'
-               ELSE 'vcard'
-           END"""
-    )
-    conn.execute(
-        "INSERT OR REPLACE INTO whitelist_meta (key, value) VALUES ('pass4_scope_backfill', 'done')"
-    )
-    conn.commit()
-
-
-def ensure_profile_fields_pass4_schema(conn: sqlite3.Connection) -> None:
-    """Migrate profile_fields CHECK to include pass-4 types (idempotent).
-
-    Detect current DDL by ABSENCE of 'middle_name' in sqlite_master sql.
-    Row-preserving table-swap: PRAGMA foreign_keys=OFF; copy rows id-
-    preserving with explicit column list; drop old, rename.
-    """
-    row = conn.execute(
-        "SELECT sql FROM sqlite_master WHERE type='table' AND name='profile_fields'"
-    ).fetchone()
-    if row is None or not row[0]:
-        return  # table absent — wl_init creates it fresh this boot
-    if "'middle_name'" in row[0]:
-        return  # already pass-4
-
-    conn.execute("DROP TABLE IF EXISTS profile_fields_pass4")
-    conn.execute(f"""
-        CREATE TABLE profile_fields_pass4 (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            profile_id INTEGER NOT NULL,
-            field_type TEXT NOT NULL CHECK(field_type IN {CARD_EDITOR_FIELD_TYPES!r}),
-            field_value TEXT NOT NULL,
-            visibility TEXT NOT NULL CHECK(visibility IN {_VCARD_VISIBILITY!r}),
-            label TEXT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-            UNIQUE(profile_id, field_type, field_value),
-            FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
-        )
-    """)
-    conn.execute("PRAGMA foreign_keys=OFF")
-    conn.execute("""
-        INSERT INTO profile_fields_pass4
-            (id, profile_id, field_type, field_value,
-             visibility, label, created_at, updated_at)
-        SELECT id, profile_id, field_type, field_value,
-               visibility, label, created_at, updated_at
-        FROM profile_fields
-    """)
-    conn.execute("DROP TABLE profile_fields")
-    conn.execute("ALTER TABLE profile_fields_pass4 RENAME TO profile_fields")
-    conn.execute("PRAGMA foreign_keys=ON")
-    conn.commit()
-
-
-# UX pass 5 (2026-09-24): Google-parity six-field types (department,
-# po_box, related_person, event, custom_field, name_prefix/suffix).
-# SQLite cannot ALTER a CHECK constraint → the same row-preserving
-# table-swap heal as v2/v3/pass-4, detected by the distinctive
-# 'department' literal in the table DDL.
-def ensure_profile_fields_pass5_schema(conn: sqlite3.Connection) -> None:
-    """Migrate profile_fields CHECK to include pass-5 types (idempotent).
-
-    Detect current DDL by ABSENCE of 'department' in sqlite_master sql.
-    Row-preserving table-swap: copy rows id-preserving with explicit
-    column list; drop old, rename.
-    """
-    row = conn.execute(
-        "SELECT sql FROM sqlite_master WHERE type='table' AND name='profile_fields'"
-    ).fetchone()
-    if row is None or not row[0]:
-        return  # table absent — wl_init creates it fresh this boot
-    if "'department'" in row[0]:
-        return  # already pass-5
-
-    conn.execute("DROP TABLE IF EXISTS profile_fields_pass5")
-    conn.execute(f"""
-        CREATE TABLE profile_fields_pass5 (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            profile_id INTEGER NOT NULL,
-            field_type TEXT NOT NULL CHECK(field_type IN {CARD_EDITOR_FIELD_TYPES!r}),
-            field_value TEXT NOT NULL,
-            visibility TEXT NOT NULL CHECK(visibility IN {_VCARD_VISIBILITY!r}),
-            label TEXT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-            UNIQUE(profile_id, field_type, field_value),
-            FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
-        )
-    """)
-    conn.execute("PRAGMA foreign_keys=OFF")
-    conn.execute("""
-        INSERT INTO profile_fields_pass5
-            (id, profile_id, field_type, field_value,
-             visibility, label, created_at, updated_at)
-        SELECT id, profile_id, field_type, field_value,
-               visibility, label, created_at, updated_at
-        FROM profile_fields
-    """)
-    conn.execute("DROP TABLE profile_fields")
-    conn.execute("ALTER TABLE profile_fields_pass5 RENAME TO profile_fields")
-    conn.execute("PRAGMA foreign_keys=ON")
-    conn.commit()
-
-
-def is_open_stub(profile_dict: dict) -> bool:
-    """Check if a profile is an 'open curated stub'.
-
-    Predicate: owner_id IS NOT NULL AND owner_id != id AND password_hash IS NULL.
-    """
-    oid = profile_dict.get("owner_id")
-    pid = profile_dict.get("id")
-    pw = profile_dict.get("password_hash")
-    return oid is not None and oid != pid and pw is None
-
-
-def _consolidate_open_stubs(conn: sqlite3.Connection) -> None:
-    """One-shot: converge open stub profiles.
-
-    For each open stub with cards:
-    - survivor = card named 'Personal' if present else lowest-id
-    - move all other cards' profile_fields links onto the survivor
-    - DELETE the other card rows (no file deletion)
-    - RENAME survivor to "{display_name} - vCard"
-    - scope='vcard'
-
-    Meta key: 'pass4_stub_consolidation'
-    """
-    conn.execute(
-        """CREATE TABLE IF NOT EXISTS whitelist_meta (
-               key TEXT PRIMARY KEY,
-               value TEXT NOT NULL
-           )"""
-    )
-    done = conn.execute(
-        "SELECT value FROM whitelist_meta WHERE key = 'pass4_stub_consolidation'"
-    ).fetchone()
-    if done:
-        return
-
-    # Find all open stubs (display_name may not exist on very old schemas).
-    cols = [r[1] for r in conn.execute("PRAGMA table_info(profiles)").fetchall()]
-    has_display = "display_name" in cols
-    stubs = conn.execute(
-        f"SELECT id, {'display_name' if has_display else 'handle'} FROM profiles "
-        "WHERE owner_id IS NOT NULL AND owner_id != id AND password_hash IS NULL"
-    ).fetchall()
-
-    for stub in stubs:
-        pid = stub["id"]
-        display_name = stub["display_name"] or "Contact"
-
-        # Get cards for this profile
-        cards = conn.execute(
-            "SELECT id, name FROM cards WHERE owner_profile_id = ? ORDER BY id",
-            (pid,),
-        ).fetchall()
-
-        if len(cards) <= 1:
-            # Single card or no cards — just rename and set scope
-            if cards:
-                card = cards[0]
-                new_name = f"{display_name} - vCard"
-                conn.execute(
-                    "UPDATE cards SET name = ?, scope = 'vcard' WHERE id = ?",
-                    (new_name, card["id"]),
-                )
-            else:
-                # No cards — create a stub card
-                now = _now_iso()
-                conn.execute(
-                    "INSERT INTO cards (owner_profile_id, name, scope, created_at, updated_at) VALUES (?, ?, 'vcard', ?, ?)",
-                    (pid, f"{display_name} - vCard", now, now),
-                )
-            continue
-
-        # Multiple cards: find survivor
-        survivor = None
-        for card in cards:
-            if card["name"].lower() == "personal":
-                survivor = card
-                break
-        if survivor is None:
-            survivor = cards[0]  # lowest id
-
-        # Move profile_fields links from non-survivor cards to survivor
-        for card in cards:
-            if card["id"] == survivor["id"]:
-                continue
-            conn.execute(
-                """INSERT OR IGNORE INTO card_fields (card_id, field_id)
-                   SELECT ?, field_id FROM card_fields WHERE card_id = ?""",
-                (survivor["id"], card["id"]),
-            )
-            # Delete the non-survivor card
-            conn.execute("DELETE FROM card_fields WHERE card_id = ?", (card["id"],))
-            conn.execute("DELETE FROM cards WHERE id = ?", (card["id"],))
-
-        # Rename survivor
-        new_name = f"{display_name} - vCard"
-        conn.execute(
-            "UPDATE cards SET name = ?, scope = 'vcard' WHERE id = ?",
-            (new_name, survivor["id"]),
-        )
-
-    # Mark done
-    conn.execute(
-        "INSERT OR REPLACE INTO whitelist_meta (key, value) VALUES ('pass4_stub_consolidation', 'done')"
-    )
-    conn.commit()
-
-
-def auto_display_name(profile_dict: dict) -> str:
-    """Auto-display name: first + ' ' + last (trimmed; empty → '')."""
-    first = (profile_dict.get("first_name") or "").strip()
-    last = (profile_dict.get("last_name") or "").strip()
-    parts = [p for p in (first, last) if p]
-    return " ".join(parts)
-
-
-def effective_display_name(profile_dict: dict) -> str:
-    """Effective display: stored display_name if non-empty, else auto."""
-    dn = (profile_dict.get("display_name") or "").strip()
-    if dn:
-        return dn
-    return auto_display_name(profile_dict)
-
-
 def ensure_whitelist_schema(conn: sqlite3.Connection) -> None:
     """Run every legacy-schema self-heal in THE REQUIRED ORDER. One place to
     touch for future migrations; app boot is a single call. Idempotent.
@@ -4053,13 +3291,6 @@ def ensure_whitelist_schema(conn: sqlite3.Connection) -> None:
     ensure_owner_auth_schema(conn)              # Phase B: per-owner sign-in auth
     ensure_access_grants_owner(conn)            # Phase B: access_grants owner_id
     ensure_contacts_owner(conn)                 # Phase B: contacts owner_profile_id
-    # UX pass 4: name columns, scope column, CHECK swap, stub convergence
-    ensure_profile_name_columns(conn)
-    ensure_cards_scope_column(conn)
-    ensure_profile_fields_pass4_schema(conn)
-    ensure_profile_fields_pass5_schema(conn)      # UX pass 5: six-field CHECK swap
-    _backfill_card_scopes(conn)
-    _consolidate_open_stubs(conn)
     seed_default_cards(conn)                    # P5: seed Work/Personal cards
 
 
@@ -4089,17 +3320,9 @@ def seed_default_cards(conn: sqlite3.Connection) -> None:
     # curate on their My Profile page).
     owners = conn.execute("SELECT id FROM profiles ORDER BY id").fetchall()
 
-    # UX pass 3/4 default pair — ALWAYS created, in this order (Personal
+    # UX pass 3 default pair — ALWAYS created, in this order (Personal
     # must land the lower id: it is the top card / default picture).
-    # UX pass 4: skip open stubs (they get their own vCard card).
-    stub_ids = {r["id"] for r in conn.execute(
-        "SELECT id FROM profiles WHERE owner_id IS NOT NULL AND owner_id != id AND password_hash IS NULL"
-    ).fetchall()}
     DEFAULT_CARD_ORDER = ("Personal", "Work")
-    DEFAULT_CARD_SCOPE = {
-        "Personal": "personal",
-        "Work": "work",
-    }
     DEFAULT_CARD_TYPES = {
         "Personal": {"phone", "text_number", "facetime_number", "birthday",
                      "high_school", "maiden_name", "nickname",
@@ -4123,13 +3346,9 @@ def seed_default_cards(conn: sqlite3.Connection) -> None:
     now = _now_iso()
     for owner in owners:
         owner_id = owner["id"]
-        # UX pass 4: skip open stubs — they get their own vCard card.
-        if owner_id in stub_ids:
-            continue
-        # --- Pass 3/4 default pair: create-always, heal-always ---
+        # --- Pass 3 default pair: create-always, heal-always ---
         for card_name in DEFAULT_CARD_ORDER:
             field_types = DEFAULT_CARD_TYPES[card_name]
-            scope = DEFAULT_CARD_SCOPE[card_name]
             field_ids = []
             for ft in sorted(field_types):
                 field_ids.extend(r["id"] for r in conn.execute(
@@ -4142,8 +3361,8 @@ def seed_default_cards(conn: sqlite3.Connection) -> None:
             ).fetchone()
             if card is None:
                 conn.execute(
-                    "INSERT INTO cards (owner_profile_id, name, scope, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-                    (owner_id, card_name, scope, now, now),
+                    "INSERT INTO cards (owner_profile_id, name, created_at, updated_at) VALUES (?, ?, ?, ?)",
+                    (owner_id, card_name, now, now),
                 )
                 card_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
             else:
@@ -4325,7 +3544,6 @@ def save_card_editor(
     field_labels: dict[int, str] | None = None,
     field_removals: list[int] | None = None,
     new_fields: list[tuple] | None = None,
-    name_fields: dict | None = None,
 ) -> dict:
     """Apply the card-editor form: ONE commit for the whole save.
 
@@ -4347,12 +3565,6 @@ def save_card_editor(
             (field_type, value, visibility, label) — created (or reused when
             the profile already has an identical type+value row) and linked
             to the card.
-        name_fields: {'first':str, 'last':str, 'suffix':str,
-            'middles':[str,...], 'display':str_or_None}. Stores profile
-            name columns + reconciles middle_name rows (id-order,
-            first-occurrence, create missing at 'private', delete unkept).
-            Applies display rule: stored display_name if non-empty, else
-            auto = first + ' ' + last.
 
     Returns the refreshed card dict.
 
@@ -4363,7 +3575,6 @@ def save_card_editor(
         - a value collides with UNIQUE(profile_id, field_type, field_value)
         - a card_name collides with the owner's other cards
         - unknown field_type or visibility on a new field
-        - phone label not allowed for this card's scope
     """
     card = get_card_by_id(conn, card_id)
     if card is None:
@@ -4373,80 +3584,10 @@ def save_card_editor(
     field_labels = field_labels or {}
     field_removals = field_removals or []
     new_fields = new_fields or []
-    name_fields = name_fields or {}
 
     try:
-        # 0. Name components (UX pass 4).
-        first = (name_fields.get('first') or '').strip()
-        last = (name_fields.get('last') or '').strip()
-        suffix = (name_fields.get('suffix') or '').strip()
-        display_override = name_fields.get('display')
-
-        # Store first/last/suffix
-        conn.execute(
-            "UPDATE profiles SET first_name = ?, last_name = ?, suffix = ? WHERE id = ?",
-            (first, last, suffix if suffix else None, owner_id),
-        )
-
-        # 0b. Middle-name reconciliation (id-order, first-occurrence).
-        submitted_middles = [m.strip() for m in name_fields.get('middles', []) if m.strip()]
-        existing_middles = conn.execute(
-            "SELECT id, field_value FROM profile_fields "
-            "WHERE profile_id = ? AND field_type = 'middle_name' "
-            "ORDER BY id",
-            (owner_id,),
-        ).fetchall()
-        existing_ids = [r['id'] for r in existing_middles]
-        existing_values = [r['field_value'] for r in existing_middles]
-
-        # Keep only middles that are in submitted (first-occurrence match)
-        kept_ids: set[int] = set()
-        submitted_seen: set[str] = set()
-        for val in submitted_middles:
-            if val in existing_values and val not in submitted_seen:
-                idx = existing_values.index(val)
-                kept_ids.add(existing_ids[idx])
-                submitted_seen.add(val)
-            else:
-                # New middle — will be created below
-                pass
-
-        # Delete unkept middle rows
-        for eid in existing_ids:
-            if eid not in kept_ids:
-                conn.execute("DELETE FROM profile_fields WHERE id = ?", (eid,))
-
-        # Create missing middle rows at 'private' visibility
-        for val in submitted_middles:
-            if val not in submitted_seen:
-                conn.execute(
-                    "INSERT INTO profile_fields (profile_id, field_type, field_value, visibility) VALUES (?, 'middle_name', ?, 'private')",
-                    (owner_id, val),
-                )
-
-        # Apply display rule: stored display_name if non-empty, else auto.
-        if display_override is not None and display_override.strip():
-            conn.execute(
-                "UPDATE profiles SET display_name = ?, updated_at = datetime('now') WHERE id = ?",
-                (display_override.strip(), owner_id),
-            )
-        elif display_override is None or not display_override.strip():
-            # Re-derive auto display
-            auto = f"{first} {last}".strip()
-            if auto:
-                conn.execute(
-                    "UPDATE profiles SET display_name = ?, updated_at = datetime('now') WHERE id = ?",
-                    (auto, owner_id),
-                )
-
         # 1. Identity: display_name lives on profiles (name components are
         #    profile-level, not per-card).
-        # (Name components already handled above; skip redundant display_name save)
-        if display_name and display_name.strip():
-            conn.execute(
-                "UPDATE profiles SET display_name = ?, updated_at = datetime('now') WHERE id = ?",
-                (display_name.strip(), owner_id),
-            )
         if display_name:
             conn.execute(
                 "UPDATE profiles SET display_name = ?, updated_at = datetime('now') WHERE id = ?",
@@ -4515,13 +3656,10 @@ def save_card_editor(
                     (visibility, fid),
                 )
 
-        # Phone label support (UX pass 2/4): labels apply STANDALONE at the
+        # Phone label support (UX pass 2): labels apply STANDALONE at the
         # transaction level — a row keyed only a label (no value/visibility
         # change, or a value emptied to unlink) must still save it. ''
         # clears, value sets; ownership checked (IDOR — fail closed).
-        # UX pass 4: validate labels against card scope.
-        card_scope = card.get("scope", "vcard")
-        allowed_labels = phone_label_choices(card_scope) + (PHONE_LABEL_CUSTOM,)
         for fid, raw_label in field_labels.items():
             row = conn.execute(
                 "SELECT profile_id FROM profile_fields WHERE id = ?", (fid,)
@@ -4529,19 +3667,6 @@ def save_card_editor(
             if row is None or row["profile_id"] != owner_id:
                 raise ValueError(f"field_id {fid} not found or not owned by this profile")
             new_label = normalize_field_label(raw_label) or None
-            # Allow built-in labels (folded lowercase) and any custom text.
-            # _parse_editor_form already replaced '__custom' with the custom
-            # value, so we check against the folded built-in set.
-            if new_label:
-                if new_label in tuple(c.lower() for c in PHONE_LABEL_CHOICES):
-                    # Built-in label — check card-scope allowance.
-                    allowed = phone_label_choices(card_scope)
-                    if new_label not in allowed:
-                        raise ValueError(
-                            f"label '{new_label}' not allowed for scope '{card_scope}' "
-                            f"(allowed: {', '.join(allowed)})"
-                        )
-                # else: custom text — always allowed
             conn.execute(
                 "UPDATE profile_fields SET label = ?, updated_at = datetime('now') WHERE id = ?",
                 (new_label, fid),
@@ -4556,14 +3681,6 @@ def save_card_editor(
                 raise ValueError(f"invalid field type '{field_type}'")
             if visibility not in _VCARD_VISIBILITY:
                 raise ValueError(f"invalid visibility '{visibility}'")
-            # Validate phone label against card scope (F5 fix: same guard as update path).
-            if label:
-                allowed = phone_label_choices(card_scope)
-                if label in tuple(c.lower() for c in PHONE_LABEL_CHOICES):
-                    if label not in allowed:
-                        raise ValueError(
-                            f"label '{label}' not allowed for scope '{card_scope}' "
-                            f"on new field type '{field_type}'")
             value = (value or "").strip()
             if not value:
                 continue  # empty add-row slot — not content
@@ -4598,41 +3715,6 @@ def save_card_editor(
     return get_card_by_id(conn, card_id)
 
 
-def remove_card_field(conn: sqlite3.Connection, card_id: int, field_id: int) -> dict:
-    """Unlink ONE field from ONE card (UX pass 5: the card-preview ✕).
-
-    Same unlink semantics as save_card_editor's field_removals — the
-    card_fields link row goes, the profile_fields row survives (cards are
-    lenses, not containers) — exposed as a narrow, form-free entry point
-    for card views that carry no editor body (the preview page). This
-    deliberately does NOT go through save_card_editor: that function
-    applies every submitted name/value/label column, and an absent editor
-    form would BLANK them (the pass-2 data-loss bug class, from the other
-    side). This touches the link row only.
-
-    Raises ValueError (→ 404 at the route layer):
-        - unknown card_id
-        - field_id doesn't exist or belongs to another profile
-          (IDOR — fail closed)
-    """
-    card = get_card_by_id(conn, card_id)
-    if card is None:
-        raise ValueError(f"card_id {card_id} not found")
-    owner_id = card["owner_profile_id"]
-    row = conn.execute(
-        "SELECT profile_id FROM profile_fields WHERE id = ?", (field_id,)
-    ).fetchone()
-    if row is None or row["profile_id"] != owner_id:
-        raise ValueError(f"field_id {field_id} not found or not owned by this profile")
-    conn.execute(
-        "DELETE FROM card_fields WHERE card_id = ? AND field_id = ?",
-        (card_id, field_id),
-    )
-    conn.execute("UPDATE cards SET updated_at = datetime('now') WHERE id = ?", (card_id,))
-    conn.commit()
-    return get_card_by_id(conn, card_id)
-
-
 # ============================================================
 # Phase A2: Contact List data layer
 # ============================================================
@@ -4663,23 +3745,17 @@ def list_contact_list_rows(
     q: str | None = None,
     page: int = 0,
     per_page: int = 50,
-    profile_cards_fallback: bool = False,
 ) -> list[dict]:
     """Return contact list rows for the owner dashboard.
 
     Returns dicts with keys:
       contact_id, name, email, phone, org, granted, live_grant,
       cards, card_refs, perm, logo_state, refreshed_at, is_pending
-    (card_refs: [{id, name, photo_path, hs_photo_path}] for the list's
-    ONE-ROW-PER-CARD rendering.)
+    (card_refs: [{id, name}] for the list's ONE-ROW-PER-CARD rendering.)
 
     Ordering: pending grants first, then A-Z by display name.
     Search filters by name or email substring (case-insensitive).
     Pagination: page 0 = first page of per_page rows.
-
-    profile_cards_fallback: when True, for non-caller profiles with cards
-    but zero produced rows, emit ONE ROW PER CARD (stub convergence).
-    Caller's own profile_id is excluded from fallback.
     """
     # ── 1. Get all pending grants (not denied) ──
     pending_grants = conn.execute(
@@ -4744,19 +3820,14 @@ def list_contact_list_rows(
     for g in active_grants:
         gd = dict(g)
         cards = conn.execute(
-            "SELECT c.id, c.name, c.photo_path, c.hs_photo_path FROM grant_cards gc JOIN cards c ON gc.card_id = c.id WHERE gc.grant_id = ?",
+            "SELECT c.id, c.name FROM grant_cards gc JOIN cards c ON gc.card_id = c.id WHERE gc.grant_id = ?",
             (gd["id"],),
         ).fetchall()
         grant_card_names[gd["id"]] = [r["name"] for r in cards]
         # UX pass ruling (2026-09-22): the list renders ONE ROW PER CARD,
         # so each row needs the card id (to deep-link the detail view) —
-        # not just the name. UX pass 4: include photo paths.
-        grant_card_refs[gd["id"]] = [
-            {"id": r["id"], "name": r["name"],
-             "photo_path": r["photo_path"],
-             "hs_photo_path": r["hs_photo_path"]}
-            for r in cards
-        ]
+        # not just the name.
+        grant_card_refs[gd["id"]] = [{"id": r["id"], "name": r["name"]} for r in cards]
 
     # ── 7. Build rows ──
     rows: list[dict] = []
@@ -4890,69 +3961,6 @@ def list_contact_list_rows(
         rows.append(row)
         if primary_email:
             seen_emails.add(primary_email.lower())
-
-    # ── 7b. Profile cards fallback (UX pass 4) ──
-    # For non-caller profiles with cards but zero produced rows,
-    # emit ONE ROW PER CARD (stub convergence). Caller's own pid
-    # is excluded from fallback.
-    #
-    # Scope: only profiles owned by this caller (p.owner_id = profile_id).
-    # Exclude the caller's main profile (id == profile_id).
-    # Dedupe key: "stub:<pid>:<card_id>" to avoid collisions with empty-email
-    # contacts rows.
-    if profile_cards_fallback:
-        other_pids = {r.get("contact_id") for r in rows if r.get("contact_id")}
-        other_pids.add(profile_id)  # exclude caller's main profile
-        profiles_with_cards = conn.execute(
-            "SELECT p.id, p.display_name, p.first_name, p.last_name, "
-            "c.id as card_id, c.name as card_name, "
-            "c.photo_path, c.hs_photo_path "
-            "FROM profiles p "
-            "LEFT JOIN cards c ON c.owner_profile_id = p.id "
-            "WHERE p.owner_id = ? "
-            "AND p.id NOT IN (" + ",".join("?" for _ in other_pids) + ") "
-            "AND EXISTS (SELECT 1 FROM cards WHERE owner_profile_id = p.id)",
-            (profile_id,) + tuple(other_pids),
-        ).fetchall()
-        # Group by profile_id
-        from collections import defaultdict
-        cards_by_pid: dict[int, list[dict]] = defaultdict(list)
-        name_by_pid: dict[int, str] = {}
-        for r in profiles_with_cards:
-            pid = r["id"]
-            name_by_pid[pid] = effective_display_name({
-                "display_name": r["display_name"],
-                "first_name": r["first_name"],
-                "last_name": r["last_name"],
-            })
-            cards_by_pid[pid].append({
-                "id": r["card_id"],
-                "name": r["card_name"],
-                "photo_path": r["photo_path"],
-                "hs_photo_path": r["hs_photo_path"],
-            })
-        for pid, cards in cards_by_pid.items():
-            if pid in other_pids:
-                continue
-            for card in cards:
-                row = {
-                    "contact_id": pid,
-                    "name": name_by_pid[pid],
-                    "email": f"stub:{pid}:{card['id']}",  # unique per stub row so HTTP
-                                                          # cross-profile dedupe doesn't collapse them
-                    "phone": "",
-                    "org": "",
-                    "granted": False,
-                    "live_grant": None,  # stub: no real grant → renders as static BlackList
-                    "is_stub": True,     # signal for template: non-clickable, no badge form
-                    "cards": [],
-                    "card_refs": [card],
-                    "perm": None,
-                    "logo_state": None,
-                    "refreshed_at": None,
-                    "is_pending": False,
-                }
-                rows.append(row)
 
     # ── 8. Apply search filter ──
     # UX pass 3 (2026-09-23): search matches ALL public-facing and granted
@@ -5094,16 +4102,16 @@ def create_contact_vcard(conn: sqlite3.Connection, owner_profile_id: int,
 
     A 'standard vCard' is a registry profile carrying the entered name and
     the conventional phone/email fields at their DEFAULT visibility
-    ('granted' per the UX pass 2 defaults ruling).
+    ('granted' per the UX pass 2 defaults ruling). Default cards are
+    seeded for the new profile and the created fields are attached to
+    their default cards, exactly like a self-published profile would look
+    after seeding.
 
     UX pass 3 (2026-09-23): the stub profile is stamped owner_id = the
     creating owner and has no password — a CURATED profile. The card
     editor's ownership guard lets the creating owner open its editor
     ("create opens the NEW vCard with ALL fields ready to populate")
     while other accounts still 404 (ruling 2A isolation intact).
-
-    UX pass 4: creates exactly ONE card named "{name} - vCard" with
-    scope 'vcard'; does NOT seed Personal/Work cards.
 
     Returns the created profile dict (with fields attached).
     Raises ValueError when display_name is empty.
@@ -5136,13 +4144,6 @@ def create_contact_vcard(conn: sqlite3.Connection, owner_profile_id: int,
         add_profile_field(conn, profile_id, "phone", phone, "granted")
     if email:
         add_profile_field(conn, profile_id, "email", email, "granted")
-
-    # UX pass 4: exactly ONE vCard card, no seeding.
-    card_name = f"{name} - vCard"
-    conn.execute(
-        "INSERT INTO cards (owner_profile_id, name, scope, created_at, updated_at) VALUES (?, ?, 'vcard', ?, ?)",
-        (profile_id, card_name, now, now),
-    )
-
+    seed_default_cards(conn)
     conn.commit()
     return get_profile_by_id(conn, profile_id)

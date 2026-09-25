@@ -85,10 +85,7 @@ class TestPhoneLabels:
         assert 'name="field_' in html and "_label\"" in html
         assert ">Mobile</option>" in html
         assert ">Home</option>" in html
-        # Personal cards: only mobile/home labels (work label is work-card only).
-        # Check Work card for the work label.
-        html_work, _ = _editor_gets(db, client, "Work")
-        assert ">Work</option>" in html_work
+        assert ">Work</option>" in html
         assert ">Custom\u2026</option>" in html
 
     def test_custom_label_saves_and_displays(self, tmp_path):
@@ -97,8 +94,8 @@ class TestPhoneLabels:
         html, cid = _editor_gets(db, client, "Personal")
         fid = int(re.search(r'name="field_(\d+)_value"', html).group(1))
         resp = client.post(f"/owner/{_owner_token()}/cards/{cid}/edit", data={
-            f"field_{fid}_value": "555-1234",
-            f"field_{fid}_visibility": "granted",
+            "field_1_value": "555-1234",
+            "field_1_visibility": "granted",
             f"field_{fid}_label": "__custom",
             f"field_{fid}_label_custom": "QA Team",
         })
@@ -152,8 +149,7 @@ class TestPhoneLabels:
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
         html, _ = _editor_gets(db, client, "Personal")
-        # Personal scope uses scoped type — existing phone field has label select
-        assert 'name="field_' in html and '_label"' in html
+        assert 'name="new_phone_label"' in html
 
 
 # ============================================================
@@ -164,12 +160,12 @@ class TestVisibilityDefaults:
     def test_new_row_select_defaults(self, tmp_path):
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
-        # UX pass 4: scoped sections — Personal card has email/phone but no
-        # title/company/website (work-only). Check Personal for email/phone,
-        # Work for website (title/company are seeded so no add-row slot).
+        # UX pass 3: the Personal card has no title/company/website rows, so
+        # the dedicated add-row slots (and their default-visibility selects)
+        # render there.
         html, _ = _editor_gets(db, client, "Personal")
 
-        def _selected_default(name: str, html: str) -> str:
+        def _selected_default(name: str) -> str:
             m = re.search(
                 r'name="' + name + r'".*?</select>', html, re.DOTALL)
             assert m, f"{name} select renders"
@@ -177,15 +173,13 @@ class TestVisibilityDefaults:
                 r'<option value="(\w+)" selected>(\w+)</option>', m.group(0))
             return sel.group(1) if sel else "(none)"
 
-        # UX pass 5 purge: base type names again (email, phone).
-        assert _selected_default("new_email_visibility", html) == "granted", \
+        assert _selected_default("new_email_visibility") == "granted", \
             "email add-row defaults to granted"
-        assert _selected_default("new_phone_visibility", html) == "granted"
-        # title/company are work-only and seeded — check website add-row slot
-        html_work, _ = _editor_gets(db, client, "Work")
-        # Work scope uses scoped type (website_work)
-        assert _selected_default("new_website_visibility", html_work) == "public", \
-            "website add-row defaults to public (UX pass 2 defaults ruling)"
+        assert _selected_default("new_title_visibility") == "public", \
+            "title add-row defaults to public (UX pass 2 defaults ruling)"
+        assert _selected_default("new_company_visibility") == "public"
+        assert _selected_default("new_website_visibility") == "public"
+        assert _selected_default("new_phone_visibility") == "granted"
 
     def test_save_without_visibility_defaults_granted(self, tmp_path):
         db = _make_db(tmp_path)
@@ -662,7 +656,7 @@ class TestNewConnection:
         conn.close()
         assert ("phone", "+1-555-777-1234", "granted") in fields
         assert ("email", "casey@new.com", "granted") in fields
-        assert cards == 1, "vCard gets exactly one card (UX pass 4)"
+        assert cards >= 2, "default cards seeded for the new vCard"
 
     def test_create_requires_name(self, tmp_path):
         db = _make_db(tmp_path)
@@ -821,24 +815,26 @@ class TestPairingFixes:
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
         conn = whitelist_db.wl_connect(db)
-        work_cid = _card_id(db, 'Work')
+        cid = conn.execute(
+            "SELECT id FROM cards WHERE owner_profile_id = 1 AND name = 'Personal'"
+        ).fetchone()[0]
         n_before = conn.execute(
-            "SELECT COUNT(*) FROM card_fields WHERE card_id = ?", (work_cid,)
+            "SELECT COUNT(*) FROM card_fields WHERE card_id = ?", (cid,)
         ).fetchone()[0]
         conn.close()
-        # POST with ONLY a label key for an existing field —
+        # POST with ONLY a label key for an existing field on ANOTHER card —
         # no field_{id}_value anywhere in the body.
         work_html = client.get(
-            f"/owner/{_owner_token()}/cards/{work_cid}/edit").text
+            f"/owner/{_owner_token()}/cards/{_card_id(db, 'Work')}/edit").text
         fid = int(re.search(r'name="field_(\d+)_value"', work_html).group(1))
-        resp = client.post(f"/owner/{_owner_token()}/cards/{work_cid}/edit",
+        resp = client.post(f"/owner/{_owner_token()}/cards/{cid}/edit",
                            data={f"field_{fid}_label": "work"})
         assert resp.status_code == 200
         conn = whitelist_db.wl_connect(db)
         label = conn.execute(
             "SELECT label FROM profile_fields WHERE id = ?", (fid,)).fetchone()[0]
         n_after = conn.execute(
-            "SELECT COUNT(*) FROM card_fields WHERE card_id = ?", (work_cid,)
+            "SELECT COUNT(*) FROM card_fields WHERE card_id = ?", (cid,)
         ).fetchone()[0]
         conn.close()
         assert label == "work", "F2: standalone label saved"

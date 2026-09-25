@@ -365,37 +365,55 @@ class TestAlphabeticalRail:
 # Contact detail: ONE card + switcher
 # ============================================================
 
-class TestContactDetailAllCards:
-    """UX pass 5 (captain ruling): the per-card chip switcher is GONE —
-    the contact detail shows ALL shared cards on one page, laid out like
-    the view-profile page, with the reach badges per card."""
-
-    def test_detail_renders_all_cards_without_switcher(self, tmp_path):
+class TestContactDetailOneCard:
+    def test_detail_renders_switcher_and_selected_card(self, tmp_path):
         client, token, grant_ids = _granted_client(tmp_path)
+        conn = whitelist_db.wl_connect(tmp_path / "test.db")
+        card_ids = [r["id"] for r in conn.execute("SELECT id FROM cards ORDER BY id")]
+        conn.close()
         html = client.get(f"/owner/{token}/contact/{grant_ids[0]}").text
-        # no chip links anywhere
-        assert "?card=" not in html, "the switcher is retired"
-        # EVERY card's fields render on the one page (Personal phone,
-        # Work title/company)
-        assert "555-1234" in html
+        # every profile card has a switch link targeting THIS grant
+        for cid in card_ids:
+            assert f"/owner/{token}/contact/{grant_ids[0]}?card={cid}" in html, \
+                "multi-card contacts need a chip per card"
+
+    def test_detail_card_query_param_selects_card(self, tmp_path):
+        client, token, grant_ids = _granted_client(tmp_path)
+        conn = whitelist_db.wl_connect(tmp_path / "test.db")
+        # UX pass 3: default pair is Personal (id 1) + Work (id 2); Work
+        # carries the seeded title/company fields.
+        card_ids = [r["id"] for r in conn.execute("SELECT id FROM cards ORDER BY id")]
+        conn.close()
+        identity_id, other_id = card_ids[-1], card_ids[0]
+        html = client.get(f"/owner/{token}/contact/{grant_ids[0]}?card={identity_id}").text
+        # the ACTIVE chip (slate fill) is the selected card — others are not
+        import re as _re
+        chips = _re.findall(
+            r'<a href="([^"]*card=(\d+))"[^>]*style="([^"]*)"', html)
+        style_by_card = {cid: style for href, cid, style in chips}
+        assert str(identity_id) in style_by_card
+        assert "--wl-btn-slate" in style_by_card[str(identity_id)], \
+            "selected chip must wear the active fill"
+        assert "--wl-btn-slate" not in style_by_card[str(other_id)], \
+            "non-selected chips must not"
+        # the selected card's own fields render (Work carries title/company)
         assert "Sales" in html and "Walther EMC" in html
-        # both card headings render
-        assert "Personal</h2>" in html and "Work</h2>" in html
 
-    def test_detail_has_profile_style_reach_badges(self, tmp_path):
+    def test_detail_photo_block_belongs_to_selected_card(self, tmp_path):
         client, token, grant_ids = _granted_client(tmp_path)
-        html = client.get(f"/owner/{token}/contact/{grant_ids[0]}").text
-        # reach badges laid out exactly like the view-profile page
-        assert "Reach me" in html
-        assert "tel:555-1234" in html
-        assert "sms:555-1234" in html
-        assert "mailto:" in html
-
-    def test_detail_keeps_access_section(self, tmp_path):
-        client, token, grant_ids = _granted_client(tmp_path)
-        html = client.get(f"/owner/{token}/contact/{grant_ids[0]}").text
-        assert "Access</h2>" in html
-        assert "/static/badge-whitelist.png" in html
+        conn = whitelist_db.wl_connect(tmp_path / "test.db")
+        card_ids = [r["id"] for r in conn.execute("SELECT id FROM cards ORDER BY id")]
+        conn.close()
+        personal_id = card_ids[0]
+        html = client.get(f"/owner/{token}/contact/{grant_ids[0]}?card={personal_id}").text
+        # the selected card's picture block (initials circle for Personal —
+        # no photo in fixture) sits with the card heading and its fields
+        pos_initials = html.find(">PE</span>")
+        pos_heading = html.find("Personal</h2>")
+        pos_phone = html.find("555-1234")
+        assert -1 not in (pos_initials, pos_heading, pos_phone)
+        assert pos_initials < pos_heading < pos_phone, \
+            "picture block, card heading and that card's fields render together"
 
 
 # ============================================================

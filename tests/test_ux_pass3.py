@@ -91,10 +91,9 @@ class TestCreateVCardFlow:
             "create must land in the new vCard's editor"
         editor = client.get(loc)
         assert editor.status_code == 200
-        # vCard card: has contact fields but NOT identity fields
-        # (Personal history, Childhood home are personal-card-only).
-        for heading in ("Emails", "Phone numbers", "Address",
-                        "Birthday", "Note"):
+        # ALL field sections ready to populate
+        for heading in ("Emails", "Phone numbers", "Address", "Personal history",
+                        "Childhood home", "Birthday", "Note"):
             assert heading in editor.text, f"editor missing '{heading}'"
         assert "Jane Rivers" in editor.text
 
@@ -124,10 +123,8 @@ class TestCreateVCardFlow:
         conn.commit()
         cards = whitelist_db.list_cards(conn, stub["id"])
         conn.close()
-        # UX pass 4: stubs get exactly one vCard card, not Personal/Work
-        assert len(cards) == 1
-        assert cards[0]["name"] == "No Contact Info - vCard"
-        assert cards[0].get("scope") == "vcard"
+        assert [c["name"] for c in cards] == ["Personal", "Work"], \
+            "even an empty stub defaults with Personal + Work"
 
 
 # ============================================================
@@ -171,8 +168,6 @@ class TestCountryAndPhoneFormat:
     def test_country_slot_on_every_card_editor(self, tmp_path):
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
-        # UX pass 5 purge: base type names on every scope (country renders
-        # inside the grouped block on personal).
         for name in ("Personal", "Work"):
             html = client.get(
                 f"/owner/{_owner_token()}/cards/{_card_id(db, name)}/edit").text
@@ -263,20 +258,13 @@ class TestPersonalIdentityFields:
         # key, the route falls back to the same table)
         html = client.get(
             f"/owner/{_owner_token()}/cards/{_card_id(db, 'Personal')}/edit").text
-        # UX pass 5 purge: base type names again.
-        public_types = [
-            "high_school", "maiden_name", "nickname",
-            "childhood_city", "childhood_state", "birthday",
-            "city", "state",
-        ]
-        for t in public_types:
+        for t in ("high_school", "maiden_name", "nickname",
+                  "childhood_city", "childhood_state", "birthday", "city", "state"):
             m = re.search(
                 r'name="new_' + t + r'_visibility".*?<option value="(\w+)" selected>',
                 html, re.DOTALL)
             assert m and m.group(1) == "public", f"{t} defaults public"
-        # Street-level addresses default granted
-        granted_types = ["childhood_address1", "address1", "zip"]
-        for t in granted_types:
+        for t in ("childhood_address1", "address1", "zip"):
             m = re.search(
                 r'name="new_' + t + r'_visibility".*?<option value="(\w+)" selected>',
                 html, re.DOTALL)

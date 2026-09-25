@@ -27,27 +27,22 @@
     'birthday': '',
     'note': 'Freeform note',
     'high_school': 'e.g. Lincoln High',
-    'maiden_name': 'Maiden/Surname',
+    'maiden_name': 'Maiden name',
     'nickname': 'Nickname',
     'childhood_address1': 'Childhood street address',
     'childhood_city': 'Childhood city',
-    'childhood_state': 'Childhood state',
-    'middle_name': 'Middle name',
-    'department': 'Engineering',
-    'po_box': 'PO Box 123',
-    'related_person': 'Name (e.g. Tessa Test)',
-    'event': '',
-    'custom_field': 'Value',
-    'name_prefix': 'Mr, Dr, Prof.',
-    'name_suffix': 'Jr., III'
+    'childhood_state': 'Childhood state'
 } %}
 
 {# ---- macros ---- #}
 {# UX pass 3 defaults ruling (2026-09-23): identity/friend-finding fields
    default PUBLIC — title, company, website, birthday, personal history
    (high school / maiden name / nickname) and city/state-level address
-   parts. Street-level addresses default 'granted' like everything else.
-   Controlled via app.py's public_default_types passed to render(). #}
+   parts. Street-level addresses default 'granted' like everything else. #}
+{% set public_default_types = ['title', 'company', 'website', 'birthday',
+                               'high_school', 'maiden_name', 'nickname',
+                               'city', 'state',
+                               'childhood_city', 'childhood_state'] %}
 
 {% macro vis_select(name, current='') %}
 <select name="{{ name }}"
@@ -60,30 +55,22 @@
 {% endmacro %}
 
 {# UX pass 2 defaults ruling: every field defaults to 'granted' except
-   title, company, and website which default 'public'. UX pass 5:
-   custom_field defaults PRIVATE (arbitrary content). #}
-{% macro default_visibility(t) %}{% set _pd = public_default_types if public_default_types is defined and public_default_types else () %}{% set _pr = private_default_types if private_default_types is defined and private_default_types else () %}{{ 'private' if t in _pr else ('public' if t in _pd else 'granted') }}{% endmacro %}
+   title, company, and website which default 'public'. #}
+{% macro default_visibility(t) %}{{ 'public' if t in public_default_types else 'granted' }}{% endmacro %}
 
-{# Phone label support (UX pass 2/4): labels per card scope.
-   vcard: mobile/home/work; personal: mobile/home; work: mobile/work.
-   UX pass 5: general-purpose label select for other labeled types
-   (significant dates: anniversary/other). #}
-{% macro phone_label_select(name, current='', choices=(), title='Label this phone number') %}
-{% set is_custom = current and current not in choices and current != '__custom' %}
+{# Phone label support (UX pass 2): Mobile / Home / Work / Custom label.
+   One select + a custom-name input revealed when Custom is chosen. #}
+{% macro phone_label_select(name, current='') %}
+{% set is_builtin = current in ('mobile', 'home', 'work') %}
+{% set is_custom = current and not is_builtin %}
 <select name="{{ name }}"
         class="wl-select text-xs border border-gray-600 rounded px-1 py-1 phone-label-select"
-        title="{{ title }}">
+        title="Label this phone number: Mobile, Home, Work, or a custom name">
     <option value="" {% if not current %}selected{% endif %}>Label…</option>
-    {% for c in choices %}
-    <option value="{{ c }}" {% if current == c %}selected{% endif %}>{{ c|capitalize }}</option>
-    {% endfor %}
-    {% if current and current not in choices and current != '__custom' %}
-    <option value="__custom" selected>Custom…</option>
-    {% elif current == '__custom' %}
-    <option value="__custom" selected>Custom…</option>
-    {% else %}
-    <option value="__custom">Custom…</option>
-    {% endif %}
+    <option value="mobile" {% if current == 'mobile' %}selected{% endif %}>Mobile</option>
+    <option value="home" {% if current == 'home' %}selected{% endif %}>Home</option>
+    <option value="work" {% if current == 'work' %}selected{% endif %}>Work</option>
+    <option value="__custom" {% if is_custom %}selected{% endif %}>Custom…</option>
 </select>
 <input type="text" name="{{ name }}_custom" value="{{ current if is_custom else '' }}"
        placeholder="Custom label name" maxlength="30"
@@ -97,36 +84,16 @@
 {% elif t == 'birthday' %}
 <input type="date" name="{{ name }}" value="{{ value }}"
        class="w-full border border-gray-600 rounded-lg px-3 py-2 text-sm bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
-{% elif t == 'event' %}
-<input type="date" name="{{ name }}" value="{{ value }}"
-       class="w-full border border-gray-600 rounded-lg px-3 py-2 text-sm bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
 {% else %}
 <input type="text" name="{{ name }}" value="{{ value }}" placeholder="{{ placeholder }}"
        class="w-full border border-gray-600 rounded-lg px-3 py-2 text-sm bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
 {% endif %}
 {% endmacro %}
 
-{# Per-type label editor (UX pass 5): phones keep the scoped label
-   select; significant dates get anniversary/other; related people and
-   custom fields get a free-text name (role / field name). #}
-{% macro label_editor(t, name, current='') %}
-{% if t in ('phone', 'text_number', 'facetime_number', 'phone_personal', 'phone_work', 'text_number_personal', 'text_number_work', 'facetime_number_personal', 'facetime_number_work') %}
-{{ phone_label_select(name, current, label_choices) }}
-{% elif t == 'event' %}
-{{ phone_label_select(name, current, event_label_choices, title='Label this date') }}
-{% elif t == 'related_person' %}
-<input type="text" name="{{ name }}" value="{{ current }}" placeholder="Role (e.g. Assistant)" maxlength="30"
-       class="w-28 border border-gray-600 rounded px-2 py-1 text-xs bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
-{% elif t == 'custom_field' %}
-<input type="text" name="{{ name }}" value="{{ current }}" placeholder="Field name" maxlength="30"
-       class="w-28 border border-gray-600 rounded px-2 py-1 text-xs bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
-{% endif %}
-{% endmacro %}
-
 {# One existing-field row. sublabel names the channel inside multi-type
-   sections (e.g. "Text number" under Phone numbers). The remove control
-   is a bare ✕ that deletes the field from the card IMMEDIATELY
-   (POST + re-render) — the old remove-checkbox pile-up is gone. #}
+   sections (e.g. "Text number" under Phone numbers). UX pass (2026-09-22):
+   the remove control is a bare ✕ that deletes the field from the card
+   IMMEDIATELY (POST + re-render) — the old remove-checkbox pile-up is gone. #}
 {% macro field_row(t, sublabel, f) %}
 <div class="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
     {% if sublabel %}
@@ -136,12 +103,17 @@
         {{ field_input('field_' ~ f.id ~ '_value', t, f.field_value, placeholders[t]) }}
     </div>
     <div class="flex items-center gap-2 flex-shrink-0 flex-wrap">
-        {{ label_editor(t, 'field_' ~ f.id ~ '_label', f.label or '') }}
+        {% if t == 'phone' %}
+        {{ phone_label_select('field_' ~ f.id ~ '_label', f.label or '') }}
+        {% endif %}
         {{ vis_select('field_' ~ f.id ~ '_visibility', f.visibility) }}
         {# Pairing-review F1 (2026-09-22): this button lives INSIDE the main
-           editor form — a nested <form> is invalid HTML. The
+           editor form — a nested <form> is invalid HTML and the browser
+           silently retargeted the click to the card-save POST. The
            formaction/formmethod overrides fire the delete route for this
-           one button without nesting anything. #}
+           one button without nesting anything (the delete route ignores
+           the body, so the editor's other fields riding along are
+           harmless). #}
         <button type="submit"
                 formmethod="post"
                 formaction="/owner/{{ token }}/cards/{{ card.id }}/fields/{{ f.id }}/delete"
@@ -153,7 +125,9 @@
 {% endmacro %}
 
 {# One fresh add-row slot (no-JS fallback for + Add, and the always-visible
-   dedicated slot when the card has no field of this type yet). #}
+   dedicated slot when the card has no field of this type yet). UX pass 2:
+   new rows carry the type's DEFAULT visibility (granted everywhere except
+   title/company/website = public), and phone rows carry the label select. #}
 {% macro empty_row(t, sublabel) %}
 <div class="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
     {% if sublabel %}
@@ -163,7 +137,9 @@
         {{ field_input('new_' ~ t ~ '_value', t, '', placeholders[t]) }}
     </div>
     <div class="flex items-center gap-2 flex-shrink-0 flex-wrap">
-        {{ label_editor(t, 'new_' ~ t ~ '_label') }}
+        {% if t == 'phone' %}
+        {{ phone_label_select('new_' ~ t ~ '_label', '') }}
+        {% endif %}
         {{ vis_select('new_' ~ t ~ '_visibility', default_visibility(t)) }}
     </div>
 </div>
@@ -187,6 +163,9 @@
         <p class="text-xs wl-text-faint mb-5">{{ profile.display_name }} · {{ card.name }}</p>
 
         {# ============ Photos: default + high-school (pass 3) ============ #}
+        {# UX pass 3: personal cards carry TWO picture slots — the DEFAULT
+           picture (the profile's public face) and the HIGH-SCHOOL picture.
+           Both default public. Non-personal cards keep one slot. #}
         {% set is_personal = card.name|lower == 'personal' %}
         {% set photo_slots = [('default', 'Photo')] if not is_personal else
                              [('default', 'Photo'), ('hs', 'High school picture')] %}
@@ -198,6 +177,9 @@
             <div class="flex-shrink-0">
                 <p class="text-sm font-medium wl-text-sub mb-2">{{ slot_label }}</p>
                 {% if slot_photo %}
+                {# UX pass (2026-09-22): the loaded photo is a button —
+                   clicking it re-opens the editor with the current photo
+                   loaded for re-crop. #}
                 <button type="button" class="photo-current block w-28 h-28 rounded-full overflow-hidden cursor-pointer p-0 border-0"
                         title="Click to edit this photo"
                         style="background: var(--wl-btn-slate);">
@@ -246,7 +228,7 @@
         </div>
         {% endfor %}
 
-        {# ============ Card name + Name block (UX pass 4) ============ #}
+        {# ============ vCard fields ============ #}
         <form method="POST" action="/owner/{{ token }}/cards/{{ card.id }}/edit">
             {# Card name #}
             <div class="mb-4" data-type="__cardname">
@@ -254,109 +236,18 @@
                 <input type="text" name="card_name" value="{{ card.name }}" maxlength="60"
                        class="w-full border border-gray-600 rounded-lg px-3 py-2 text-sm bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
             </div>
-            <div class="mb-4 pb-4" style="border-bottom: 1px solid var(--wl-glass-border);">
-                <label class="block text-sm font-medium wl-text-sub mb-2">Name</label>
-                <div class="flex flex-wrap gap-3">
-                    <div class="flex-1 min-w-[120px]">
-                        <input type="text" name="first_name" value="{{ name_context.first_name or '' }}"
-                               placeholder="First" maxlength="60"
-                               class="w-full border border-gray-600 rounded-lg px-3 py-2 text-sm bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
-                    </div>
-                    <div class="flex-1 min-w-[120px]">
-                        <input type="text" name="last_name" value="{{ name_context.last_name or '' }}"
-                               placeholder="Last" maxlength="60"
-                               class="w-full border border-gray-600 rounded-lg px-3 py-2 text-sm bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
-                    </div>
-                    <div class="flex-1 min-w-[120px]">
-                        <input type="text" name="suffix" value="{{ name_context.suffix or '' }}"
-                               placeholder="Suffix (Jr., III)" maxlength="20"
-                               class="w-full border border-gray-600 rounded-lg px-3 py-2 text-sm bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
-                    </div>
-                </div>
-                {# Middle names: repeated inputs, client can add more #}
-                <div class="mt-2 flex flex-wrap gap-2 items-center" id="middle-names-row">
-                    {% for mid in name_context.middle_rows %}
-                    <input type="text" name="middle_names" value="{{ mid.field_value }}"
-                           placeholder="Middle name" maxlength="60"
-                           class="border border-gray-600 rounded-lg px-3 py-1.5 text-sm bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8] middle-name-input">
-                    {% else %}
-                    <input type="text" name="middle_names" value=""
-                           placeholder="Middle name (optional)" maxlength="60"
-                           class="border border-gray-600 rounded-lg px-3 py-1.5 text-sm bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8] middle-name-input">
-                    {% endfor %}
-                    <button type="button" id="add-middle-btn"
-                            class="wl-btn-ink px-2 py-1 rounded text-xs">+ Another</button>
-                </div>
-                {# Display name with auto hint #}
-                <div class="mt-3">
-                    <input type="text" name="display_name" value="{{ name_context.display_name or '' }}" maxlength="120"
-                           class="w-full border border-gray-600 rounded-lg px-3 py-2 text-sm bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]"
-                           placeholder="Display name (auto-generated from first + last if blank)">
-                    {% if name_context.auto_display and name_context.auto_display != name_context.display_name %}
-                    <p class="text-xs wl-text-faint mt-1">Auto: {{ name_context.auto_display }}</p>
-                    {% endif %}
-                </div>
+
+            {# Full name — profile-level (name components live on the profile) #}
+            <div class="mb-4" data-type="__displayname">
+                <label class="block text-sm font-medium wl-text-sub mb-1">Full name</label>
+                <input type="text" name="display_name" value="{{ profile.display_name }}" maxlength="120"
+                       class="w-full border border-gray-600 rounded-lg px-3 py-2 text-sm bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
                 <p class="text-xs wl-text-faint mt-1">Your identity across all cards.</p>
             </div>
 
-            {# ============ vCard fields — sections from server ============ #}
             {% for heading, types in sections %}
             <div class="mb-4 pb-4" data-section="{{ heading }}" style="border-bottom: 1px solid var(--wl-glass-border);">
                 <label class="block text-sm font-medium wl-text-sub mb-2">{{ heading }}</label>
-                {% if address_block and heading == 'Addresses' %}
-                {# UX pass 5: ADDRESSES AS BLOCKS (vcard + personal).
-                   The k-th of each component is block k; one '+ Add
-                   address' control appends a complete six-input block.
-                   po_box is a standalone component (report §6: never
-                   folded into address2, not part of the block). #}
-                {% set bt = [] %}
-                {% set pb = [] %}
-                {% for t, sub in types %}
-                    {% if t in address_block_types %}{% set _ = bt.append((t, sub)) %}{% endif %}
-                    {% if t == 'po_box' %}{% set _ = pb.append((t, sub)) %}{% endif %}
-                {% endfor %}
-                {% set nb = namespace(n=1) %}
-                {% for t, sub in bt %}
-                    {% if by_type[t]|length > nb.n %}{% set nb.n = by_type[t]|length %}{% endif %}
-                {% endfor %}
-                <div data-address-blocks class="space-y-3 mb-3">
-                    {% for k in range(nb.n) %}
-                    <div class="rounded-lg border p-3" style="border-color: var(--wl-glass-border);">
-                        <p class="text-xs wl-text-faint uppercase tracking-wide mb-2">Address {{ k + 1 }}</p>
-                        {% for t, sub in bt %}
-                            {% if by_type[t]|length > k %}
-                            {{ field_row(t, sub, by_type[t][k]) }}
-                            {% else %}
-                            {{ empty_row(t, sub) }}
-                            {% endif %}
-                        {% endfor %}
-                    </div>
-                    {% endfor %}
-                </div>
-                <template data-newblock>
-                    <div class="rounded-lg border p-3" style="border-color: var(--wl-glass-border);">
-                        <p class="text-xs wl-text-faint uppercase tracking-wide mb-2">Address</p>
-                        {% for t, sub in bt %}
-                        {{ empty_row(t, sub) }}
-                        {% endfor %}
-                    </div>
-                </template>
-                <button type="button" class="wl-btn-ink px-2 py-1 rounded text-xs mt-1"
-                        onclick="addAddressBlock()">+ Add address</button>
-                {# po_box standalone row #}
-                {% for t, sub in pb %}
-                <div data-type="po_box" class="mt-3">
-                    <div class="rows">
-                        {% for f in by_type['po_box'] %}
-                        {{ field_row(t, sub, f) }}
-                        {% endfor %}
-                        {% if not by_type['po_box'] %}
-                        {{ empty_row(t, sub) }}
-                        {% endif %}
-                    </div>
-                </div>
-                {% endfor %}
-                {% else %}
                 {% for t, sublabel in types %}
                 <div data-type="{{ t }}" class="mb-3">
                     <div class="rows">
@@ -372,7 +263,7 @@
                         {% endif %}
                     </div>
                     {% if t in multi_types %}
-                    <button type="button" class="wl-btn-ink px-2 py-1 rounded text-xs mt-1"
+                    <button type="button" class="wl-link text-xs mt-1"
                             onclick="addFieldRow('{{ t }}')">+ Add {{ labels[t]|lower }}</button>
                     <template data-newrow="{{ t }}">
                         {{ empty_row(t, sublabel) }}
@@ -380,25 +271,8 @@
                     {% endif %}
                 </div>
                 {% endfor %}
-                {% endif %}
             </div>
             {% endfor %}
-
-            {# ============ Field picker (UX pass 4) ============ #}
-            <div class="mb-4 pb-4" style="border-bottom: 1px solid var(--wl-glass-border);">
-                <label class="block text-sm font-medium wl-text-sub mb-2">Add field</label>
-                <select id="add-field-picker"
-                        class="wl-select w-full border border-gray-600 rounded-lg px-3 py-2 text-sm bg-slate-900 wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
-                    <option value="">— Select a field type —</option>
-                    {% for heading, types in picker_sections %}
-                    <optgroup label="{{ heading }}">
-                        {% for t, sublabel in types %}
-                        <option value="{{ t }}">{{ labels[t] }}{% if sublabel %} — {{ sublabel }}{% endif %}</option>
-                        {% endfor %}
-                    </optgroup>
-                    {% endfor %}
-                </select>
-            </div>
 
             <div class="flex items-center justify-between">
                 <p class="text-xs wl-text-faint">Public: anyone · Granted: approved contacts · Private: only you</p>
@@ -412,14 +286,14 @@
         {# ============ Danger zone: delete card (two-step confirm) ============ #}
         <div class="mt-6 pt-4" style="border-top: 1px solid var(--wl-glass-border);">
             <button type="button" id="delete-card-btn" onclick="showDeleteCard()"
-                    class="wl-btn-deny px-2 py-1 rounded text-xs">
+                    class="wl-link text-xs" style="color: var(--wl-danger);">
                 Delete card
             </button>
             <form id="delete-card-form" method="POST"
                   action="/owner/{{ token }}/cards/{{ card.id }}/delete"
                   class="hidden mt-2">
                 <p class="text-xs wl-text-sub mb-2">
-                    Delete " {{ card.name }}"? Contacts who already saved this
+                    Delete “{{ card.name }}”? Contacts who already saved this
                     card keep the vCard on their phone — it stops updating,
                     loses its badge, and becomes a normal vCard. The fields
                     stay on your profile.
@@ -449,71 +323,7 @@ function addFieldRow(type) {
     rows.appendChild(tpl.content.cloneNode(true));
 }
 
-// ---- Address blocks (UX pass 5): '+ Add address' appends a complete
-// six-input block (address1/address2/city/state/zip/country) so
-// addresses are added and grouped BY BLOCK, never by line. ----
-function addAddressBlock() {
-    const tpl = document.querySelector('template[data-newblock]');
-    const container = document.querySelector('[data-address-blocks]');
-    if (!tpl || !container) return;
-    container.appendChild(tpl.content.cloneNode(true));
-    const blocks = container.children;
-    const last = blocks[blocks.length - 1];
-    [...blocks].forEach((b, i) => {
-        const lbl = b.querySelector('p');
-        if (lbl) lbl.textContent = 'Address ' + (i + 1);
-    });
-    last.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    const inp = last.querySelector('input[type="text"], input[type="date"]');
-    if (inp) inp.focus();
-}
-
-// ---- Field picker (UX pass 4): select a type, append starter row ----
-document.addEventListener('DOMContentLoaded', function () {
-    const picker = document.getElementById('add-field-picker');
-    if (!picker) return;
-    picker.addEventListener('change', function () {
-        const type = picker.value;
-        if (!type) return;
-        // Find the section for this type.
-        const sections = document.querySelectorAll('[data-type]');
-        let targetSection = null;
-        for (const s of sections) {
-            if (s.dataset.type === type) {
-                targetSection = s;
-                break;
-            }
-        }
-        if (!targetSection) return;
-        const rows = targetSection.querySelector('.rows');
-        if (!rows) return;
-        // Clone the empty_row template for this type.
-        const tpl = targetSection.querySelector('template[data-newrow]');
-        if (tpl) {
-            rows.appendChild(tpl.content.cloneNode(true));
-        } else {
-            // Build a minimal row inline.
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.name = 'new_' + type + '_value';
-            input.placeholder = type;
-            input.className = 'w-full border border-gray-600 rounded-lg px-3 py-2 text-sm bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]';
-            const row = document.createElement('div');
-            row.className = 'flex flex-col sm:flex-row sm:items-center gap-2 mb-2';
-            row.appendChild(input);
-            rows.appendChild(row);
-        }
-        // Scroll the new row into view.
-        const newRow = rows.lastElementChild;
-        newRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        // Focus the new input.
-        const newInput = newRow.querySelector('input[type="text"]');
-        if (newInput) newInput.focus();
-        picker.value = '';
-    });
-});
-
-// ---- Phone labels (UX pass 2/4): Custom… reveals the custom-name input ----
+// ---- Phone labels (UX pass 2): Custom… reveals the custom-name input ----
 function syncPhoneLabelCustom(select) {
     const custom = select.parentElement.querySelector('.phone-label-custom');
     if (!custom) return;
@@ -536,48 +346,6 @@ function hideDeleteCard() {
     document.getElementById('delete-card-form').classList.add('hidden');
     document.getElementById('delete-card-btn').classList.remove('hidden');
 }
-
-// ---- Middle names: add another input ----
-document.addEventListener('DOMContentLoaded', function () {
-    const addMiddleBtn = document.getElementById('add-middle-btn');
-    if (addMiddleBtn) {
-        addMiddleBtn.addEventListener('click', function () {
-            const row = document.getElementById('middle-names-row');
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.name = 'middle_names';
-            input.placeholder = 'Middle name';
-            input.maxLength = 60;
-            input.className = 'border border-gray-600 rounded-lg px-3 py-1.5 text-sm bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8] middle-name-input';
-            row.insertBefore(input, addMiddleBtn);
-            input.focus();
-        });
-    }
-});
-
-// ---- Added-row ✕ (UX pass 4): client-side DOM removal only ----
-document.addEventListener('click', function (e) {
-    if (e.target.classList.contains('addrow-x')) {
-        const row = e.target.closest('[data-newrow]') || e.target.closest('.rows > div');
-        if (row) row.remove();
-    }
-});
-
-// ---- Shift+Tab step-back (UX pass 4) ----
-function shiftTabStepBack(e) {
-    e.preventDefault();
-    const focusable = Array.from(document.querySelectorAll(
-        'input:not([type="hidden"]), select, textarea, button:not([disabled]), a[href]'
-    )).filter(el => !el.closest('.hidden') && !el.hasAttribute('disabled') && el.offsetParent !== null);
-    const idx = focusable.indexOf(document.activeElement);
-    const prev = focusable[idx > 0 ? idx - 1 : focusable.length - 1];
-    if (prev) prev.focus();
-}
-document.addEventListener('keydown', function (e) {
-    if (e.key === 'Tab' && e.shiftKey) {
-        shiftTabStepBack(e);
-    }
-});
 
 // ---- Photo cropper: hand-rolled CIRCLE canvas (crop / zoom / position).
 // UX pass 3: SLOT-AWARE — one instance per photo block (default picture
@@ -608,6 +376,9 @@ document.addEventListener('keydown', function (e) {
         function draw(showGuide = true) {
             if (!img) return;
             clampOffset();
+            // Circle crop: the photo shows through the disc only; the corners
+            // get the app backdrop so the exported JPEG carries the circle
+            // boundary (display surfaces clip to a circle regardless).
             ctx.fillStyle = '#1A1A1C';
             ctx.fillRect(0, 0, SIZE, SIZE);
             ctx.save();
@@ -617,6 +388,8 @@ document.addEventListener('keydown', function (e) {
             const dw = img.width * zoom, dh = img.height * zoom;
             ctx.drawImage(img, (SIZE - dw) / 2 + ox, (SIZE - dh) / 2 + oy, dw, dh);
             ctx.restore();
+            // Circle edge guide — EDITOR ONLY. Pairing-review F3: never bake
+            // the ring into the export (the photo travels via vCard).
             if (showGuide) {
                 ctx.strokeStyle = 'rgba(255,255,255,0.35)';
                 ctx.lineWidth = 2;
@@ -626,9 +399,15 @@ document.addEventListener('keydown', function (e) {
             }
         }
 
+        // Shared editor-open path for both a freshly chosen file and a click
+        // on the already-loaded photo (UX pass 2026-09-22: click-to-reopen).
         function openEditor(image) {
             img = image;
             minZoom = Math.max(SIZE / img.width, SIZE / img.height);
+            // Zoom starts at 1.0× = fit. The slider is the multiplier
+            // (100 = fit, 400 = 4× fit); pixel scale derives from it, so
+            // touching the slider continues smoothly from the fit view
+            // instead of snapping to the image's natural pixel size.
             zoom = minZoom;
             ox = 0; oy = 0;
             zoomInput.value = '100';
@@ -653,6 +432,7 @@ document.addEventListener('keydown', function (e) {
             image.src = url;
         });
 
+        // Clicking the loaded photo re-opens the editor with it loaded.
         const current = block.querySelector('.photo-current');
         if (current && current.tagName === 'BUTTON') {
             current.addEventListener('click', () => {
@@ -666,6 +446,9 @@ document.addEventListener('keydown', function (e) {
 
         zoomInput.addEventListener('input', () => {
             if (!img) return;
+            // Proportional tracking: slider 100 → fit (1.0×), 400 → 4× fit.
+            // Pixel scale is minZoom × multiplier — never slider/100 alone,
+            // which jumped straight to the natural size (~4×+ on big photos).
             const mult = parseInt(zoomInput.value, 10) / 100;
             zoom = minZoom * mult;
             zoomVal.textContent = mult.toFixed(1) + '×';
@@ -686,9 +469,12 @@ document.addEventListener('keydown', function (e) {
         ['pointerup', 'pointercancel', 'pointerleave'].forEach((ev) =>
             canvas.addEventListener(ev, () => { drag = null; }));
 
+        // Hand the cropped circle (JPEG, 512×512, disc on the backdrop) to
+        // the server on save — the button WORKS; it stays disabled until an
+        // image is in the editor.
         saveBtn.addEventListener('click', () => {
             if (!img) return;
-            draw(false);
+            draw(false);  // F3: export without the editor's guide ring
             photoData.value = canvas.toDataURL('image/jpeg', 0.92);
         });
     });

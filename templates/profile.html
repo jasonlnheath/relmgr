@@ -97,7 +97,7 @@
             <div class="space-y-3">
                 {% for card in cards %}
                 {% set reach = namespace(has=false) %}
-                {% for f in card.visible_fields %}{% if f.field_type in ('phone', 'phone_personal', 'phone_work', 'email', 'email_personal', 'email_work') %}{% set reach.has = true %}{% endif %}{% endfor %}
+                {% for f in card.visible_fields %}{% if f.field_type in ('phone', 'email') %}{% set reach.has = true %}{% endif %}{% endfor %}
                 {% if reach.has %}
                 <div class="flex items-center gap-3">
                     {% if card.photo_path %}
@@ -190,120 +190,41 @@
         </div>
         {% endif %}
         {% endif %}
-
-        {# ========================================================
-           PASS 5 CONNECT BUTTONS (John Doe flow): a granted contact can
-           ask for the OTHER scope's card information — e.g. approved for
-           professional info asks for personal later, and vice versa.
-           Each button mints a scoped pending request; the owner approves
-           it from the amber request box with the matching cards picked.
-           Only offered when this isn't the owner's own view and the
-           owner actually has cards of that scope.
-           ======================================================== #}
-        {% if requested %}
-        <div class="mt-6 p-3 rounded-lg text-sm wl-text"
-             style="background: rgba(255,255,255,0.05); border: 1px solid var(--wl-glass-edge);">
-            {% if requested_fresh %}Request sent — {% else %}You've already asked — {% endif %}{{ profile.display_name }} will review your request for
-            {% if requested == 'personal' %}personal{% else %}professional{% endif %}
-            contact information.
-        </div>
-        {% endif %}
-        {% if tier == 'granted' and not viewer_is_owner and (has_personal_cards or has_work_cards) %}
-        <div class="mt-6 pt-4" style="border-top: 1px solid var(--wl-glass-border);">
-            <p class="text-xs wl-text-faint mb-2">Want more of {{ profile.display_name }}'s information? Send a request:</p>
-            <div class="flex flex-wrap gap-2">
-                {% if has_personal_cards %}
-                <form method="POST" action="/p/{{ profile.handle }}/connect" class="inline">
-                    <input type="hidden" name="scope" value="personal">
-                    <input type="hidden" name="e" value="{{ viewer_email or '' }}">
-                    <button type="submit"
-                            class="wl-btn-ink px-4 py-2 rounded-lg text-sm">
-                        Connect personally
-                    </button>
-                </form>
-                {% endif %}
-                {% if has_work_cards %}
-                <form method="POST" action="/p/{{ profile.handle }}/connect" class="inline">
-                    <input type="hidden" name="scope" value="professional">
-                    <input type="hidden" name="e" value="{{ viewer_email or '' }}">
-                    <button type="submit"
-                            class="wl-btn-ink px-4 py-2 rounded-lg text-sm">
-                        Connect professionally
-                    </button>
-                </form>
-                {% endif %}
-            </div>
-        </div>
-        {% endif %}
     </div>
 </div>
 {% endblock %}
 
 {% macro _field_label(field_type) %}
     {%- if field_type == 'email' -%}email
-    {%- elif field_type == 'email_personal' -%}email
-    {%- elif field_type == 'email_work' -%}email
     {%- elif field_type == 'phone' -%}phone
-    {%- elif field_type == 'phone_personal' -%}phone
-    {%- elif field_type == 'phone_work' -%}phone
     {%- elif field_type == 'text_number' -%}text number
-    {%- elif field_type == 'text_number_personal' -%}text number
-    {%- elif field_type == 'text_number_work' -%}text number
     {%- elif field_type == 'facetime_number' -%}FaceTime number
-    {%- elif field_type == 'facetime_number_personal' -%}FaceTime number
-    {%- elif field_type == 'facetime_number_work' -%}FaceTime number
     {%- elif field_type == 'facetime' -%}FaceTime
     {%- elif field_type == 'skype' -%}skype
     {%- elif field_type == 'video_app' -%}video app
     {%- elif field_type == 'messenger' -%}messenger
     {%- elif field_type == 'messaging_app' -%}messaging app
     {%- elif field_type == 'facebook' -%}facebook
-    {%- elif field_type == 'facebook_personal' -%}facebook
-    {%- elif field_type == 'facebook_work' -%}facebook
     {%- elif field_type == 'instagram' -%}instagram
-    {%- elif field_type == 'instagram_personal' -%}instagram
-    {%- elif field_type == 'instagram_work' -%}instagram
     {%- elif field_type == 'social_other' -%}social
-    {%- elif field_type == 'social_other_personal' -%}social
-    {%- elif field_type == 'social_other_work' -%}social
     {%- elif field_type == 'title' -%}title
     {%- elif field_type == 'company' -%}company
     {%- elif field_type == 'address1' -%}address 1
-    {%- elif field_type == 'address1_personal' -%}address 1
-    {%- elif field_type == 'address1_work' -%}address 1
     {%- elif field_type == 'address2' -%}address 2
-    {%- elif field_type == 'address2_personal' -%}address 2
-    {%- elif field_type == 'address2_work' -%}address 2
     {%- elif field_type == 'city' -%}city
-    {%- elif field_type == 'city_personal' -%}city
-    {%- elif field_type == 'city_work' -%}city
     {%- elif field_type == 'state' -%}state/province
-    {%- elif field_type == 'state_personal' -%}state/province
-    {%- elif field_type == 'state_work' -%}state/province
     {%- elif field_type == 'zip' -%}zip/postal code
-    {%- elif field_type == 'zip_personal' -%}zip/postal code
-    {%- elif field_type == 'zip_work' -%}zip/postal code
     {%- elif field_type == 'country' -%}country
-    {%- elif field_type == 'country_personal' -%}country
-    {%- elif field_type == 'country_work' -%}country
     {%- elif field_type == 'address' -%}address
     {%- elif field_type == 'website' -%}website
     {%- elif field_type == 'birthday' -%}birthday
     {%- elif field_type == 'note' -%}note
     {%- elif field_type == 'high_school' -%}high school
-    {%- elif field_type == 'maiden_name' -%}Maiden/Surname
+    {%- elif field_type == 'maiden_name' -%}maiden name
     {%- elif field_type == 'nickname' -%}nickname
     {%- elif field_type == 'childhood_address1' -%}childhood address
     {%- elif field_type == 'childhood_city' -%}childhood city
     {%- elif field_type == 'childhood_state' -%}childhood state
-    {#- UX pass 5: Google-parity six-field addition -#}
-    {%- elif field_type == 'department' -%}department
-    {%- elif field_type == 'po_box' -%}PO Box
-    {%- elif field_type == 'related_person' -%}related person
-    {%- elif field_type == 'event' -%}significant date
-    {%- elif field_type == 'custom_field' -%}custom field
-    {%- elif field_type == 'name_prefix' -%}name prefix
-    {%- elif field_type == 'name_suffix' -%}name suffix
     {%- else -%}{{ field_type }}
     {%- endif -%}
 {% endmacro %}
@@ -314,8 +235,8 @@
    (Mobile/Home/Work or a custom name) surface instead of the plain type. #}
 {% macro _field_row(f) %}
 <div class="flex items-start wl-text-sub">
-    <span class="w-28 flex-shrink-0 text-right pr-4 text-xs wl-text-faint uppercase tracking-wide pt-0.5">{% if f.field_type in ('phone', 'phone_personal', 'phone_work') and f.get('label') %}{{ label_display(f.label) }}{% else %}{{ _field_label(f.field_type) }}{% endif %}</span>
-    <span class="flex-1 min-w-0 wl-text break-words">{% if f.field_type in ('phone', 'phone_personal', 'phone_work', 'text_number', 'text_number_personal', 'text_number_work', 'facetime_number', 'facetime_number_personal', 'facetime_number_work') %}{{ phone_fmt(f.field_value) }}{% else %}{{ f.field_value }}{% endif %}</span>
+    <span class="w-28 flex-shrink-0 text-right pr-4 text-xs wl-text-faint uppercase tracking-wide pt-0.5">{% if f.field_type == 'phone' and f.get('label') %}{{ label_display(f.label) }}{% else %}{{ _field_label(f.field_type) }}{% endif %}</span>
+    <span class="flex-1 min-w-0 wl-text break-words">{% if f.field_type in ('phone', 'text_number', 'facetime_number') %}{{ phone_fmt(f.field_value) }}{% else %}{{ f.field_value }}{% endif %}</span>
     {% if f.visibility == 'private' %}
     <span class="ml-2 text-xs wl-text-faint" title="Private field">🔒</span>
     {% endif %}
