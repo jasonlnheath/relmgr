@@ -147,9 +147,9 @@
 
 <div class="max-w-2xl mx-auto py-8 px-4">
     {# Top bar #}
-    <div class="flex items-center justify-between mb-6">
+    <div class="flex items-center gap-3 mb-6">
         <a href="/owner/{{ token }}/profile" class="wl-link text-sm">← My Profile</a>
-        <a href="/owner/{{ token }}/profile/card/{{ card.id }}" class="wl-link text-sm">Preview card →</a>
+        <a href="/owner/{{ token }}/profile/card/{{ card.id }}" class="wl-link text-sm ml-auto">Preview card →</a>
     </div>
 
     {% if error %}

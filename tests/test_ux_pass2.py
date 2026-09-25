@@ -340,12 +340,12 @@ class TestViewProfileFieldRows:
         client = TestClient(create_app(db))
         return client
 
-    def test_labels_right_justified_with_spacing(self, tmp_path):
+    def test_labels_two_row_left_justified(self, tmp_path):
         db = _make_db(tmp_path)
         client = self._granted_client(db)
         html = client.get("/p/jasonheath?e=friend%40x.com").text
-        assert "text-right pr-4" in html, \
-            "field names RIGHT-justified with spacing (never overwrite values)"
+        assert "space-y-3" in html, \
+            "fields use two-row layout with blank line between (UX pass 8)"
 
     def test_no_forward_section(self, tmp_path):
         db = _make_db(tmp_path)

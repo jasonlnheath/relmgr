@@ -77,7 +77,7 @@
                     {% endif %}
                     <h2 class="wl-heading wl-heading-sm wl-text">{{ card.name }}</h2>
                 </div>
-                <div class="space-y-2">
+                <div class="space-y-3">
                     {% for f in card.visible_fields %}
                     {{ _field_row(f) }}
                     {% else %}
@@ -93,7 +93,7 @@
         {% if card.visible_fields %}
         <div class="mb-6 {% if not loop.last %}pb-4 border-b{% endif %}" style="border-color: var(--wl-glass-border);">
             <h2 class="wl-heading wl-heading-sm wl-text mb-3">{{ card.name }}</h2>
-            <div class="space-y-2">
+            <div class="space-y-3">
                 {% for f in card.visible_fields %}
                 {{ _field_row(f) }}
                 {% endfor %}
@@ -105,7 +105,7 @@
 
         {# Card-less profile: legacy flat field list #}
         {% if not cards and tier == 'granted' %}
-        <div class="space-y-2">
+        <div class="space-y-3">
             {% for f in profile.fields %}
             {{ _field_row(f) }}
             {% endfor %}
@@ -232,14 +232,18 @@
     {%- endif -%}
 {% endmacro %}
 
-{# One display row (UX pass 2): RIGHT-justified field names with clear
-   spacing so they never overwrite the value; phone labels surface. #}
+{# One display row (UX pass 8): label on top, value below, single-spaced,
+   one blank line between fields, everything left-justified. #}
 {% macro _field_row(f) %}
-<div class="flex items-start wl-text-sub">
-    <span class="w-28 flex-shrink-0 text-right pr-4 text-xs wl-text-faint uppercase tracking-wide pt-0.5">{% if f.field_type == 'phone' and f.get('label') %}{{ label_display(f.label) }}{% else %}{{ _field_label(f.field_type) }}{% endif %}</span>
-    <span class="flex-1 min-w-0 wl-text break-words">{% if f.field_type in ('phone', 'text_number', 'facetime_number') %}{{ phone_fmt(f.field_value) }}{% else %}{{ f.field_value }}{% endif %}</span>
+<div class="flex flex-col space-y-0.5">
+    <span class="text-xs wl-text-faint uppercase tracking-wide">
+        {% if f.field_type == 'phone' and f.get('label') %}{{ label_display(f.label) }}{% else %}{{ _field_label(f.field_type) }}{% endif %}
+    </span>
+    <span class="wl-text break-words">
+        {% if f.field_type in ('phone', 'text_number', 'facetime_number') %}{{ phone_fmt(f.field_value) }}{% else %}{{ f.field_value }}{% endif %}
+    </span>
     {% if f.visibility == 'private' %}
-    <span class="ml-2 text-xs wl-text-faint" title="Private field">🔒</span>
+    <span class="text-xs wl-text-faint" title="Private field">🔒</span>
     {% endif %}
 </div>
 {% endmacro %}

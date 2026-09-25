@@ -51,7 +51,7 @@
            id="new-connection-link"
            title="Add a new connection"
            aria-label="Add a new connection"
-           class="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center wl-btn-ink text-xl leading-none">+</a>
+           class="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center wl-btn-ink text-lg leading-none"><span class="-translate-y-0.5">+</span></a>
     </form>
 
     {# ============================================================
@@ -233,7 +233,7 @@
         {# Fast alphabetical filter rail (UX pass 2026-09-22): one click to
            filter by initial; click the active letter to clear. #}
         {% if available_letters %}
-        <nav class="flex flex-col items-center flex-shrink-0 py-1 pr-1" aria-label="Filter by first letter">
+        <nav class="flex flex-col items-center flex-shrink-0 py-1 pr-1 sticky top-0 z-10 bg-[#1A1A1C]" aria-label="Filter by first letter" id="letter-rail">
             {% for L in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'|list %}
             {% if L in available_letters %}
             {% if letter == L %}
@@ -317,6 +317,62 @@
     }
     input.addEventListener('input', sync);
     sync();
+})();
+
+// UX pass 8: swipe-driven letter filter on the A-Z rail.
+(function () {
+    const rail = document.getElementById('letter-rail');
+    if (!rail) return;
+    const letters = Array.from(rail.querySelectorAll('a[href]'))
+        .map(a => a.textContent.trim())
+        .filter(Boolean);
+    if (!letters.length) return;
+
+    let startY = 0, scrolling = false;
+
+    function haptic() {
+        try { navigator.vibrate && navigator.vibrate(10); } catch (_) {}
+    }
+
+    function setLetter(letter) {
+        const link = rail.querySelector('a[href*="letter=' + encodeURIComponent(letter) + '"]');
+        if (link) {
+            haptic();
+            window.location.href = link.href;
+        }
+    }
+
+    rail.addEventListener('touchstart', (e) => {
+        if (e.target.tagName === 'A') return; // let clicks work
+        startY = e.touches[0].clientY;
+        scrolling = true;
+    }, { passive: true });
+
+    rail.addEventListener('touchmove', (e) => {
+        if (!scrolling) return;
+        const dy = e.touches[0].clientY - startY;
+        if (Math.abs(dy) > 30) {
+            scrolling = false;
+            const idx = dy > 0
+                ? Math.min(letters.length - 1, letters.indexOf(rail.querySelector('[aria-pressed="true"]')?.textContent.trim()) + 1)
+                : Math.max(0, letters.indexOf(rail.querySelector('[aria-pressed="true"]')?.textContent.trim()) - 1);
+            if (idx >= 0 && idx < letters.length) {
+                setLetter(letters[idx]);
+            }
+        }
+    }, { passive: true });
+
+    rail.addEventListener('touchend', () => { scrolling = false; }, { passive: true });
+})();
+
+// UX pass 8: haptics on all action buttons.
+(function () {
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('button, .wl-btn-ink, [role="button"]');
+        if (btn) {
+            try { navigator.vibrate && navigator.vibrate(10); } catch (_) {}
+        }
+    });
 })();
 </script>
 {% endblock %}
