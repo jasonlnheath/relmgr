@@ -1,9 +1,15 @@
-"""Owner self-view bug (found via Jason 2026-09-12).
+"""Owner self-view (originally found via Jason 2026-09-12; security-audit
+contract change 2026-09-25).
 
-'View profile' from the dashboard opened /p/{handle} anonymously, so the
-OWNER saw the public-stripped view with a 'Request access' taunt. Rule:
-if the viewer email is one of the profile's OWN emails, tier = granted —
-you always have access to yourself. Dashboard link now carries ?e=.
+OLD rule: if the viewer email (?e=) is one of the profile's OWN emails,
+tier = granted — and the page minted a 365-day owner dashboard token.
+That made the owner's signup email a full authentication credential:
+anyone who knows it got the dashboard link and every private field.
+
+NEW rule (security audit 2026-09-25): the owner self-view is AUTH-ONLY —
+a signed owner_dashboard token (?ot=, what My Profile's 'View profile'
+link carries) or the session cookie. ?e= is the granted-CONTACT tracking
+parameter and can never lift the viewer to the owner's own tier.
 """
 
 import os
@@ -36,28 +42,71 @@ def _make_db(tmp_path: Path):
     return db
 
 
-def test_owner_self_email_gets_granted_tier(tmp_path):
+def test_own_email_no_longer_grants_tier(tmp_path):
     db = _make_db(tmp_path)
     conn = whitelist_db.wl_connect(db)
     pid = whitelist_db.resolve_handle(conn, "jasonheath")["id"]
-    # own email (any casing) -> granted even though NO grant row exists
-    assert whitelist_db.effective_tier(conn, pid, "JHEATH@waltheremc.com") == "granted"
-    # someone else's email -> still anonymous
+    # SECURITY REGRESSION GUARD: own email must NOT authenticate —
+    # email knowledge is not a credential (audit 2026-09-25).
+    assert whitelist_db.effective_tier(conn, pid, "JHEATH@waltheremc.com") == "anonymous"
+    assert whitelist_db.effective_tier(conn, pid, "jlnh@hotmail.com") == "anonymous"
+    # granted contacts keep their tier via the admitted-grant predicate
+    gid = whitelist_db.create_grant(conn, pid, "friend@x.com", "Friend")
+    whitelist_db.apply_decision(conn, gid, "approve", "quarter")
+    assert whitelist_db.effective_tier(conn, pid, "friend@x.com") == "granted"
+    # strangers stay anonymous
     assert whitelist_db.effective_tier(conn, pid, "stranger@x.com") == "anonymous"
     conn.close()
 
 
-def test_owner_self_view_shows_all_fields(tmp_path):
+def test_owner_self_view_via_signed_token(tmp_path):
     db = _make_db(tmp_path)
     client = TestClient(create_app(db))
-    # anonymous: bio only, no granted fields (round-2: no "some info hidden" text)
+    # anonymous: no granted fields
     anon = client.get("/p/jasonheath").text
     assert "jheath@waltheremc.com" not in anon
-    # self-view via ?e=: full contact info, no request-access taunt
-    me = client.get("/p/jasonheath?e=jheath%40waltheremc.com").text
+    # own email alone: STILL anonymous now (no private fields, no back-link)
+    via_email = client.get("/p/jasonheath?e=jheath%40waltheremc.com").text
+    assert "jheath@waltheremc.com" not in via_email
+    assert "/owner/" not in via_email, "email knowledge must not mint owner tokens"
+    # signed ?ot= token: full contact info, back to My Profile link present
+    ot = wl_tokens.make_token(b"test-secret", "owner_dashboard", "1")
+    me = client.get(f"/p/jasonheath?ot={ot}").text
     assert "jheath@waltheremc.com" in me
     assert "jlnh@hotmail.com" in me
     assert "Request access" not in me
+    assert "/owner/" in me
+
+
+def test_owner_self_view_via_session_cookie(tmp_path):
+    db = _make_db(tmp_path)
+    conn = whitelist_db.wl_connect(db)
+    profile = whitelist_db.create_owner_profile(
+        conn, "sessionown", "Session Owner", "own@x.com", "pw-12345678")
+    conn.close()
+    client = TestClient(create_app(db))
+    r = client.post("/signin", data={
+        "email": "own@x.com", "password": "pw-12345678"},
+        follow_redirects=False)
+    assert r.status_code == 303
+    me = client.get("/p/sessionown").text
+    assert "Session Owner" in me
+    assert "/owner/" in me, "signed-in owner must get the back link"
+
+
+def test_my_profile_view_link_carries_signed_token(tmp_path):
+    db = _make_db(tmp_path)
+    conn = whitelist_db.wl_connect(db)
+    whitelist_db.create_owner_profile(
+        conn, "linkown", "Link Owner", "link@x.com", "pw-12345678")
+    conn.close()
+    tok = wl_tokens.make_token(b"test-secret", "owner_dashboard", "2")
+    client = TestClient(create_app(db))
+    html = client.get(f"/owner/{tok}/profile").text
+    # The View-profile link must carry a signed ?ot= token — never the
+    # owner's raw email.
+    assert "?ot=" in html
+    assert "link%40x.com" not in html and "?e=link@x.com" not in html
 
 
 def test_dashboard_view_profile_link_carries_owner_email(tmp_path):
@@ -70,4 +119,4 @@ def test_dashboard_view_profile_link_carries_owner_email(tmp_path):
     resp = client.get(f"/owner/{tok}")
     assert resp.status_code == 200
     # contacts.html replaced the dashboard — profile link is gone but the
-    # self-view logic still works (the ?e= test is on the profile page)
+    # self-view logic still works (the ?ot= test is on the profile page)

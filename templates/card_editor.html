@@ -183,7 +183,7 @@
                 <button type="button" class="photo-current block w-28 h-28 rounded-full overflow-hidden cursor-pointer p-0 border-0"
                         title="Click to edit this photo"
                         style="background: var(--wl-btn-slate);">
-                    <img src="/photos/{{ owner_id }}/{{ card.id }}{{ slot_id }}"
+                    <img src="/photos/{{ owner_id }}/{{ card.id }}{{ slot_id }}?t={{ token | urlencode }}"
                          alt="{{ card.name }} {{ slot_label }} (click to edit)"
                          class="w-28 h-28 rounded-full object-cover">
                 </button>

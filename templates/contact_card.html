@@ -14,7 +14,7 @@
             {% if cards %}
             {% set main_card = cards[0] %}
             {% if main_card.photo_path %}
-            <img src="/photos/{{ profile.id }}/{{ main_card.id }}"
+            <img src="/photos/{{ profile.id }}/{{ main_card.id }}?t={{ token | urlencode }}"
                  alt="{{ profile.display_name }} photo"
                  class="w-16 h-16 rounded-full object-cover flex-shrink-0">
             {% else %}
@@ -78,7 +78,7 @@
             <div class="mb-6 pb-4" style="border-bottom: 1px solid var(--wl-glass-border);">
                 <div class="flex items-center gap-3 mb-3">
                     {% if card.photo_path %}
-                    <img src="/photos/{{ profile.id }}/{{ card.id }}"
+                    <img src="/photos/{{ profile.id }}/{{ card.id }}?t={{ token | urlencode }}"
                          alt="{{ card.name }} photo"
                          class="w-10 h-10 rounded-full object-cover flex-shrink-0">
                     {% else %}
