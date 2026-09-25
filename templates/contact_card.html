@@ -79,15 +79,13 @@
                 <div class="flex items-center gap-3 mb-3">
                     {% if card.photo_path %}
                     <img src="/photos/{{ profile.id }}/{{ card.id }}"
-                         alt="{{ card.name }} photo"
+                         alt="photo"
                          class="w-10 h-10 rounded-full object-cover flex-shrink-0">
                     {% else %}
                     <div class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
                          style="background: var(--wl-btn-slate);">
-                        <span class="text-sm wl-text-muted">{{ card.name[:2].upper() }}</span>
                     </div>
                     {% endif %}
-                    <h2 class="wl-heading wl-heading-sm wl-text">{{ card.name }}</h2>
                 </div>
                 <div class="space-y-2">
                     {% for f in card.visible_fields %}
@@ -240,7 +238,7 @@
    spacing so they never overwrite the value; phone labels surface. #}
 {% macro _field_row(f) %}
 <div class="flex items-start wl-text-sub">
-    <span class="w-28 flex-shrink-0 text-right pr-4 text-xs wl-text-faint uppercase tracking-wide pt-0.5">{% if f.field_type == 'phone' and f.get('label') %}{{ label_display(f.label) }}{% else %}{{ _field_label(f.field_type) }}{% endif %}</span>
+    <span class="w-28 flex-shrink-0 text-right pr-4 text-xs wl-text-faint uppercase tracking-wide pt-0.5 wl-field-label">{% if f.field_type == 'phone' and f.get('label') %}{{ label_display(f.label) }}{% else %}{{ _field_label(f.field_type) }}{% endif %}</span>
     <span class="flex-1 min-w-0 wl-text break-words">{% if f.field_type in ('phone', 'text_number', 'facetime_number') %}{{ phone_fmt(f.field_value) }}{% else %}{{ f.field_value }}{% endif %}</span>
     {% if f.visibility == 'private' %}
     <span class="ml-2 text-xs wl-text-faint" title="Private field">🔒</span>

@@ -1,6 +1,24 @@
 {% extends "base.html" %}
 {% block title %}WhiteList — New Connection{% endblock %}
 
+{% block extra_head %}
+<script>
+// Phone formatting on blur: 6165142665 → +1 (616) 514-2665
+function formatPhoneInput(el) {
+    const raw = (el.value || '').replace(/\D/g, '');
+    if (raw.length === 10) {
+        el.value = '+1 (' + raw.slice(0,3) + ') ' + raw.slice(3,6) + '-' + raw.slice(6);
+    } else if (raw.length === 11 && raw[0] === '1') {
+        el.value = '+1 (' + raw.slice(1,4) + ') ' + raw.slice(4,7) + '-' + raw.slice(7);
+    }
+}
+document.addEventListener('DOMContentLoaded', function() {
+    const phone = document.querySelector('input[name="phone"]');
+    if (phone) phone.addEventListener('blur', function() { formatPhoneInput(this); });
+});
+</script>
+{% endblock %}
+
 {% block content %}
 <div class="max-w-2xl mx-auto py-8 px-4">
     <div class="mb-4">

@@ -160,20 +160,18 @@ class TestEditorRendersAllFieldTypes:
 
     def test_app_sections_with_add_affordances(self, tmp_path):
         """Video apps / Messaging apps / Socials sections show their named
-        slots first, then a '+ Add …' affordance covering all others."""
+        slots; no '+ Add' buttons (UX pass 6)."""
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
         card_id = _first_card_id(db)
         html = client.get(f"/owner/{_owner_token()}/cards/{card_id}/edit").text
-        # Named slots + section headings.
-        for heading in ("Video apps", "Messaging apps", "Social", "Address"):
+        # Section headings (Address → Address Block 1, UX pass 6).
+        for heading in ("Video apps", "Messaging apps", "Social", "Address Block 1"):
             assert heading in html, f"section '{heading}' missing"
         for slot in ("facetime", "skype", "messenger", "facebook", "instagram"):
             assert f'name="new_{slot}_value"' in html, f"named slot '{slot}' missing"
-        # + Add affordances (generic types cover all other apps/platforms).
-        for add in ("+ Add video app", "+ Add messaging app", "+ Add social",
-                    "+ Add phone", "+ Add email"):
-            assert add in html, f"'{add}' affordance missing"
+        # No '+ Add' buttons (UX pass 6: removed).
+        assert "+ Add" not in html
         # The structured address block replaces the single line.
         for label in ("Address 1", "Address 2", "City", "State/Province",
                       "Zip/Postal Code"):

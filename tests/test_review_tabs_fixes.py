@@ -85,32 +85,27 @@ def _owner_token(payload: str = "1") -> str:
 # ============================================================
 
 class TestRoutePagination:
-    def test_page_0_shows_100_of_120(self, tmp_path):
-        db = _make_db(tmp_path)
-        _seed_contacts(db, 120)
-        client = TestClient(create_app(db))
-        html = client.get(f"/owner/{_owner_token()}").text
-        # Redesigned UI uses wl-card p-3 for contact rows; UX pass 3: 100/page
-        assert html.count('wl-card p-3') == 100, \
-            f"page 1 must show exactly 100 rows, got {html.count('wl-card p-3')}"
-
+    # UX pass 6: pagination removed — continuous scroll-through (per_page=999999).
     # The list is ordered A-Z by display name (spec), so the lexicographic last
     # contact of "Person 0".."Person 119" is "Person 99" (rendered F99 L99).
     _LAST_NAME = "F99 L99"
 
-    def test_page_1_has_last_row(self, tmp_path):
-        db = _make_db(tmp_path)
-        _seed_contacts(db, 120)
-        client = TestClient(create_app(db))
-        html = client.get(f"/owner/{_owner_token()}?page=1").text
-        assert self._LAST_NAME in html, "the sorted-last row must appear on page 2"
-
-    def test_page_0_excludes_last_row(self, tmp_path):
+    def test_all_rows_visible_no_pagination(self, tmp_path):
+        """UX pass 6: all 120 rows visible on one page (continuous scroll)."""
         db = _make_db(tmp_path)
         _seed_contacts(db, 120)
         client = TestClient(create_app(db))
         html = client.get(f"/owner/{_owner_token()}").text
-        assert self._LAST_NAME not in html, "the sorted-last row must NOT be on page 1"
+        assert html.count('wl-card p-3') == 120, \
+            f"all rows must be visible, got {html.count('wl-card p-3')}"
+
+    def test_last_row_visible_on_page_0(self, tmp_path):
+        """UX pass 6: last row is on the same page (no pagination)."""
+        db = _make_db(tmp_path)
+        _seed_contacts(db, 120)
+        client = TestClient(create_app(db))
+        html = client.get(f"/owner/{_owner_token()}").text
+        assert self._LAST_NAME in html, "the sorted-last row must appear on page 1"
 
     def test_search_and_pagination_compose(self, tmp_path):
         db = _make_db(tmp_path)

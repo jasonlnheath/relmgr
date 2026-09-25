@@ -211,7 +211,7 @@ class TestDefaultCards:
 
     def test_personal_is_the_public_default_card(self, tmp_path):
         """Anonymous viewers get the TOP (Personal) card only; its picture
-        is THE default public picture."""
+        is THE default public picture. UX pass 6: card names removed from view."""
         db = _make_db(tmp_path)
         conn = whitelist_db.wl_connect(db)
         whitelist_db.add_profile_field(conn, 1, "birthday", "1985-06-15", "public")
@@ -222,7 +222,6 @@ class TestDefaultCards:
         conn.close()
         client = TestClient(create_app(db))
         html = client.get("/p/jasonheath").text
-        assert "Personal" in html
         assert "Work" not in html, "anon sees the top card only"
 
     def test_grant_ordering_personal_first_on_share(self, tmp_path):
@@ -242,6 +241,7 @@ class TestDefaultCards:
 
 class TestPersonalIdentityFields:
     def test_new_types_render_with_multiples(self, tmp_path):
+        """Personal-identity fields render with dedicated slots; no + Add buttons (UX pass 6)."""
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
         html = client.get(
@@ -249,7 +249,8 @@ class TestPersonalIdentityFields:
         for t in ("high_school", "maiden_name", "nickname",
                   "childhood_address1", "childhood_city", "childhood_state"):
             assert f'name="new_{t}_value"' in html
-            assert f"addFieldRow('{t}')" in html, f"{t} is repeatable"
+        # UX pass 6: no + Add buttons
+        assert "+ Add" not in html
 
     def test_identity_fields_default_public_addresses_city_level(self, tmp_path):
         db = _make_db(tmp_path)
@@ -502,7 +503,9 @@ class TestFilterTabsAndRows:
         conn.commit()
         conn.close()
         html = client.get(f"/owner/{_owner_token()}").text
-        assert html.count("wl-card p-3") == 100
+        # UX pass 6: no pagination — all rows visible (continuous scroll)
+        # 150 contacts + possible my_card/pending rows, so at least 150
+        assert html.count("wl-card p-3") >= 150
 
 
 # ============================================================

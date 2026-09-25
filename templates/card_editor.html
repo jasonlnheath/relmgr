@@ -263,8 +263,6 @@
                         {% endif %}
                     </div>
                     {% if t in multi_types %}
-                    <button type="button" class="wl-link text-xs mt-1"
-                            onclick="addFieldRow('{{ t }}')">+ Add {{ labels[t]|lower }}</button>
                     <template data-newrow="{{ t }}">
                         {{ empty_row(t, sublabel) }}
                     </template>
@@ -314,7 +312,25 @@
 </div>
 
 <script>
-// ---- Card fields: + Add rows (clone the per-type <template>) ----
+// ---- Phone formatting on blur: 6165142665 → +1 (616) 514-2665 ----
+(function () {
+    function formatPhoneInput(el) {
+        var raw = (el.value || '').replace(/\D/g, '');
+        if (raw.length === 10) {
+            el.value = '+1 (' + raw.slice(0,3) + ') ' + raw.slice(3,6) + '-' + raw.slice(6);
+        } else if (raw.length === 11 && raw[0] === '1') {
+            el.value = '+1 (' + raw.slice(1,4) + ') ' + raw.slice(4,7) + '-' + raw.slice(7);
+        }
+    }
+    document.querySelectorAll('input[name^="field_"], input[name^="new_"]').forEach(function (inp) {
+        var name = inp.name;
+        if ((name.indexOf('_value') === -1) ||
+            !(name.match(/_(phone|text_number|facetime_number)_value/))) return;
+        inp.addEventListener('blur', function () { formatPhoneInput(this); });
+    });
+})();
+
+// ---- Card fields: clone the per-type <template> ----
 function addFieldRow(type) {
     const tpl = document.querySelector('template[data-newrow="' + type + '"]');
     if (!tpl) return;

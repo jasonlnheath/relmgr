@@ -63,12 +63,11 @@ def test_anon_sees_default_card_only(tmp_path):
 
     UX pass 3: the default card is PERSONAL (top card — its picture is the
     default public picture, and its public identity fields are the
-    friend-finding surface).
+    friend-finding surface). UX pass 6: card names removed from profile view.
     """
     db = _seed_full(tmp_path)
     client = TestClient(create_app(db))
     html = client.get("/p/jasonheath").text
-    assert "Personal" in html
     assert "Work" not in html, "anon must not see non-default cards"
     # Public field visible, granted-visibility fields hidden.
     assert "public@waltheremc.com" in html

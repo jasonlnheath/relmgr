@@ -141,10 +141,16 @@
             border-bottom: 1px solid var(--wl-glass-edge);
         }
 
-        /* Heading scale — all Arapey 400 weight */
+        /* Heading scale — all Arapey 400 weight; responsive for mobile */
         .wl-heading { font-family: "Arapey", Georgia, serif; font-weight: 400; color: var(--wl-ink); }
         .wl-heading-sm { font-size: 22px; line-height: 28px; }
         .wl-heading-md { font-size: 30px; line-height: 36px; }
+        @media (max-width: 480px) {
+            .wl-heading-sm { font-size: 18px; line-height: 24px; }
+            .wl-heading-md { font-size: 24px; line-height: 30px; }
+        }
+        /* UX pass 6: field name labels wrap to two rows for long names */
+        .wl-field-label { word-break: break-word; line-height: 1.2; }
     </style>
 </head>
 <body class="wl-page-bg min-h-screen wl-text">
@@ -154,6 +160,16 @@
     </div>
 
     <script>
+    // Haptic feedback on button taps (UX pass 6): light pulse on interactive elements.
+    (function () {
+        document.addEventListener('click', function (e) {
+            var btn = e.target.closest('button, a, .wl-card, [role="group"] button');
+            if (btn && navigator.vibrate) {
+                try { navigator.vibrate(10); } catch (_) {}
+            }
+        });
+    })();
+
     // UX pass 2 (2026-09-22): every visibility dropdown is keyboard-
     // controlled — ArrowUp/ArrowDown move the selection while the select
     // is focused. Native selects mostly do this already; this makes the

@@ -230,7 +230,7 @@ CARD_EDITOR_SECTIONS = (
         ('instagram', 'Instagram'),
         ('social_other', 'Social'),
     )),
-    ('Address', (
+    ('Address Block 1', (
         ('address1', 'Address 1'),
         ('address2', 'Address 2'),
         ('city', 'City'),

@@ -1173,8 +1173,8 @@ def create_app(db_path: Path = None) -> FastAPI:
                 page = max(0, int(request.query_params.get("page", 0)))
             except ValueError:
                 page = 0
-            # UX pass 3 (2026-09-23): reduced rows (~100 per page).
-            per_page = 100
+            # UX pass 6: continuous scroll-through — no pagination.
+            per_page = 999999
 
             # Owner dashboard: per-owner isolation (ruling 2A). Every auth
             # path — session cookie, integer-payload token, and the legacy
