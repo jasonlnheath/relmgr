@@ -164,7 +164,7 @@
         {% if is_grey %}
         <div class="mt-6 pt-4" style="border-top: 1px solid var(--wl-glass-border);">
             <p class="text-xs wl-text-faint mb-2">Quarterly review — choose one:</p>
-            <div class="flex flex-wrap gap-2">
+            <div class="flex flex-wrap gap-2 justify-center">
                 {# Keep on GreyList #}
                 <form method="POST" action="/owner/{{ token }}/quarter/punt" class="inline">
                     <input type="hidden" name="grant_id" value="{{ grant.id }}">

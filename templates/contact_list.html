@@ -233,7 +233,7 @@
         {# Fast alphabetical filter rail (UX pass 2026-09-22): one click to
            filter by initial; click the active letter to clear. #}
         {% if available_letters %}
-        <nav class="flex flex-col items-center flex-shrink-0 py-1 pr-1 sticky top-0 z-10 bg-[#1A1A1C]" aria-label="Filter by first letter" id="letter-rail">
+        <nav class="flex flex-col items-center flex-shrink-0 py-1 pr-1 alpha-rail" aria-label="Filter by first letter" id="letter-rail">
             {% for L in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'|list %}
             {% if L in available_letters %}
             {% if letter == L %}
@@ -323,22 +323,20 @@
 // the rail letters filters by the letter under the finger.
 // Uses pointer events (works for mouse + touch) with
 // passive: false so we can prevent page-scroll interference.
+// Also handles touch events directly for mobile compatibility.
 (function () {
-    const rail = document.querySelector('nav[aria-label="Filter by first letter"]');
+    const rail = document.getElementById('letter-rail');
     if (!rail) return;
 
     // Gather all letter elements (both <a> and <span>)
     const letters = Array.from(rail.children);
     if (!letters.length) return;
 
-    // Base query string: everything EXCEPT the letter param
-    const url = new URL(window.location.href);
-    url.searchParams.delete('letter');
-    const baseQuery = url.toString().replace(window.location.origin, '');
+    // Set touch-action:none on the rail to prevent scroll during drag
+    rail.style.touchAction = 'none';
 
     let dragging = false;
     let pendingUrl = null;
-    let scrollY = 0;
 
     function highlightLetter(idx) {
         letters.forEach((el, i) => {
@@ -361,43 +359,38 @@
         window.location.href = href;
     }
 
-    function findLetterAt(y) {
-        // Find which letter element's bounding box contains y
+    function findLetterAt(clientY) {
+        // Find which letter element's bounding box contains clientY
         for (let i = 0; i < letters.length; i++) {
             const rect = letters[i].getBoundingClientRect();
-            if (y >= rect.top && y <= rect.bottom) {
+            if (clientY >= rect.top && clientY <= rect.bottom) {
                 return i;
             }
         }
         return -1;
     }
 
-    // Pointer events — work for both mouse and touch.
-    // passive: false so we can prevent default scroll on the rail.
-    rail.addEventListener('pointerdown', function (e) {
-        // Only handle primary button / touch
-        if (e.button && e.button !== 0) return;
+    function startDrag(clientY) {
         dragging = true;
-        scrollY = window.scrollY;
-        rail.setPointerCapture(e.pointerId);
-        e.preventDefault();  // prevent page scroll while dragging rail
-    }, { passive: false });
-
-    rail.addEventListener('pointermove', function (e) {
-        if (!dragging) return;
-        e.preventDefault();  // keep preventing scroll during drag
-        const idx = findLetterAt(e.clientY);
+        const idx = findLetterAt(clientY);
         if (idx >= 0) {
             highlightLetter(idx);
             pendingUrl = idx;
         }
-    }, { passive: false });
+    }
 
-    rail.addEventListener('pointerup', function (e) {
+    function moveDrag(clientY) {
+        if (!dragging) return;
+        const idx = findLetterAt(clientY);
+        if (idx >= 0) {
+            highlightLetter(idx);
+            pendingUrl = idx;
+        }
+    }
+
+    function endDrag() {
         if (!dragging) return;
         dragging = false;
-        // Release pointer capture
-        try { rail.releasePointerCapture(e.pointerId); } catch (_) {}
         // Apply the filter for the last highlighted letter
         if (pendingUrl !== null) {
             applyFilter(pendingUrl);
@@ -405,21 +398,55 @@
         pendingUrl = null;
         // Reset highlights
         highlightLetter(-1);
+    }
+
+    // Pointer events — work for both mouse and touch.
+    // passive: false so we can prevent default scroll on the rail.
+    rail.addEventListener('pointerdown', function (e) {
+        // Only handle primary button / touch
+        if (e.button && e.button !== 0) return;
+        e.preventDefault();  // prevent page scroll while dragging rail
+        startDrag(e.clientY);
+    }, { passive: false });
+
+    rail.addEventListener('pointermove', function (e) {
+        if (!dragging) return;
+        e.preventDefault();  // keep preventing scroll during drag
+        moveDrag(e.clientY);
+    }, { passive: false });
+
+    rail.addEventListener('pointerup', function (e) {
+        endDrag();
     });
 
     rail.addEventListener('pointercancel', function (e) {
-        if (!dragging) return;
-        dragging = false;
-        try { rail.releasePointerCapture(e.pointerId); } catch (_) {}
-        pendingUrl = null;
-        highlightLetter(-1);
+        endDrag();
     });
 
     rail.addEventListener('pointerleave', function (e) {
-        if (!dragging) return;
-        dragging = false;
-        pendingUrl = null;
-        highlightLetter(-1);
+        endDrag();
+    });
+
+    // Touch events — direct handling for mobile compatibility
+    // (some browsers don't fire pointer events on touch)
+    rail.addEventListener('touchstart', function (e) {
+        e.preventDefault();  // prevent page scroll
+        startDrag(e.touches[0].clientY);
+    }, { passive: false });
+
+    rail.addEventListener('touchmove', function (e) {
+        e.preventDefault();  // prevent page scroll during drag
+        moveDrag(e.touches[0].clientY);
+    }, { passive: false });
+
+    rail.addEventListener('touchend', function (e) {
+        e.preventDefault();
+        endDrag();
+    });
+
+    rail.addEventListener('touchcancel', function (e) {
+        e.preventDefault();
+        endDrag();
     });
 })();
 </script>

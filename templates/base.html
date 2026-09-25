@@ -154,8 +154,8 @@
         /* === Mobile squeeze (pass 9): 25% smaller text, tighter padding,
            wider content area, alpha rail pushed right === */
         @media (max-width: 640px) {
-            /* Reduce page padding — content owns more of the screen */
-            body > div {
+            /* Dashboard pages only (not sign-in/signup): reduce padding */
+            .max-w-2xl {
                 padding-top: 1rem !important;
                 padding-left: 0.5rem !important;
                 padding-right: 0.5rem !important;
@@ -222,11 +222,33 @@
             /* Card editor: shrink visibility select */
             select.wl-select.text-xs { width: auto !important; min-width: 60px !important; }
 
-            /* Thinner borders everywhere on mobile */
-            .wl-card { border-width: 0.5px !important; }
-            * { border-width: 0.5px !important; }
-            input, textarea, select { border-width: 0.5px !important; }
-            button { border-width: 0.5px !important; }
+            /* Thinner borders on dashboard cards/inputs/buttons (not sign-in) */
+            .max-w-2xl .wl-card { border-width: 0.5px !important; }
+            .max-w-2xl input, .max-w-2xl textarea, .max-w-2xl select {
+                border-width: 0.5px !important;
+            }
+            .max-w-2xl button { border-width: 0.5px !important; }
+
+            /* Remove visible outlines from text boxes on mobile
+               (captain: "Text boxes are visible everywhere on MOBILE web") */
+            .max-w-2xl input:focus, .max-w-2xl textarea:focus,
+            .max-w-2xl select:focus {
+                outline: none !important;
+                box-shadow: none !important;
+            }
+
+            /* Alpha rail: position:fixed on mobile so swipe doesn't scroll page,
+               touch-action:none to prevent scroll during drag */
+            .alpha-rail {
+                position: fixed !important;
+                top: 0 !important;
+                right: 0 !important;
+                z-index: 50 !important;
+                background: var(--wl-surface-base) !important;
+                touch-action: none !important;
+                height: 100vh !important;
+                padding-top: 4rem !important;
+            }
         }
     </style>
 </head>
