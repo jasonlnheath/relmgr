@@ -19,6 +19,11 @@
            ink-faint=#FFFFFF42, ink-secondary=#FFFFFFB8
         */
         :root {
+            /* Tell mobile browsers to use dark-mode form controls —
+               without this iOS Safari applies its default blue accent
+               to <input> elements, which is the blue-button bug. */
+            color-scheme: dark;
+
             /* Surfaces */
             --wl-surface-base: #1A1A1C;
             --wl-surface-deep: #0B0B0C;
