@@ -485,9 +485,9 @@ class TestContactCardAccessSection:
         conn.close()
         html = client.get(f"/owner/{_owner_token()}/contact/{gid}").text
         assert "GreyList" in html
-        assert "Make Permanent" in html, "grey keeps its review choices"
-        assert "Punt Another Quarter" in html
-        assert "Revoke" not in html
+        assert "Keep on GreyList" in html, "grey keeps its review choices"
+        assert "Add to WhiteList" in html
+        assert "Add to BlackList" in html
 
     def test_blacklist_state_shows_blacklist(self, tmp_path):
         db = _make_db(tmp_path)

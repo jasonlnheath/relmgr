@@ -58,24 +58,12 @@
         </div>
         {% endif %}
 
-        {# Card-driven field rendering — UX pass (2026-09-22): the contact
-           detail shows ONE card at a time (like My Cards), with a chip
-           switcher when the contact has several. #}
+        {# Card-driven field rendering — UX pass 7 (2026-10-xx): ALL cards
+           laid out on one continuous view, no tab switcher. #}
         {% if cards and tier == 'granted' %}
-            {% if cards|length > 1 %}
-            <div class="flex flex-wrap gap-1.5 mb-4">
-                {% for c in cards %}
-                <a href="/owner/{{ token }}/contact/{{ grant.id }}?card={{ c.id }}"
-                   class="text-xs px-2 py-1 rounded-full"
-                   aria-label="Show the {{ c.name }} card"
-                   style="{% if selected_card and c.id == selected_card.id %}background: var(--wl-btn-slate); color: var(--wl-ink);{% else %}background: var(--wl-glass-fill-alt); color: var(--wl-ink-muted);{% endif %}
-                          border: 1px solid var(--wl-glass-edge);">{{ c.name }}</a>
-                {% endfor %}
-            </div>
-            {% endif %}
-            {% set card = selected_card %}
-            {% if card %}
-            <div class="mb-6 pb-4" style="border-bottom: 1px solid var(--wl-glass-border);">
+            {% for card in cards %}
+            {% if card.visible_fields %}
+            <div class="mb-6 {% if not loop.last %}pb-4 border-b{% endif %}" style="border-color: var(--wl-glass-border);">
                 <div class="flex items-center gap-3 mb-3">
                     {% if card.photo_path %}
                     <img src="/photos/{{ profile.id }}/{{ card.id }}"
@@ -98,6 +86,7 @@
                 </div>
             </div>
             {% endif %}
+            {% endfor %}
         {% elif cards and tier != 'anonymous' %}
         {# Pending/denied tier — show what's available #}
         {% for card in cards %}
@@ -168,29 +157,36 @@
             </div>
         </div>
 
-        {# Quarterly review actions — UX pass 2: the revoke button is gone
-           here (the contact-list badge moves cover it); grey contacts keep
-           their review choices (Make Permanent / Punt). Review NEVER
-           deletes a contact (semantics ruling). #}
+        {# Quarterly review actions — UX pass 7 (2026-10-xx): three options
+           per captain's live review — Keep on GreyList, Add to WhiteList,
+           Add to BlackList. Review NEVER deletes a contact (semantics ruling). #}
         {% if tier == 'granted' and grant %}
         {% if is_grey %}
         <div class="mt-6 pt-4" style="border-top: 1px solid var(--wl-glass-border);">
             <p class="text-xs wl-text-faint mb-2">Quarterly review — choose one:</p>
             <div class="flex flex-wrap gap-2">
-                {# Make Permanent #}
-                <form method="POST" action="/owner/{{ token }}/quarter/make_permanent" class="inline">
-                    <input type="hidden" name="grant_id" value="{{ grant.id }}">
-                    <button type="submit"
-                            class="wl-btn-approve px-4 py-2 rounded-lg text-sm">
-                        Make Permanent
-                    </button>
-                </form>
-                {# Punt Another Quarter #}
+                {# Keep on GreyList #}
                 <form method="POST" action="/owner/{{ token }}/quarter/punt" class="inline">
                     <input type="hidden" name="grant_id" value="{{ grant.id }}">
                     <button type="submit"
                             class="wl-btn-punt px-4 py-2 rounded-lg text-sm">
-                        Punt Another Quarter
+                        Keep on GreyList
+                    </button>
+                </form>
+                {# Add to WhiteList #}
+                <form method="POST" action="/owner/{{ token }}/quarter/make_permanent" class="inline">
+                    <input type="hidden" name="grant_id" value="{{ grant.id }}">
+                    <button type="submit"
+                            class="wl-btn-approve px-4 py-2 rounded-lg text-sm">
+                        Add to WhiteList
+                    </button>
+                </form>
+                {# Add to BlackList #}
+                <form method="POST" action="/owner/{{ token }}/quarter/revoke" class="inline">
+                    <input type="hidden" name="grant_id" value="{{ grant.id }}">
+                    <button type="submit"
+                            class="wl-btn-deny px-4 py-2 rounded-lg text-sm">
+                        Add to BlackList
                     </button>
                 </form>
             </div>

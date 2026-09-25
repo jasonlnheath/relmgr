@@ -288,7 +288,7 @@ def card_kind(card: dict) -> str | None:
 
 
 def format_phone_display(value) -> str:
-    """UX pass 3: display phones as +1(XXX)XXX-XXXX.
+    """UX pass 7: display phones as +1 (XXX) XXX-XXXX.
 
     10-digit numbers (and 11-digit +1-prefixed) format as US; anything
     else (international, extensions, junk) renders unchanged. Display-time
@@ -301,7 +301,7 @@ def format_phone_display(value) -> str:
     if len(digits) == 11 and digits.startswith("1"):
         digits = digits[1:]
     if len(digits) == 10:
-        return f"+1({digits[0:3]}){digits[3:6]}-{digits[6:10]}"
+        return f"+1 ({digits[0:3]}) {digits[3:6]}-{digits[6:10]}"
     return raw
 
 
