@@ -1981,8 +1981,12 @@ def create_app(db_path: Path = None) -> FastAPI:
                              "high_school", "maiden_name", "nickname",
                              "city", "state",
                              "childhood_city", "childhood_state")
+    # UX pass 5: custom_field defaults PRIVATE (arbitrary content).
+    _PRIVATE_DEFAULT_TYPES = ("custom_field",)
 
     def _editor_default_visibility(field_type: str) -> str:
+        if field_type in _PRIVATE_DEFAULT_TYPES:
+            return "private"
         return ("public" if field_type in _PUBLIC_DEFAULT_TYPES else "granted")
 
     def _parse_editor_form(form):

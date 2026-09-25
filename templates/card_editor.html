@@ -31,7 +31,14 @@
     'nickname': 'Nickname',
     'childhood_address1': 'Childhood street address',
     'childhood_city': 'Childhood city',
-    'childhood_state': 'Childhood state'
+    'childhood_state': 'Childhood state',
+    'department': 'Department name',
+    'po_box': 'PO Box number',
+    'related_person': 'Person name',
+    'event': 'Date (e.g. 2024-06-15)',
+    'custom_field': 'Field name: value',
+    'name_prefix': 'Mr / Dr / …',
+    'name_suffix': 'Jr. / III / …'
 } %}
 
 {# ---- macros ---- #}
@@ -77,6 +84,17 @@
        class="w-28 border border-gray-600 rounded px-2 py-1 text-xs bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8] phone-label-custom {% if not is_custom %}hidden{% endif %}">
 {% endmacro %}
 
+{# Event label support (UX pass 5): Anniversary / Other. #}
+{% macro event_label_select(name, current='') %}
+<select name="{{ name }}"
+        class="wl-select text-xs border border-gray-600 rounded px-1 py-1 event-label-select"
+        title="Type of significant date">
+    <option value="" {% if not current %}selected{% endif %}>Type…</option>
+    <option value="anniversary" {% if current == 'anniversary' %}selected{% endif %}>Anniversary</option>
+    <option value="other" {% if current == 'other' %}selected{% endif %}>Other</option>
+</select>
+{% endmacro %}
+
 {% macro field_input(name, t, value='', placeholder='') %}
 {% if t == 'note' %}
 <textarea name="{{ name }}" rows="2" placeholder="{{ placeholder }}"
@@ -107,6 +125,13 @@
     <div class="flex items-center gap-2 flex-shrink-0 flex-wrap">
         {% if t == 'phone' %}
         {{ phone_label_select('field_' ~ f.id ~ '_label', f.label or '') }}
+        {% elif t == 'event' %}
+        {{ event_label_select('field_' ~ f.id ~ '_label', f.label or '') }}
+        {% elif t in ('related_person', 'custom_field') %}
+        <input type="text" name="field_{{ f.id }}_label"
+               value="{{ f.label or '' }}" maxlength="30"
+               placeholder="Label (role / field name)"
+               class="w-28 border border-gray-600 rounded px-2 py-1 text-xs bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
         {% endif %}
         {{ vis_select('field_' ~ f.id ~ '_visibility', f.visibility) }}
         {# Pairing-review F1 (2026-09-22): this button lives INSIDE the main
@@ -131,7 +156,9 @@
    new rows carry the type's DEFAULT visibility (granted everywhere except
    title/company/website = public), and phone rows carry the label select.
    UX pass 9 (mobile): always flex-row — field input shares the row with
-   dropdown + ✕. #}
+   dropdown + ✕.
+   UX pass 5: event rows carry the type select; related_person/custom_field
+   carry a free-text label input. #}
 {% macro empty_row(t, sublabel) %}
 <div class="flex flex-row items-center gap-2 mb-2">
     {% if sublabel %}
@@ -143,6 +170,13 @@
     <div class="flex items-center gap-2 flex-shrink-0 flex-wrap">
         {% if t == 'phone' %}
         {{ phone_label_select('new_' ~ t ~ '_label', '') }}
+        {% elif t == 'event' %}
+        {{ event_label_select('new_' ~ t ~ '_label', '') }}
+        {% elif t in ('related_person', 'custom_field') %}
+        <input type="text" name="new_{{ t }}_label"
+               value="" maxlength="30"
+               placeholder="Label (role / field name)"
+               class="w-28 border border-gray-600 rounded px-2 py-1 text-xs bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
         {% endif %}
         {{ vis_select('new_' ~ t ~ '_visibility', default_visibility(t)) }}
     </div>
