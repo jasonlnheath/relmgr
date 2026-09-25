@@ -47,7 +47,7 @@
         {# Photo #}
         {% if card.photo_path %}
         <div class="mb-4">
-            <img src="/photos/{{ owner_id }}/{{ card.id }}" alt="{{ card.name }} photo" class="w-24 h-24 rounded-full object-cover">
+            <img src="/photos/{{ owner_id }}/{{ card.id }}?t={{ token | urlencode }}" alt="{{ card.name }} photo" class="w-24 h-24 rounded-full object-cover">
         </div>
         {% endif %}
 

@@ -24,7 +24,7 @@
     {% if my_card %}
     <a href="/owner/{{ token }}/profile" class="wl-card p-4 mb-4 flex items-center gap-3 block hover:opacity-90 transition-opacity">
         {% if my_card.photo_path %}
-        <img src="/photos/{{ my_card.owner_id }}/{{ my_card.id }}"
+        <img src="/photos/{{ my_card.owner_id }}/{{ my_card.id }}?t={{ token | urlencode }}"
              alt="{{ my_card.name }} photo"
              class="w-12 h-12 rounded-full object-cover">
         {% else %}
@@ -122,7 +122,7 @@
            style="{% if active %}outline: 2px solid var(--wl-ink); outline-offset: 2px;{% endif %}">
             {% if t.kind == 'card' %}
             {% if t.card.photo_path %}
-            <img src="/photos/{{ t.card.owner_profile_id }}/{{ t.card.id }}" alt="" aria-hidden="true"
+            <img src="/photos/{{ t.card.owner_profile_id }}/{{ t.card.id }}?t={{ token | urlencode }}" alt="" aria-hidden="true"
                  class="w-10 h-10 rounded-full object-cover">
             {% else %}
             <span class="w-10 h-10 rounded-full flex items-center justify-center text-[10px] wl-text-muted"

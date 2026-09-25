@@ -28,6 +28,13 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 - Direct-DB test writes need the columns/tables the app boot creates: run `TestClient(create_app(db))` BEFORE writing `quarter_status` etc. (boot runs `ensure_whitelist_schema`), and `store.init_db(db)` before touching `contacts`. `search_new_connections` degrades to [] when the contacts table is absent. `create_app` records its db path on `app.state.relmgr_db_path` (tests recover it for data-layer calls).
 - Contact-list rows are per-CARD, carry NO email sub-line, and are one click target (overlay anchor, class `absolute inset-0`); badges are round 40px; filter tabs are multi-select `?f=<cardId|state>,…` (card group OR, state group OR, groups AND); `per_page=100`; sort = card name, state rank, name. Phones display via the `phone_fmt` Jinja global (`format_phone_display`, +1(XXX)XXX-XXXX, display-time only).
 
+## Security contract (audit 2026-09-25, branch fm/whitelist-security-audit)
+
+- Owner self-view of /p/{handle} is AUTH-ONLY: signed `?ot=` owner_dashboard token (what My Profile's View-profile link carries, `profile_view_url`) or session cookie. NEVER treat `?e=` matching the owner's email as auth — that hole minted 365-day dashboard tokens (removed from `effective_tier` too). `?e=` stays the granted-CONTACT tracking param.
+- EVERY /owner/{token}/ route that touches a grant must call `_verify_grant_ownership` — the quarter routes (make_permanent/revoke/punt) once skipped it (cross-owner IDOR). No route may fall back to `profiles ORDER BY id LIMIT 1` (bio-visibility used to).
+- /photos/{pid}/{cid}[/hs] goes through `_photo_allowed`: default card, non-expired share-bundle cards, owner auth (`?t=` token or session; stub cards resolve via `profiles.owner_id`), or granted `?e=`. Owner templates append `?t={{ token }}` to photo imgs; profile.html granted view appends `?e=`.
+- `create_app` installs one security middleware: body cap (16 MB), per-IP sliding-window limiter (POST /p/*/request|forward 10/min; /signin,/signup,/forgot-password 30/min; off via `WHITELIST_RATELIMIT_DISABLED=1`), and Referrer-Policy/X-Content-Type-Options/X-Frame-Options/Permissions-Policy headers (capability tokens live in URLs). Session cookie sets `secure` when the request scheme is https. `_encode_square_jpeg` caps decodes at 40 MP (bomb guard); duplicate /p request POSTs no longer re-push owner email (`find_admitting_grant_id` tells new from deduped).
+
 ## Maintaining this file
 
 Keep this file for knowledge useful to almost every future agent session in this project.

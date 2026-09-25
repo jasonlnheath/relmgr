@@ -8,6 +8,7 @@ require WHITELIST_SECRET to be present.
 
 from pathlib import Path
 import hmac
+import json
 import os
 import re
 import sys
@@ -116,13 +117,19 @@ def _encode_square_jpeg(content: bytes) -> bytes:
     (the client cropper already squares; this is defense in depth), then
     Lanczos-resample to the stored display size: 512×512 JPEG q82.
 
-    Raises ValueError on junk/unsupported content (route maps to 400).
+    Security audit 2026-09-25: an explicit pixel cap (40 MP) is enforced
+    BEFORE any decode — a compact bomb PNG otherwise decompresses to
+    hundreds of MB of RAM per request (DoS). Raises ValueError on
+    junk/unsupported/oversized content (route maps to 400).
     """
     import io
+    _MAX_PIXELS = 40_000_000  # 40 MP decode ceiling
     if not (content[:3] == b"\xff\xd8\xff" or content[:4] == b"\x89PNG"):
         raise ValueError("unsupported image format")
     try:
         img = Image.open(io.BytesIO(content))
+        if img.width * img.height > _MAX_PIXELS:
+            raise ValueError("image too large")
         img.verify()
         img = Image.open(io.BytesIO(content))
         if img.format not in ("JPEG", "PNG"):
@@ -369,9 +376,15 @@ def _qr_png(payload: str) -> bytes:
 
 
 def _vcf_escape(value: str) -> str:
-    """Escape one vCard text value (backslash first, then ; , \n)."""
+    """Escape one vCard text value (backslash first, then ; , \r\n, \n).
+
+    Bare \r is stripped too (audit 2026-09-25): CRLF is the vCard line
+    delimiter, and a lone CR smuggled through could confuse lenient
+    parsers into treating injected text as new properties.
+    """
     return (value.replace("\\", "\\\\").replace(";", "\\;")
-            .replace(",", "\\,").replace("\r\n", "\\n").replace("\n", "\\n"))
+            .replace(",", "\\,").replace("\r\n", "\\n").replace("\n", "\\n")
+            .replace("\r", ""))
 
 
 def _build_vcard(profile: dict, cards: list[dict]) -> str:
@@ -460,6 +473,67 @@ def create_app(db_path: Path = None) -> FastAPI:
     application.state.relmgr_db_path = path
 
     # ============================================================
+    # Security middleware (audit 2026-09-25): response headers, request
+    # body cap, and a small per-IP sliding-window limiter on the
+    # anonymous POST surfaces (connection requests, forwards, auth).
+    # ============================================================
+    _MAX_BODY_BYTES = 16 * 1024 * 1024  # 16 MB across every request
+    _RATELIMIT_OFF = bool(
+        wl_env.get_secret("WHITELIST_RATELIMIT_DISABLED"))
+    _rate_buckets: dict[tuple[str, str], list[float]] = {}
+    _RATE_RULES = {
+        # path-prefix -> (max requests, window seconds) per client IP
+        "auth": (30, 60),        # /signin, /signup, /forgot-password POSTs
+        "publicpost": (10, 60),  # /p/{handle}/request + /forward
+    }
+
+    def _rate_limited(request: Request) -> bool:
+        """True when this client exceeded its window for the bucket the
+        request lands in. Single-process (uvicorn) by design; set
+        WHITELIST_RATELIMIT_DISABLED=1 to switch it off (tests/load tools).
+        """
+        p = request.url.path
+        if request.method != "POST":
+            return False
+        if p in ("/signin", "/signup", "/forgot-password"):
+            bucket = "auth"
+        elif (p.endswith("/request") or p.endswith("/forward")) \
+                and p.startswith("/p/"):
+            bucket = "publicpost"
+        else:
+            return False
+        max_n, window = _RATE_RULES[bucket]
+        ip = request.client.host if request.client else "unknown"
+        now = time.monotonic()
+        key = (ip, bucket)
+        hits = _rate_buckets.setdefault(key, [])
+        while hits and now - hits[0] > window:
+            hits.pop(0)
+        if len(hits) >= max_n:
+            return True
+        hits.append(now)
+        return False
+
+    @application.middleware("http")
+    async def _security_middleware(request: Request, call_next):
+        content_length = request.headers.get("content-length")
+        if (content_length and content_length.isdigit()
+                and int(content_length) > _MAX_BODY_BYTES):
+            return HTMLResponse("Request body too large", status_code=413)
+        if not _RATELIMIT_OFF and _rate_limited(request):
+            return HTMLResponse("Too many requests — try again later.",
+                                status_code=429)
+        response = await call_next(request)
+        # Capability tokens live in /owner/{token} URLs — never leak them
+        # via Referer on outbound navigation.
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Permissions-Policy"] = (
+            "camera=(), microphone=(), geolocation=()")
+        return response
+
+    # ============================================================
     # Static files (scroll-mark favicon, badge PNGs)
     # ============================================================
     application.mount("/static", StaticFiles(directory="static"), name="static")
@@ -518,6 +592,7 @@ def create_app(db_path: Path = None) -> FastAPI:
                 httponly=True,
                 samesite="lax",
                 max_age=7 * 86400,
+                secure=request.url.scheme == "https",
             )
             return response
         finally:
@@ -574,6 +649,7 @@ def create_app(db_path: Path = None) -> FastAPI:
                 httponly=True,
                 samesite="lax",
                 max_age=7 * 86400,
+                secure=request.url.scheme == "https",
             )
             return response
         except ValueError as exc:
@@ -779,33 +855,40 @@ def create_app(db_path: Path = None) -> FastAPI:
             # visits keep viewer_email NULL — still a scan (that's the point).
             whitelist_db.record_scan(conn, profile["id"], e if e else None)
 
-            # UX pass (2026-09-22): owner detection for the '← back to
-            # My Profile' link. The owner arrives either via session cookie
-            # or the ?e= link carrying their OWN email; anyone else
-            # (granted contact with their ?e=, or anonymous) never sees it.
+            # Security audit 2026-09-25: owner detection is AUTH-ONLY — a
+            # signed owner_dashboard token (?ot=) or the session cookie.
+            # The old ?e=-matches-own-email check let ANYONE who knew the
+            # owner's signup email mint a 365-day dashboard token and read
+            # every private field — email knowledge is not authentication.
+            # ?e= remains the granted-CONTACT tracking parameter only.
             viewer_is_owner = False
-            session_cookie = request.cookies.get("wl_session")
-            if session_cookie:
-                session_profile_id = _consume_session_cookie(
-                    session_cookie, _get_secret())
-                if session_profile_id and session_profile_id == profile["id"]:
+            ot = request.query_params.get("ot")
+            if ot:
+                ot_payload = wl_tokens.consume_token(
+                    _get_secret(), "owner_dashboard", ot)
+                if ot_payload and ot_payload.isdigit() \
+                        and int(ot_payload) == profile["id"]:
                     viewer_is_owner = True
-            if not viewer_is_owner and e:
-                owner_email = conn.execute(
-                    "SELECT field_value FROM profile_fields "
-                    "WHERE profile_id = ? AND field_type = 'email' LIMIT 1",
-                    (profile["id"],),
-                ).fetchone()
-                if owner_email and owner_email[0].lower() == e.lower():
-                    viewer_is_owner = True
+            if not viewer_is_owner:
+                session_cookie = request.cookies.get("wl_session")
+                if session_cookie:
+                    session_profile_id = _consume_session_cookie(
+                        session_cookie, _get_secret())
+                    if session_profile_id and session_profile_id == profile["id"]:
+                        viewer_is_owner = True
             owner_token = None
             if viewer_is_owner:
                 owner_token = wl_tokens.make_token(
-                    _get_secret(), "owner_dashboard", str(profile["id"]),
-                    expires_days=365)
+                    _get_secret(), "owner_dashboard", str(profile["id"]))
 
             viewer_email = e if e else None
-            tier = whitelist_db.effective_tier(conn, profile["id"], viewer_email)
+            # Owner self-view sees everything; ?e= alone can no longer lift
+            # the tier to the owner's own private fields.
+            if viewer_is_owner:
+                tier = "granted"
+            else:
+                tier = whitelist_db.effective_tier(
+                    conn, profile["id"], viewer_email)
 
             stale = is_verified_stale(profile.get("verified_at"))
 
@@ -821,7 +904,8 @@ def create_app(db_path: Path = None) -> FastAPI:
             return HTMLResponse(jinja.get_template("profile.html").render(
                 request=request, profile=profile, tier=tier, stale=stale,
                 cards=cards, bio_visibility=bio_visibility, days_since=days_since,
-                viewer_is_owner=viewer_is_owner, owner_token=owner_token))
+                viewer_is_owner=viewer_is_owner, owner_token=owner_token,
+                viewer_email=viewer_email))
         finally:
             conn.close()
 
@@ -866,7 +950,13 @@ def create_app(db_path: Path = None) -> FastAPI:
                 grant_id = str(uuid.uuid4())
             else:
                 quarantined = False
+                # Security audit 2026-09-25: deduped re-POSTs must not
+                # re-push the owner's email — only a genuinely NEW request
+                # notifies (same predicate create_grant dedupes on).
+                already_admitted = whitelist_db.find_admitting_grant_id(
+                    conn, profile["id"], email or "")
                 grant_id = whitelist_db.create_grant(conn, profile["id"], email, name, profile.get("owner_id"))
+                is_new_request = already_admitted is None
                 # Two-layer notification (2026-09-20): the in-app row is the
                 # source of truth and commits here; the email is only the push
                 # (BackgroundTask below). dedupe_key collapses re-POSTs of a
@@ -881,8 +971,9 @@ def create_app(db_path: Path = None) -> FastAPI:
         finally:
             conn.close()
 
-        background = None if quarantined else BackgroundTask(
-            _send_connection_request_email, path, grant_id)
+        background = (None if (quarantined or not is_new_request)
+                      else BackgroundTask(
+                          _send_connection_request_email, path, grant_id))
         return HTMLResponse(jinja.get_template("request_success.html").render(
             request=request, profile=profile, grant_id=grant_id),
             background=background)
@@ -1652,6 +1743,12 @@ def create_app(db_path: Path = None) -> FastAPI:
         # Resolve BASE_URL for the share-link template (config-driven:
         # APP_BASE_URL > legacy BASE_URL > LAN default, never fails).
         base_url = mailer.app_base_url()
+        # Security audit 2026-09-25: 'View profile' carries a SIGNED
+        # owner_dashboard token (?ot=), never the owner's raw email —
+        # email knowledge must not authenticate the owner self-view.
+        view_token = wl_tokens.make_token(
+            _get_secret(), "owner_dashboard", str(profile_id))
+        profile_view_url = f"{base_url}/p/{profile['handle']}?ot={view_token}"
         # UX pass 3: UNIFIED sharing — the link the QR + Share button carry
         # is the profile URL itself. No bundle, no card-choosing: the
         # access-grant decision lands after a contact requests access.
@@ -1673,6 +1770,7 @@ def create_app(db_path: Path = None) -> FastAPI:
             share_error=share_error,
             BASE_URL=base_url,
             share_url=share_url,
+            profile_view_url=profile_view_url,
             share_message=(f"{profile['display_name']} wants to share their "
                            f"WhiteList card: {share_url}"),
             share_subject=f"{profile['display_name']} WhiteList Card",
@@ -1748,25 +1846,27 @@ def create_app(db_path: Path = None) -> FastAPI:
     @application.post("/owner/{token}/bio-visibility")
     async def owner_bio_visibility(request: Request, token: str):
         """Toggle bio visibility between public and private."""
-        payload = wl_tokens.consume_token(_get_secret(), "owner_dashboard", token)
-        if payload is None:
-            return HTMLResponse("Invalid or expired link", status_code=403)
-
-        form = await request.form()
-        visibility = (form.get("bio_visibility") or "").strip()
-        if visibility not in ("public", "private"):
-            return HTMLResponse("Invalid visibility value", status_code=400)
-
         conn = whitelist_db.wl_connect(path)
         try:
-            try:
-                profile_id = int(payload)
-            except (ValueError, TypeError):
-                row = conn.execute("SELECT * FROM profiles ORDER BY id LIMIT 1").fetchone()
-                if row:
-                    profile_id = row["id"]
-                else:
-                    return HTMLResponse("Profile not found", status_code=404)
+            # Security audit 2026-09-25: this route used a legacy fallback
+            # that resolved a non-integer (pre-migration) token payload to
+            # the FIRST profile in the DB and flipped ITS bio visibility.
+            # It now resolves the owner exactly like every other /owner
+            # route (ruling 2026-09-20 option A: legacy links are retired).
+            result = _resolve_owner(conn, request, token, _get_secret())
+            if result[0] is None and result[2] is None:
+                return HTMLResponse("Invalid or expired link", status_code=403)
+            if result[2]:
+                return RedirectResponse(url=f"/owner/{result[2]}")
+            profile_id = result[0]
+            profile = result[1]
+            if not profile:
+                return HTMLResponse("Profile not found", status_code=404)
+
+            form = await request.form()
+            visibility = (form.get("bio_visibility") or "").strip()
+            if visibility not in ("public", "private"):
+                return HTMLResponse("Invalid visibility value", status_code=400)
 
             whitelist_db.update_bio_visibility(conn, profile_id, visibility)
             profile = whitelist_db.get_profile_by_id(conn, profile_id)
@@ -2177,6 +2277,13 @@ def create_app(db_path: Path = None) -> FastAPI:
         from starlette.datastructures import UploadFile
         import os
 
+        # Cheap early reject (audit 2026-09-25): a giant body otherwise
+        # buffers fully into memory/temp before the 10 MB post-read check.
+        content_length = request.headers.get("content-length")
+        if (content_length and content_length.isdigit()
+                and int(content_length) > 12 * 1024 * 1024):
+            return HTMLResponse("File too large (max 10 MB)", status_code=413)
+
         form = await request.form()
         remove_photo = form.get("remove_photo")
         # UX pass 3: two picture slots on personal cards — the DEFAULT
@@ -2281,26 +2388,101 @@ def create_app(db_path: Path = None) -> FastAPI:
             days_since=days_since,
         ))
 
-    @application.get("/photos/{owner_profile_id}/{card_id}")
-    async def serve_photo(owner_profile_id: int, card_id: int):
+    def _photo_allowed(conn, request, card, viewer_email, owner_token):
+        """Access predicate for /photos/{pid}/{cid}[/hs] (security audit
+        2026-09-25 — the route used to serve ANY card's photo to ANYONE,
+        enumerable by sequential profile/card ids).
+
+        A photo is reachable when the card is PUBLICLY VISIBLE — it is the
+        owner's default card (what the anonymous /p page renders) or it sits
+        in a NON-EXPIRED share bundle — OR the viewer authenticates as the
+        card owner's owning account: a signed owner_dashboard token (?t=,
+        what the owner surfaces embed) or the session cookie.
+        """
+        if card is None:
+            return False
+        card_owner = card["owner_profile_id"]
+        # Owner authentication: token/session profile must be the card
+        # owner itself or the account that owns it (curated stubs have
+        # profiles.owner_id = creating owner).
+        auth_pid = None
+        if owner_token:
+            payload = wl_tokens.consume_token(
+                _get_secret(), "owner_dashboard", owner_token)
+            if payload and payload.isdigit():
+                auth_pid = int(payload)
+        if auth_pid is None:
+            session_cookie = request.cookies.get("wl_session")
+            if session_cookie:
+                cand = _consume_session_cookie(session_cookie, _get_secret())
+                if cand:
+                    auth_pid = cand
+        if auth_pid is not None:
+            if auth_pid == card_owner:
+                return True
+            row = conn.execute(
+                "SELECT owner_id FROM profiles WHERE id = ?", (card_owner,)
+            ).fetchone()
+            if row is not None and row["owner_id"] == auth_pid:
+                return True
+            return False
+        # Anonymous: default card of its owner (first by the public order).
+        default_row = conn.execute(
+            f"SELECT id FROM cards WHERE owner_profile_id = ? "
+            f"ORDER BY {whitelist_db._CARD_ORDER_SQL} LIMIT 1",
+            (card_owner,),
+        ).fetchone()
+        if default_row is not None and default_row["id"] == card["id"]:
+            return True
+        # Anonymous: card present in a non-expired share bundle (the /s
+        # pages render chosen cards' photos to anonymous openers).
+        bundle_rows = conn.execute(
+            "SELECT card_ids, expires_at FROM share_bundles WHERE profile_id = ?",
+            (card_owner,),
+        ).fetchall()
+        for b in bundle_rows:
+            try:
+                ids = json.loads(b["card_ids"])
+            except (ValueError, TypeError):
+                continue
+            if card["id"] in ids and not whitelist_db.bundle_is_expired(dict(b)):
+                return True
+        # Granted contact (?e= with an admitted grant) — same tier rule the
+        # /p page itself applies before rendering these photos.
+        if viewer_email and whitelist_db.effective_tier(
+                conn, card_owner, viewer_email) == "granted":
+            return True
+        return False
+
+    def _serve_photo_response(request: Request, owner_profile_id: int,
+                              card_id: int, slot: str):
         upload_dir = Path(__file__).parent / "uploads"
-        photo_path = f"{owner_profile_id}_{card_id}.jpg"
+        photo_path = (f"{owner_profile_id}_{card_id}.jpg" if slot == "default"
+                      else f"{owner_profile_id}_{card_id}_hs.jpg")
         full_path = upload_dir / photo_path
         if not full_path.exists():
             return HTMLResponse("Photo not found", status_code=404)
+        conn = whitelist_db.wl_connect(path)
+        try:
+            card = whitelist_db.get_card_by_id(conn, card_id)
+            if not _photo_allowed(
+                    conn, request, card,
+                    request.query_params.get("e"),
+                    request.query_params.get("t")):
+                return HTMLResponse("Photo not found", status_code=404)
+        finally:
+            conn.close()
         from fastapi.responses import FileResponse
         return FileResponse(full_path, media_type="image/jpeg")
 
+    @application.get("/photos/{owner_profile_id}/{card_id}")
+    async def serve_photo(request: Request, owner_profile_id: int, card_id: int):
+        return _serve_photo_response(request, owner_profile_id, card_id, "default")
+
     @application.get("/photos/{owner_profile_id}/{card_id}/hs")
-    async def serve_hs_photo(owner_profile_id: int, card_id: int):
+    async def serve_hs_photo(request: Request, owner_profile_id: int, card_id: int):
         """UX pass 3: the HIGH-SCHOOL picture slot on personal cards."""
-        upload_dir = Path(__file__).parent / "uploads"
-        photo_path = f"{owner_profile_id}_{card_id}_hs.jpg"
-        full_path = upload_dir / photo_path
-        if not full_path.exists():
-            return HTMLResponse("Photo not found", status_code=404)
-        from fastapi.responses import FileResponse
-        return FileResponse(full_path, media_type="image/jpeg")
+        return _serve_photo_response(request, owner_profile_id, card_id, "hs")
 
     @application.get("/qr/share/{bundle_id}")
     async def serve_bundle_qr(bundle_id: str):
@@ -2498,17 +2680,26 @@ def create_app(db_path: Path = None) -> FastAPI:
     @application.post("/owner/{token}/quarter/make_permanent", response_class=HTMLResponse)
     async def quarter_make_permanent(request: Request, token: str):
         """Make a grey grant permanent (lifetime access)."""
-        payload = wl_tokens.consume_token(_get_secret(), "owner_dashboard", token)
-        if payload is None:
-            return HTMLResponse("Invalid or expired link", status_code=403)
-
         form = await request.form()
         grant_id = form.get("grant_id", "")
         conn = whitelist_db.wl_connect(path)
         try:
+            # Security audit 2026-09-25: these three quarter routes used to
+            # skip _verify_grant_ownership — any authenticated owner could
+            # punt / make permanent / revoke ANY grant in the DB (cross-owner
+            # IDOR). They now enforce the same ownership rule as /decision.
+            result = _resolve_owner(conn, request, token, _get_secret())
+            if result[0] is None and result[2] is None:
+                return HTMLResponse("Invalid or expired link", status_code=403)
+            if result[2]:
+                return RedirectResponse(url=f"/owner/{result[2]}")
+            profile_id = result[0]
+
             grant = whitelist_db.get_grant(conn, grant_id)
             if not grant:
                 return HTMLResponse("Grant not found", status_code=404)
+            if not _verify_grant_ownership(conn, grant, profile_id):
+                return HTMLResponse("Not found", status_code=404)
             profile = whitelist_db.get_profile_by_id(conn, grant["profile_id"])
             updated = whitelist_db.make_grant_permanent(conn, grant_id)
             if updated is None:
@@ -2524,17 +2715,22 @@ def create_app(db_path: Path = None) -> FastAPI:
     @application.post("/owner/{token}/quarter/revoke", response_class=HTMLResponse)
     async def quarter_revoke(request: Request, token: str):
         """Revoke a grey grant (lands in blocked state)."""
-        payload = wl_tokens.consume_token(_get_secret(), "owner_dashboard", token)
-        if payload is None:
-            return HTMLResponse("Invalid or expired link", status_code=403)
-
         form = await request.form()
         grant_id = form.get("grant_id", "")
         conn = whitelist_db.wl_connect(path)
         try:
+            result = _resolve_owner(conn, request, token, _get_secret())
+            if result[0] is None and result[2] is None:
+                return HTMLResponse("Invalid or expired link", status_code=403)
+            if result[2]:
+                return RedirectResponse(url=f"/owner/{result[2]}")
+            profile_id = result[0]
+
             grant = whitelist_db.get_grant(conn, grant_id)
             if not grant:
                 return HTMLResponse("Grant not found", status_code=404)
+            if not _verify_grant_ownership(conn, grant, profile_id):
+                return HTMLResponse("Not found", status_code=404)
             profile = whitelist_db.get_profile_by_id(conn, grant["profile_id"])
             whitelist_db.revoke_grant(conn, grant_id)
             grant = whitelist_db.get_grant(conn, grant_id)
@@ -2549,17 +2745,22 @@ def create_app(db_path: Path = None) -> FastAPI:
     @application.post("/owner/{token}/quarter/punt", response_class=HTMLResponse)
     async def quarter_punt(request: Request, token: str):
         """Punt a grey grant for another quarter."""
-        payload = wl_tokens.consume_token(_get_secret(), "owner_dashboard", token)
-        if payload is None:
-            return HTMLResponse("Invalid or expired link", status_code=403)
-
         form = await request.form()
         grant_id = form.get("grant_id", "")
         conn = whitelist_db.wl_connect(path)
         try:
+            result = _resolve_owner(conn, request, token, _get_secret())
+            if result[0] is None and result[2] is None:
+                return HTMLResponse("Invalid or expired link", status_code=403)
+            if result[2]:
+                return RedirectResponse(url=f"/owner/{result[2]}")
+            profile_id = result[0]
+
             grant = whitelist_db.get_grant(conn, grant_id)
             if not grant:
                 return HTMLResponse("Grant not found", status_code=404)
+            if not _verify_grant_ownership(conn, grant, profile_id):
+                return HTMLResponse("Not found", status_code=404)
             profile = whitelist_db.get_profile_by_id(conn, grant["profile_id"])
             updated = whitelist_db.punt_grant(conn, grant_id)
             if updated is None:

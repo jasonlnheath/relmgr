@@ -122,7 +122,10 @@ def test_granted_tier_sees_all_cards_and_fields(tmp_path):
 
 
 def test_owner_self_view_shows_all_cards_photos_bio(tmp_path):
-    """Self-view (?e= own email -> tier granted): all cards, bio, QR.
+    """Self-view via the SIGNED ?ot= token (audit 2026-09-25): all cards,
+    bio, QR. The old ?e=-own-email path is RETIRED — knowing the owner's
+    email must never authenticate (it used to hand out a 365-day owner
+    dashboard token and every private field).
 
     round-2: per-card photos removed from profile page (only QR on profile).
     round-2: Connect button only for non-granted tier.
@@ -130,7 +133,8 @@ def test_owner_self_view_shows_all_cards_photos_bio(tmp_path):
     db = _seed_full(tmp_path)
 
     client = TestClient(create_app(db))
-    me = client.get("/p/jasonheath?e=jheath%40waltheremc.com").text
+    ot = wl_tokens.make_token(b"test-secret", "owner_dashboard", "1")
+    me = client.get(f"/p/jasonheath?ot={ot}").text
     assert "Personal" in me
     assert "Work" in me
     assert "jheath@waltheremc.com" in me
@@ -142,6 +146,12 @@ def test_owner_self_view_shows_all_cards_photos_bio(tmp_path):
     assert "Connect" not in me  # self-view (granted tier) doesn't see Connect button
     assert "Request access" not in me
     assert "Forward your card" not in me, "forward section removed (UX pass 2)"
+
+    # Security audit 2026-09-25: the owner's raw email must NOT unlock the
+    # self-view anymore.
+    via_email = client.get("/p/jasonheath?e=jheath%40waltheremc.com").text
+    assert "555-1234" not in via_email, "?e= own email must stay anonymous"
+    assert "Request access" in via_email or "Connect" in via_email
 
 
 def test_anon_still_hides_granted_fields_pin_kept(tmp_path):

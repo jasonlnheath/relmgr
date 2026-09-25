@@ -230,7 +230,7 @@ CARD_EDITOR_SECTIONS = (
         ('instagram', 'Instagram'),
         ('social_other', 'Social'),
     )),
-    ('Address', (
+    ('Address Block 1', (
         ('address1', 'Address 1'),
         ('address2', 'Address 2'),
         ('city', 'City'),
@@ -1006,18 +1006,11 @@ def effective_tier(
     if viewer_email is None:
         return "anonymous"
 
-    # Owner self-view: your own email always resolves to granted — you see
-    # your own profile in full (dashboard 'View profile' passes ?e=). Checked
-    # against this profile's own email fields, case-insensitive.
-    own = conn.execute(
-        """SELECT 1 FROM profile_fields
-           WHERE profile_id = ? AND field_type = 'email'
-             AND LOWER(field_value) = LOWER(?)
-           LIMIT 1""",
-        (profile_id, viewer_email),
-    ).fetchone()
-    if own:
-        return "granted"
+    # Security audit 2026-09-25: the old 'own email → granted' self-view
+    # branch is REMOVED — knowing the owner's signup email must never
+    # equal authentication (it leaked every private field on ?e=).
+    # Owner self-view is handled at the route layer via session cookie or
+    # a signed ?ot= token; ?e= here is the granted-CONTACT tracking param.
 
     # Tier admission via the shared admitted-grant predicate
     # (_ADMITTED_EXPIRY_SQL — grey-aware per the never-expire ruling; see its
@@ -1070,6 +1063,32 @@ def get_grant(conn: sqlite3.Connection, grant_id: str) -> Optional[dict]:
         "SELECT * FROM access_grants WHERE id = ?", (grant_id,)
     ).fetchone()
     return dict(row) if row else None
+
+
+def find_admitting_grant_id(
+    conn: sqlite3.Connection,
+    profile_id: int,
+    requester_email: str,
+) -> Optional[str]:
+    """The id of the grant create_grant's dedupe would collapse onto
+    (pending, or granted-and-admitted — the same predicate), else None.
+
+    Security audit 2026-09-25: lets the request route tell a NEW request
+    apart from a deduped re-POST, so only genuinely new requests push the
+    owner's email (repeat POSTs used to re-send the email every time —
+    a free spam vector against the owner's inbox).
+    """
+    row = conn.execute(
+        f"""SELECT id FROM access_grants
+            WHERE profile_id = ? AND LOWER(requester_email) = LOWER(?)
+              AND (
+                    status = 'pending'
+                    OR (status = 'granted' AND {_ADMITTED_EXPIRY_SQL})
+                  )
+            ORDER BY created_at DESC LIMIT 1""",
+        (profile_id, requester_email, _now_iso()),
+    ).fetchone()
+    return row[0] if row else None
 
 
 def create_grant(

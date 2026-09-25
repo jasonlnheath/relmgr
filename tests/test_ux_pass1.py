@@ -419,8 +419,14 @@ class TestProfileViewBackLink:
     def test_owner_email_link_sees_back_link(self, tmp_path):
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
-        html = client.get("/p/jasonheath?e=jason@waltheremc.com").text
+        # Security audit 2026-09-25: the back link needs the signed ?ot=
+        # token (or session) — the raw owner email no longer authenticates.
+        ot = wl_tokens.make_token(b"test-secret", "owner_dashboard", "1")
+        html = client.get(f"/p/jasonheath?ot={ot}").text
         assert "← Back to My Profile" in html
+        # ...and email knowledge alone must NOT produce it.
+        html2 = client.get("/p/jasonheath?e=jason@waltheremc.com").text
+        assert "Back to My Profile" not in html2
 
     def test_stranger_never_sees_back_link(self, tmp_path):
         db = _make_db(tmp_path)
@@ -434,8 +440,13 @@ class TestReachMeRowsPerCard:
         """One row per card, each led by THAT card's picture, that card's
         icons following it — pinned by ordering, not substrings-anywhere."""
         db = _make_db(tmp_path)
+        conn = whitelist_db.wl_connect(db)
+        gid = whitelist_db.create_grant(conn, 1, "grantedviewer@x.com", "GV")
+        whitelist_db.apply_decision(conn, gid, "approve", "quarter",
+                                    merge_contacts=False)
+        conn.close()
         client = TestClient(create_app(db))
-        html = client.get("/p/jasonheath?e=jason@waltheremc.com").text
+        html = client.get("/p/jasonheath?e=grantedviewer@x.com").text
         assert "Reach me" in html
         pos_reach = html.find("Reach me")
         # UX pass 3 card order: Personal first (phone icons, initials circle),
