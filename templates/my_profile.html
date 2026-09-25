@@ -18,7 +18,7 @@
                     <h2 class="wl-heading wl-heading-sm wl-text">{{ profile.display_name }}</h2>
                     <p class="text-xs wl-text-faint mt-1">{{ visit_count }} visits (last 14 days)</p>
                 </div>
-                <a href="/p/{{ profile.handle }}?e={{ owner_email | urlencode }}"
+                <a href="{{ profile_view_url }}"
                    class="wl-link text-sm">
                     View profile →
                 </a>
@@ -34,7 +34,7 @@
                lands after a contact requests access.
                ======================================================== #}
             <div class="flex flex-col items-center gap-3 my-4">
-                <a href="/p/{{ profile.handle }}?e={{ owner_email | urlencode }}"
+                <a href="{{ profile_view_url }}"
                    title="Open your public profile"
                    aria-label="Open your public profile">
                     <img src="/qr/{{ profile.handle }}"
@@ -135,7 +135,7 @@
                     <div class="flex items-center justify-between gap-3">
                         <div class="flex items-center gap-3 min-w-0">
                             {% if card.photo_path %}
-                            <img src="/photos/{{ owner_id }}/{{ card.id }}"
+                            <img src="/photos/{{ owner_id }}/{{ card.id }}?t={{ token | urlencode }}"
                                  alt="{{ card.name }} photo"
                                  class="w-10 h-10 rounded-full object-cover flex-shrink-0">
                             {% else %}

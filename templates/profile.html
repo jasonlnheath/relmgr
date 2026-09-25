@@ -101,7 +101,7 @@
                 {% if reach.has %}
                 <div class="flex items-center gap-3">
                     {% if card.photo_path %}
-                    <img src="/photos/{{ profile.id }}/{{ card.id }}"
+                    <img src="/photos/{{ profile.id }}/{{ card.id }}{% if viewer_email %}?e={{ viewer_email | urlencode }}{% endif %}"
                          alt="{{ card.name }} photo"
                          class="w-8 h-8 rounded-full object-cover flex-shrink-0">
                     {% else %}
@@ -165,7 +165,7 @@
              style="border-color: var(--wl-glass-border);">
             <div class="flex items-center gap-2 mb-3">
                 {% if card.photo_path %}
-                <img src="/photos/{{ profile.id }}/{{ card.id }}"
+                <img src="/photos/{{ profile.id }}/{{ card.id }}{% if viewer_email %}?e={{ viewer_email | urlencode }}{% endif %}"
                      alt="{{ card.name }} photo"
                      class="w-8 h-8 rounded-full object-cover flex-shrink-0">
                 {% endif %}
