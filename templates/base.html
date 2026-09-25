@@ -145,6 +145,84 @@
         .wl-heading { font-family: "Arapey", Georgia, serif; font-weight: 400; color: var(--wl-ink); }
         .wl-heading-sm { font-size: 22px; line-height: 28px; }
         .wl-heading-md { font-size: 30px; line-height: 36px; }
+
+        /* === Mobile squeeze (pass 9): 25% smaller text, tighter padding,
+           wider content area, alpha rail pushed right === */
+        @media (max-width: 640px) {
+            /* Reduce page padding — content owns more of the screen */
+            body > div {
+                padding-top: 1rem !important;
+                padding-left: 0.5rem !important;
+                padding-right: 0.5rem !important;
+            }
+
+            /* 25% text reduction */
+            .wl-heading-sm  { font-size: 16px !important; line-height: 22px !important; }
+            .wl-heading-md  { font-size: 22px !important; line-height: 28px !important; }
+            .wl-heading     { font-size: 18px !important; }
+            .text-sm        { font-size: 10px !important; }
+            .text-xs        { font-size: 8.5px !important; }
+            .text-[10px]    { font-size: 7.5px !important; }
+            .text-[11px]    { font-size: 8.5px !important; }
+
+            /* Tighter card padding */
+            .wl-card { padding: 0.5rem !important; border-radius: 8px !important; }
+            .wl-card.p-6 { padding: 0.75rem !important; }
+            .wl-card.p-4 { padding: 0.5rem !important; }
+            .wl-card.p-3 { padding: 0.4rem !important; }
+
+            /* Reduce gaps */
+            .gap-3 { gap: 0.5rem !important; }
+            .gap-2 { gap: 0.35rem !important; }
+            .gap-6 { gap: 0.5rem !important; }
+
+            /* Alpha rail: push it right, reduce its width */
+            nav[aria-label="Filter by first letter"] {
+                padding-right: 0 !important;
+                margin-right: -0.25rem !important;
+            }
+            /* Shrink the rail container */
+            .flex.gap-3 > div:first-child {
+                min-width: 0 !important;
+            }
+
+            /* Tighter avatar/badge sizes */
+            .w-10 { width: 32px !important; height: 32px !important; }
+            .w-12 { width: 36px !important; height: 36px !important; }
+            .w-16 { width: 44px !important; height: 44px !important; }
+            .h-10 { height: 32px !important; }
+            .h-12 { height: 36px !important; }
+            .h-16 { height: 44px !important; }
+
+            /* Reduce form/input padding */
+            input, textarea, select {
+                padding: 0.25rem 0.4rem !important;
+                font-size: 10px !important;
+            }
+
+            /* Reduce button padding */
+            button, .wl-btn-ink, .wl-btn-approve, .wl-btn-deny,
+            .wl-btn-revoke, .wl-btn-punt, .wl-btn-submit {
+                padding: 0.2rem 0.5rem !important;
+                font-size: 10px !important;
+            }
+
+            /* Card editor: shrink sublabel spans on mobile so field + dropdown
+               + ✕ fit on one row. w-28 → 56px on mobile. */
+            span.w-28 { width: 56px !important; min-width: 56px !important; }
+
+            /* Card editor: shrink the ✕ button slightly */
+            button.w-6.h-6 { width: 24px !important; height: 24px !important; }
+
+            /* Card editor: shrink visibility select */
+            select.wl-select.text-xs { width: auto !important; min-width: 60px !important; }
+
+            /* Thinner borders everywhere on mobile */
+            .wl-card { border-width: 0.5px !important; }
+            * { border-width: 0.5px !important; }
+            input, textarea, select { border-width: 0.5px !important; }
+            button { border-width: 0.5px !important; }
+        }
     </style>
 </head>
 <body class="wl-page-bg min-h-screen wl-text">

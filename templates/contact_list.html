@@ -318,5 +318,111 @@
     input.addEventListener('input', sync);
     sync();
 })();
+
+// ============================================================
+// Alpha rail swipe/drag (UX pass 9): dragging a finger across
+// the rail letters filters by the letter under the finger.
+// Uses pointer events (works for mouse + touch) with
+// passive: false so we can prevent page-scroll interference.
+// ============================================================
+(function () {
+    const rail = document.querySelector('nav[aria-label="Filter by first letter"]');
+    if (!rail) return;
+
+    // Gather all letter elements (both <a> and <span>)
+    const letters = Array.from(rail.children);
+    if (!letters.length) return;
+
+    // Base query string: everything EXCEPT the letter param
+    const url = new URL(window.location.href);
+    url.searchParams.delete('letter');
+    const baseQuery = url.toString().replace(window.location.origin, '');
+
+    let dragging = false;
+    let pendingUrl = null;
+    let scrollY = 0;
+
+    function highlightLetter(idx) {
+        letters.forEach((el, i) => {
+            if (i === idx) {
+                el.classList.add('wl-text', 'font-bold');
+                el.style.background = 'var(--wl-btn-slate)';
+            } else {
+                el.classList.remove('wl-text', 'font-bold');
+                el.style.background = '';
+            }
+        });
+    }
+
+    function applyFilter(idx) {
+        const el = letters[idx];
+        if (!el) return;
+        const href = el.getAttribute('href');
+        if (!href) return;
+        // Navigate to the letter filter
+        window.location.href = href;
+    }
+
+    function findLetterAt(y) {
+        // Find which letter element's bounding box contains y
+        for (let i = 0; i < letters.length; i++) {
+            const rect = letters[i].getBoundingClientRect();
+            if (y >= rect.top && y <= rect.bottom) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    // Pointer events — work for both mouse and touch.
+    // passive: false so we can prevent default scroll on the rail.
+    rail.addEventListener('pointerdown', function (e) {
+        // Only handle primary button / touch
+        if (e.button && e.button !== 0) return;
+        dragging = true;
+        scrollY = window.scrollY;
+        rail.setPointerCapture(e.pointerId);
+        e.preventDefault();  // prevent page scroll while dragging rail
+    }, { passive: false });
+
+    rail.addEventListener('pointermove', function (e) {
+        if (!dragging) return;
+        e.preventDefault();  // keep preventing scroll during drag
+        const idx = findLetterAt(e.clientY);
+        if (idx >= 0) {
+            highlightLetter(idx);
+            pendingUrl = idx;
+        }
+    }, { passive: false });
+
+    rail.addEventListener('pointerup', function (e) {
+        if (!dragging) return;
+        dragging = false;
+        // Release pointer capture
+        try { rail.releasePointerCapture(e.pointerId); } catch (_) {}
+        // Apply the filter for the last highlighted letter
+        if (pendingUrl !== null) {
+            applyFilter(pendingUrl);
+        }
+        pendingUrl = null;
+        // Reset highlights
+        highlightLetter(-1);
+    });
+
+    rail.addEventListener('pointercancel', function (e) {
+        if (!dragging) return;
+        dragging = false;
+        try { rail.releasePointerCapture(e.pointerId); } catch (_) {}
+        pendingUrl = null;
+        highlightLetter(-1);
+    });
+
+    rail.addEventListener('pointerleave', function (e) {
+        if (!dragging) return;
+        dragging = false;
+        pendingUrl = null;
+        highlightLetter(-1);
+    });
+})();
 </script>
 {% endblock %}

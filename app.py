@@ -1532,13 +1532,17 @@ def create_app(db_path: Path = None) -> FastAPI:
             new_profile = whitelist_db.create_contact_vcard(
                 conn, profile_id, display_name, phone=phone, email=email)
             # UX pass 3 (bug fix + create-flow ruling): land DIRECTLY in the
-            # new vCard's editor — ALL field sections ready to populate. The
-            # Personal card is the top/default card; fall back to the first
-            # card when a custom heal left none (there is always Personal,
-            # but never 404 on a race).
+            # new vCard's editor — ALL field sections ready to populate.
+            # BUG FIX (pass 9): seed_default_cards maps email→Work, phone→Personal;
+            # always landing on Personal hid the email field. Prefer Work when
+            # email was provided (it carries the email fields), else Personal.
             cards = whitelist_db.list_cards(conn, new_profile["id"])
-            target = next((c for c in cards if c["name"].lower() == "personal"),
-                          cards[0] if cards else None)
+            if email:
+                target = next((c for c in cards if c["name"].lower() == "work"),
+                              cards[0] if cards else None)
+            else:
+                target = next((c for c in cards if c["name"].lower() == "personal"),
+                              cards[0] if cards else None)
         finally:
             conn.close()
         if target is None:
