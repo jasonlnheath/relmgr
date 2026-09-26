@@ -1446,9 +1446,10 @@ def get_profiles_needing_verification(
 ) -> list[dict]:
     """Find profiles whose verified_at is older than *days* days."""
     rows = conn.execute(
-        f"""SELECT * FROM profiles
-           WHERE verified_at IS NOT NULL AND verified_at < datetime('now', '-{days} days')
-           ORDER BY verified_at"""
+        """SELECT * FROM profiles
+           WHERE verified_at IS NOT NULL AND verified_at < datetime('now', ?)
+           ORDER BY verified_at""",
+        (f"-{int(days)} days",),
     ).fetchall()
     return [dict(r) for r in rows]
 
@@ -1874,6 +1875,10 @@ def ensure_access_grants_context(conn: sqlite3.Connection) -> None:
 # Scan analytics — P3-T4 (profile page access tracking)
 # ============================================================
 
+_SCAN_EMAIL_MAX = 320  # RFC max email length — cap for unthrottled GET
+                        # scan writes (see record_scan)
+
+
 def ensure_scan_events(conn: sqlite3.Connection) -> None:
     """Additive-only: guarantee the scan_events table exists (idempotent)."""
     conn.executescript("""
@@ -1892,10 +1897,19 @@ def record_scan(conn: sqlite3.Connection, profile_id: int,
                 viewer_email: Optional[str]) -> None:
     """Log one profile-page view. Anonymous visits keep viewer_email NULL —
     an unauthenticated look is still a scan (that's the point of this table).
+
+    Security audit 2 (2026-09-26): the ?e= tracking param arrives on GET
+    /p and /s — surfaces the request limiter never covers (it is
+    POST-only), so the stored value is CAPPED at _SCAN_EMAIL_MAX bytes.
+    Real emails are <=320 chars (RFC); anything longer is junk written at
+    network speed (disk-fill / scan-stats pollution), not a contact.
     """
+    email = viewer_email if viewer_email else None
+    if email is not None and len(email) > _SCAN_EMAIL_MAX:
+        email = email[:_SCAN_EMAIL_MAX]
     conn.execute(
         "INSERT INTO scan_events (profile_id, viewer_email) VALUES (?, ?)",
-        (profile_id, viewer_email),
+        (profile_id, email),
     )
     conn.commit()
 
@@ -3206,12 +3220,21 @@ def forward_card(
     forwarder_name: str,
     recipient_email: str,
     recipient_name: str,
+    owner_id: Optional[int] = None,
 ) -> int:
     """Record a card forwarding.
 
     Returns the grant id. The owner is notified via a pending
     access request so they can decide whether to grant access to the
     new contact.
+
+    owner_id (audit 2, 2026-09-26): the account that owns the forwarded
+    profile — same rule submit_request applies. Defaults to profile_id
+    (self-published profiles); for CURATED stub profiles the caller passes
+    the creating owner so the minted grant is decidable from their
+    dashboard (owner_id = the stub itself made every decision route 404
+    it — fail-closed, but the owner could never act on their own pending
+    request).
     """
     conn.execute(
         "INSERT INTO card_forwardings "
@@ -3229,7 +3252,7 @@ def forward_card(
     if forwarder_name:
         display_name = f"{display_name} (forwarded by {forwarder_name})"
     grant_id = create_grant(
-        conn, profile_id, recipient_email, display_name
+        conn, profile_id, recipient_email, display_name, owner_id
     )
     # F8: create_grant dedupes on profile+email — if a pending grant
     # already exists, its requester_name won't carry the forwarder info.
