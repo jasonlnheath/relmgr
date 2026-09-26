@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 """Parse Apple/iCloud VCF export into normalized contact dicts."""
 
-import csv
 import json
 import re
-import sys
 from pathlib import Path
 
 

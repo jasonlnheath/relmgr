@@ -3,10 +3,9 @@
 
 import argparse
 import json
-import sys
 from pathlib import Path
 
-from store import init_db, get_all_contacts, find_duplicates, log_dedup
+from store import init_db, get_all_contacts, find_duplicates
 from fetcher import fetch_all
 from normalizer import normalize_contact
 from deduplicator import resolve_duplicates

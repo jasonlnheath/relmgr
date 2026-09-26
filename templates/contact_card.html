@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_fields.html" as fields %}
 {% block title %}{{ profile.display_name }} — WhiteList{% endblock %}
 
 {% block content %}
@@ -9,47 +10,17 @@
     </div>
 
     <div class="wl-card p-6">
-        {# Header: picture + name + title/company #}
-        <div class="flex items-start gap-4 mb-6">
-            {% if cards %}
-            {% set main_card = cards[0] %}
-            {% if main_card.photo_path %}
-            <img src="/photos/{{ profile.id }}/{{ main_card.id }}?t={{ token | urlencode }}"
-                 alt="{{ profile.display_name }} photo"
-                 class="w-16 h-16 rounded-full object-cover flex-shrink-0">
-            {% else %}
-            <div class="w-16 h-16 rounded-full flex items-center justify-center flex-shrink-0"
-                 style="background: var(--wl-btn-slate);">
-                <span class="wl-text text-xl">{{ profile.display_name[:2].upper() }}</span>
-            </div>
-            {% endif %}
-            {% else %}
-            <div class="w-16 h-16 rounded-full flex items-center justify-center flex-shrink-0"
-                 style="background: var(--wl-btn-slate);">
-                <span class="wl-text text-xl">{{ profile.display_name[:2].upper() }}</span>
-            </div>
-            {% endif %}
-            <div class="flex-1">
-                <h1 class="wl-heading wl-heading-md">{{ profile.display_name }}</h1>
-                {% if profile.title or profile.company %}
-                <p class="wl-text-sub text-sm mt-0.5">
-                    {% if profile.title %}{{ profile.title }}{% endif %}
-                    {% if profile.title and profile.company %} at {% endif %}
-                    {% if profile.company %}{{ profile.company }}{% endif %}
-                </p>
-                {% endif %}
-                {% if profile.verified_at %}
-                <div class="mt-1">
-                    {% set days = days_since(profile.verified_at) %}
-                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs"
-                        style="background: {% if stale %}var(--wl-btn-slate){% else %}var(--wl-success-field){% endif %};
-                        color: {% if stale %}var(--wl-ink-muted){% else %}var(--wl-success){% endif %};">
-                        {% if stale %}⚠ Stale ({{ days }}d){% else %}✓ Verified ({{ days }}d){% endif %}
-                    </span>
-                </div>
-                {% endif %}
-            </div>
-        </div>
+        {# Header: picture + name + title/company (shared macro — see
+           _fields.html; owner view → photo URLs carry the dashboard token,
+           no hs companion, badge predates the aria ruling) #}
+        {% set main_card = cards[0] if cards else None %}
+        {{ fields.profile_header(
+            profile, cards,
+            ('/photos/%s/%s?t=%s' % (profile.id, main_card.id, token | urlencode)) if main_card else '',
+            stale=stale,
+            days=days_since(profile.verified_at),
+            show_hs=False,
+            badge_aria=False) }}
 
         {# Bio #}
         {% if profile.bio %}
@@ -79,7 +50,7 @@
                 </div>
                 <div class="space-y-3">
                     {% for f in card.visible_fields %}
-                    {{ _field_row(f) }}
+                    {{ fields.field_row(f) }}
                     {% else %}
                     <p class="text-sm wl-text-faint">No fields on this card.</p>
                     {% endfor %}
@@ -95,7 +66,7 @@
             <h2 class="wl-heading wl-heading-sm wl-text mb-3">{{ card.name }}</h2>
             <div class="space-y-3">
                 {% for f in card.visible_fields %}
-                {{ _field_row(f) }}
+                {{ fields.field_row(f) }}
                 {% endfor %}
             </div>
         </div>
@@ -107,7 +78,7 @@
         {% if not cards and tier == 'granted' %}
         <div class="space-y-3">
             {% for f in profile.fields %}
-            {{ _field_row(f) }}
+            {{ fields.field_row(f) }}
             {% endfor %}
         </div>
         {% endif %}
@@ -196,54 +167,3 @@
     </div>
 </div>
 {% endblock %}
-
-{% macro _field_label(field_type) %}
-    {%- if field_type == 'email' -%}email
-    {%- elif field_type == 'phone' -%}phone
-    {%- elif field_type == 'text_number' -%}text number
-    {%- elif field_type == 'facetime_number' -%}FaceTime number
-    {%- elif field_type == 'facetime' -%}FaceTime
-    {%- elif field_type == 'skype' -%}skype
-    {%- elif field_type == 'video_app' -%}video app
-    {%- elif field_type == 'messenger' -%}messenger
-    {%- elif field_type == 'messaging_app' -%}messaging app
-    {%- elif field_type == 'facebook' -%}facebook
-    {%- elif field_type == 'instagram' -%}instagram
-    {%- elif field_type == 'social_other' -%}social
-    {%- elif field_type == 'title' -%}title
-    {%- elif field_type == 'company' -%}company
-    {%- elif field_type == 'address1' -%}address 1
-    {%- elif field_type == 'address2' -%}address 2
-    {%- elif field_type == 'city' -%}city
-    {%- elif field_type == 'state' -%}state/province
-    {%- elif field_type == 'zip' -%}zip/postal code
-    {%- elif field_type == 'country' -%}country
-    {%- elif field_type == 'address' -%}address
-    {%- elif field_type == 'website' -%}website
-    {%- elif field_type == 'birthday' -%}birthday
-    {%- elif field_type == 'note' -%}note
-    {%- elif field_type == 'high_school' -%}high school
-    {%- elif field_type == 'maiden_name' -%}maiden name
-    {%- elif field_type == 'nickname' -%}nickname
-    {%- elif field_type == 'childhood_address1' -%}childhood address
-    {%- elif field_type == 'childhood_city' -%}childhood city
-    {%- elif field_type == 'childhood_state' -%}childhood state
-    {%- else -%}{{ field_type }}
-    {%- endif -%}
-{% endmacro %}
-
-{# One display row (UX pass 8): label on top, value below, single-spaced,
-   one blank line between fields, everything left-justified. #}
-{% macro _field_row(f) %}
-<div class="flex flex-col space-y-0.5">
-    <span class="text-xs wl-text-faint uppercase tracking-wide">
-        {% if f.field_type == 'phone' and f.get('label') %}{{ label_display(f.label) }}{% else %}{{ _field_label(f.field_type) }}{% endif %}
-    </span>
-    <span class="wl-text break-words">
-        {% if f.field_type in ('phone', 'text_number', 'facetime_number') %}{{ phone_fmt(f.field_value) }}{% else %}{{ f.field_value }}{% endif %}
-    </span>
-    {% if f.visibility == 'private' %}
-    <span class="text-xs wl-text-faint" title="Private field">🔒</span>
-    {% endif %}
-</div>
-{% endmacro %}

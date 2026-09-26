@@ -612,7 +612,10 @@ class TestBadgeGovernedAccess:
         assert f'action="/owner/{token}/badge"' in html
         assert 'name="state"' in html
         # _granted creates a quarterly grant → greylist badge, next=BlackList
-        assert 'data-state="greylist"' in html and "Click to change to BlackList" in html
+        # (asserts the rendered BADGE MARKUP — the greylist badge icon —
+        # never stylesheet text; the dead .wl-badge-scroll CSS that used to
+        # satisfy a data-state string match was removed 2026-09-26)
+        assert 'badge-greylist.png?v=' in html and "Click to change to BlackList" in html
 
 
 # ============================================================

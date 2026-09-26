@@ -68,7 +68,7 @@
 {# UX pass 2 defaults ruling: every field defaults to 'granted' except
    title, company, and website which default 'public'. UX pass 5:
    custom_field defaults PRIVATE (arbitrary content). #}
-{% macro default_visibility(t) %}{% set _pd = public_default_types if public_default_types is defined and public_default_types else () %}{% set _pr = private_default_types if private_default_types is defined and private_default_types else () %}{{ 'private' if t in _pr else ('public' if t in _pd else 'granted') }}{% endmacro %}
+{% macro default_visibility(t) %}{{ 'private' if t in private_default_types else ('public' if t in public_default_types else 'granted') }}{% endmacro %}
 
 {# Phone label support (UX pass 2/4): labels per card scope.
    vcard: mobile/home/work; personal: mobile/home; work: mobile/work.
@@ -111,17 +111,6 @@
 <input type="text" name="{{ name }}" value="{{ current }}" placeholder="Field name" maxlength="30"
        class="w-28 border border-gray-600 rounded px-2 py-1 text-xs bg-transparent wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
 {% endif %}
-{% endmacro %}
-
-{# Event label support (UX pass 5): Anniversary / Other. #}
-{% macro event_label_select(name, current='') %}
-<select name="{{ name }}"
-        class="wl-select text-xs border border-gray-600 rounded px-1 py-1 event-label-select"
-        title="Type of significant date">
-    <option value="" {% if not current %}selected{% endif %}>Type…</option>
-    <option value="anniversary" {% if current == 'anniversary' %}selected{% endif %}>Anniversary</option>
-    <option value="other" {% if current == 'other' %}selected{% endif %}>Other</option>
-</select>
 {% endmacro %}
 
 {% macro field_input(name, t, value='', placeholder='') %}
