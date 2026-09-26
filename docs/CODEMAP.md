@@ -1,206 +1,176 @@
 # RelMgr / WhiteList — Codebase Map
 
-One-read orientation for workers and the captain. Line numbers are pinned to
-`fm/whitelist-ux-pass-4b` @ `43b27b9` (PR 22 head); they drift slowly — grep
-the symbol name if the range is off. Companion doc: `AGENTS.md` (rulings and
-sharp edges). This file is the map; that file is the law.
+One-read orientation for workers and the captain. Anchors are SYMBOL
+names + module (line numbers drift; grep the symbol if it moved).
+Companion doc: `AGENTS.md` (rulings and sharp edges). This file is the
+map; that file is the law.
 
 ## 1. Architecture in one paragraph
 
-A single FastAPI server (`app.py`) serves server-rendered HTML (Jinja2,
-`templates/`) over one SQLite file (`contacts.db`; path = `create_app()` arg →
-`RELMGR_DB_PATH` env → file beside `app.py`). `app.py` defines helpers at
-module top, then one giant factory `create_app()` (line 453) that resolves the
-DB path, builds the Jinja env, runs the full idempotent schema-heal chain once
-(`whitelist_db.ensure_whitelist_schema`, line 557), registers middleware
-(body cap, per-IP rate limit on anonymous POSTs, security headers), and
-declares every route as a nested `async def` — each route opens its own
-`sqlite3` connection (`wl_connect`: WAL + FK + Row factory), calls functions
-in `whitelist_db.py` (the entire data layer, pure sqlite3, no ORM), and
+A single FastAPI service serves server-rendered HTML (Jinja2,
+`templates/`) over one SQLite file (`contacts.db`; path = `create_app()`
+arg → `RELMGR_DB_PATH` env → file beside `app.py`). **`app.py` is the
+composition root** (~220 lines): it resolves the DB path, builds the
+Jinja env, runs the full idempotent schema-heal chain once
+(`whitelist_db.ensure_whitelist_schema`), installs the security
+middleware (body cap, per-IP rate limit on anonymous POSTs, security
+headers, cache discipline), mounts `/static`, registers the
+retired-link handler, then delegates every route group to a
+`routes_*.py` module via `register_*_routes(application, ctx)` (the
+2026-09-26 refactor split the old 2800-line single file; behavior and
+route set are unchanged). Shared helpers live in `web_support.py`, and
+`WebContext` (db_path, jinja, push_connection_email) is the bundle each
+route group closes over. Each route opens its own `sqlite3` connection
+(`wl_connect`: WAL + FK + Row factory), calls functions in
+`whitelist_db.py` (the entire data layer, pure sqlite3, no ORM), and
 returns `HTMLResponse(jinja.get_template(...).render(...))`. Auth is
 capability-style: HMAC-signed tokens (`wl_tokens.py`) embedded in
-`/owner/{token}` URLs (scope `owner_dashboard`, payload = profile id) plus a
-signed `wl_session` cookie (7 days) set by `/signin`/`/signup`; `_resolve_owner`
-(app.py:219) is the single oracle that accepts either. The imported address
-book (`contacts` table, owned by `store.py`/`cli.py`/`scripts/fetch_*.py`)
-feeds contact-list rows and new-connection search; secrets and SMTP config
-come from env-or-`.env` (`wl_env.py`), outbound mail goes through `mailer.py`.
-Photos are files in `uploads/` served through guarded `/photos/…` routes.
-`app = create_app()` at module level (line 2802) makes `uvicorn app:app` work.
+`/owner/{token}` URLs (scope `owner_dashboard`, payload = profile id)
+plus a signed `wl_session` cookie (7 days) set by `/signin`/`/signup`;
+`web_support._resolve_owner` is the single oracle that accepts either.
+The imported address book (`contacts` table, owned by `store.py`/
+`cli.py`/`scripts/fetch_*.py`) feeds contact-list rows and
+new-connection search; secrets and SMTP config come from env-or-`.env`
+(`wl_env.py`), outbound mail goes through `mailer.py`. Photos are files
+in `uploads/` served through guarded `/photos/…` routes. `app =
+create_app()` at module level makes `uvicorn app:app` work.
 
-## 2. File-by-file tour
+## 2. Module map
 
 Root, by role:
 
-| File | What it is |
+| Module | What it is |
 |---|---|
-| `app.py` (2802 ln) | All routes + render glue. Section map below. |
-| `whitelist_db.py` (4431 ln) | Entire data layer: schema, migrations, queries. Map below. |
-| `wl_tokens.py` (85) | HMAC-SHA256 make/consume tokens (`purpose\|payload\|expiry`). |
-| `wl_env.py` (27) | `get_secret(key)`: os.environ first, then `.env` beside app.py. |
-| `mailer.py` (157) | SMTP config + `send_email` + `app_base_url()` (APP_BASE_URL > BASE_URL > LAN default). |
-| `notify.py` (121) | Quarterly grey-contact digest builder + `--review` CLI. |
-| `store.py` (202) | Imported-address-book schema (`contacts`, `contact_sources`, `dedup_log`) + CRUD. |
-| `cli.py` (172) | `sync/list/dedup/export/onboard` over store+fetcher (the import pipeline). |
-| `fetcher.py` (399), `normalizer.py` (210), `deduplicator.py` (150) | Contact import: source fetch → normalize → dedup. |
-| `config.py` (39) | Import-pipeline config (sources, dedup thresholds). |
-| `scripts/` | `fetch_{gmail,facebook,outlook_csv,vcf}.py`, `merge_*`, `onboard`, `seed_demo`, `notify` (CLI mailer, sys.exits on missing creds), `refresh_token`. |
-| `templates/`, `static/`, `uploads/` (runtime), `data/` | See templates below; static = badge/scroll PNGs. |
+| `app.py` (~220 ln) | Composition root: middleware, static mount, retired-link handler, boot heal, route-group registration, module-level `app`. Re-exports the helper names tests import from `app`. |
+| `web_support.py` (~490 ln) | Shared plumbing: `_parse_dt`/`days_since`/`days_until`, `_rail_letter`, `is_verified_stale`, `_get_secret`, `_encode_square_jpeg`, `_static_version`, `_make_jinja` (globals `phone_fmt`/`label_display`/`asset_v`), b64 + session-cookie make/consume, `LegacyOwnerLinkRetired`, **`_resolve_owner`** (token-or-session oracle), `_verify_grant_ownership`, `_decision_outcome`, `_owner_email_for`, `_send_connection_request_email`, `_qr_png`, `_vcf_escape`/`_build_vcard`, `WebContext` dataclass. |
+| `routes_auth.py` | `/signin` `/signup` `/signout` `/forgot-password` `/reset-password/{token}` (+ shared `_set_session_redirect` cookie helper; lazy `scripts.notify` import — tests patch it). |
+| `routes_public.py` | `/` landing, `/owner/`, `/p/{handle}` (auth-only owner detection via `?ot=`/session), request-form, POST request (quarantine + dedupe-email-push), POST forward. |
+| `routes_share.py` | `/s/{bundle_id}` (ALWAYS public tier, bio always, expired→owner ping once) + `/s/{bundle_id}/card.vcf`. |
+| `routes_review.py` | `/a/{token}` emailed grant-review page + decision, `/verify/{token}`. |
+| `routes_dashboard.py` | `/owner/{token}` contact list (q/page/letter/f params, per-card rows, amber pending box, filter tabs, alpha rail data), POST badge, approve-with-cards, junk, new-connection GET/POST, access, `/contact/{grant_id}` card view. |
+| `routes_profile.py` | My Profile: GET `/profile`, POST `/bio`, `/bio-visibility`, `/cards/new`, `/cards/{cid}/fields`, `/fields/new`. **`_my_profile_html` = ONE render site for all of them.** |
+| `routes_editor.py` | Card editor: GET/POST `/cards/{cid}/edit`, per-field ✕ delete, card delete, photo upload, `/profile/card/{cid}` preview. Seams: **`_card_editor_html`** (one render site), **`_parse_editor_form`** (one parser, shared by save + ✕ delete), `_resolve_editor_card` (auth + curated-stub exception), `_editor_default_visibility` + `_PUBLIC_DEFAULT_TYPES`/`_PRIVATE_DEFAULT_TYPES`. |
+| `routes_media.py` | `/photos/{pid}/{cid}[/hs]` via **`_photo_allowed`** (audit predicate) + `/qr/share/{bid}`, `/qr/{handle}`. |
+| `routes_decisions.py` | POST `/owner/{token}/decision`, `/bulk`, `/revoke`, quarter make_permanent/revoke/punt (all ownership-enforced). |
+| `whitelist_db.py` (~4400 ln) | Entire data layer: schema, migrations, queries. Map below. |
+| `wl_tokens.py` | HMAC-SHA256 make/consume tokens (`purpose\|payload\|expiry`). |
+| `wl_env.py` | `get_secret(key)`: os.environ first, then `.env` beside app.py. |
+| `mailer.py` | SMTP config + `send_email` + `app_base_url()` (APP_BASE_URL > BASE_URL > LAN default). |
+| `notify.py` | Quarterly grey-contact digest builder + `--review` CLI. |
+| `store.py` | Imported-address-book schema (`contacts`, `contact_sources`, `dedup_log`) + CRUD. |
+| `cli.py` | `sync/list/dedup/export/onboard` over store+fetcher (the import pipeline). |
+| `fetcher.py`, `normalizer.py`, `deduplicator.py` | Contact import: source fetch → normalize → dedup. |
+| `config.py` | Import-pipeline config (sources, dedup thresholds). |
+| `scripts/` | `fetch_{gmail,facebook,outlook_csv,vcf}.py`, `merge_*`, `onboard`, `seed_demo`, `notify` (CLI mailer, sys.exits on missing creds), `refresh_token`, `render_snapshot.py` (template-refactor verification harness). |
+| `templates/`, `static/`, `uploads/` (runtime), `data/` | See templates below; static = badge/scroll PNGs + vendored tailwind. |
 | `Dockerfile`, `docker-compose.yml`, `.env.example`, `SPEC.md`, `README.md` | Deploy + specs. README describes the import pipeline; SPEC the whitelist product. |
 
-### app.py section map
+### whitelist_db.py section map (symbol anchors)
 
-| Lines | Section |
+| Symbols | Section |
 |---|---|
-| 1–34 | Imports; `import wl_env` (30). |
-| 36–103 | Time/rail helpers: `_parse_dt` 36, `days_since` 55, `days_until` 64, `_rail_letter` 76 (alpha-rail A–Z + `#` fold), `is_verified_stale` 90 (>180d). |
-| 105–209 | Secrets + request plumbing: `_get_secret` 105, `_encode_square_jpeg` 113 (magic sniff, 40MP cap, square 512 q82), `_make_jinja` 152 (globals `phone_fmt`, `label_display`), b64url 162/168, session cookie make/consume 175/186. |
-| 210–357 | Owner auth + email: `LegacyOwnerLinkRetired` 210, **`_resolve_owner` 219** (token-or-session oracle; retired pre-migration links → redirect to /signin), `_verify_grant_ownership` 273 (ruling 2A), `_decision_outcome` 286 (shared by /a and /owner decision), `_owner_email_for` 310, `_send_connection_request_email` 321 (BackgroundTask; only genuinely NEW requests). |
-| 360–450 | vCard export: `_qr_png` 360, `_vcf_escape` 378, `_build_vcard` 390 (built ONLY from `visible_fields`). |
-| 453–563 | `create_app()`: db path 467, rate rules 484 (`_rate_limited` 490), security middleware 517 (16MB cap, 429s, Referrer-Policy etc.), static mount 539, retired-link handler 544, **boot heal 557**. |
-| 565–810 | Auth pages: `/signin` 565/571, `/signup` 601/607, `/signout` 663, forgot/reset 701–810 (`_issue_and_send_reset` 739; timing-parity + no-enumeration). |
-| 812–840 | `/` landing 813, `/owner/` 828 (session→dashboard redirects). |
-| 842–910 | **`/p/{handle}` public profile** 843: `record_scan`, owner detection AUTH-ONLY (`?ot=` or session; `?e=` is granted-contact tracking only), `effective_tier`, `cards_for_public_view`; renders `profile.html`. Card-less profiles fall back to flat field list. |
-| 912–1054 | Connect flow: request-form 913, **POST request 925** (blacklisted → `quarantine_request` + fake uuid4 grant id, indistinguishable success; else `create_grant` + notification + email push), **POST forward 982** (granted-only, creates pending grant for recipient). |
-| 1046–1157 | Sharing: share-url helpers 1046–1056, `/s/{id}/card.vcf` 1058, **`/s/{id}` view 1089** — ALWAYS anonymous-tier public page (F4 ruling), bio always included, expired → `share_expired.html` + one deduped owner ping (never for blacklisted openers). |
-| 1160–1248 | Badge + admin links: **POST badge 1161** (instant, always silent), `/a/{token}` grant review 1196 + decision 1215, `/verify/{token}` 1233. |
-| 1250–1499 | **Owner contact list** 1251: q/page/letter params, per-card row expansion (pending → amber box), filter tabs `?f=` (card-OR + state-OR, AND across groups), sort (card name, state rank, name), alpha rail letters, `sync_quarterly_notifications` on render, `my_card` header row; renders `contact_list.html`. |
-| 1501–1584 | Approve-with-cards 1502, junk (denied) list 1549. |
-| 1586–1645 | New connection: search form 1587, **POST create 1604** — `create_contact_vcard`, lands in Work editor if email given else Personal. |
-| 1646–1705 | Access management 1647 (expiry + card set for granted contacts). |
-| 1708–1990 | My Profile: **`_my_profile_html` 1708** (ONE render site for all five POSTs), `/profile` 1784, `/bio` 1802 (500-char reject), `/bio-visibility` 1851, `/cards/new` 1885, `/cards/{id}/fields` 1920, `/fields/new` 1955. |
-| 1993–2291 | **Card editor core**: `_resolve_editor_card` 1993 (auth + ownership; curated-stub exception: owner_id==creator + password_hash NULL), `_card_editor_html` 2026 (ONE render site; `card_scope = card_kind(card) or "vcard"`, `sections = picker_sections(scope)`, `by_type` from `card["fields"]`), default-visibility tables 2086–2101 (`_PUBLIC_DEFAULT_TYPES`, `_PRIVATE_DEFAULT_TYPES=('custom_field',)`, `_editor_default_visibility` 2098), **`_parse_editor_form` 2103** (ONE parser shared by save + ✕-delete — the pass-2 data-loss fix), GET edit 2067, POST save 2173, **POST field delete 2205** (applies FULL parsed body + the removal), card delete 2263. |
-| 2293–2408 | Photos: upload 2294 (client circle-crop data URL or raw file; 10MB; default + `?photo_kind=hs` slots), preview 2381. |
-| 2410–2495 | Photo serving: `_photo_allowed` 2410 (audit predicate: default card / non-expired bundle / owner token-session / granted `?e=`), `_serve_photo_response` 2476. |
-| 2497–2531 | `/photos/{pid}/{cid}` 2498 (+`/hs` 2502), `/qr/share/{bid}` 2507, `/qr/{handle}` 2520. |
-| 2533–2801 | Decisions + quarterly: `/decision` 2534, contact card 2567 (chip-less all-cards view, quarterly buttons), `/bulk` 2625, `/revoke` 2666, quarter make_permanent/revoke/punt 2700/2735/2765 (ownership-enforced). |
-| 2802 | Module-level `app = create_app()` (uvicorn entrypoint). |
-
-### whitelist_db.py section map
-
-| Lines | Section |
-|---|---|
-| 14–131 | Constants + passwords: `_PWHASH_ROUNDS` 18 (pbkdf2 260k), hash/verify 21/30, dummy-burn 47/60 (timing parity), `_table_exists` 72, `quarter_end_iso` 79, `is_current_quarter` 96. |
-| 133–158 | **The two expiry oracles**: `_LIVE_GRANT_EXPIRY_SQL` 133 (display/logo freshness only), `_ADMITTED_EXPIRY_SQL` 146 (admission predicate shared by `effective_tier` + `create_grant` dedupe — granted + any real-timestamp expiry admits forever; grey/black never expire; legacy `'14d'` strings never leak via GLOB guard). |
-| 161–516 | **Editor vocabulary**: `CARD_EDITOR_FIELD_TYPES` 161 (THE enum, 36 types), `CARD_EDITOR_FIELD_LABELS` 185, `ADDRESS_BLOCK_TYPES` 229, `ADDRESS_BLOCK_SCOPES` 231 (vcard+personal), `EVENT_LABEL_CHOICES` 240, **`_SCOPE_TEMPLATES` 250** (vcard/personal/work section layouts — scoping is NAME-based via `card_kind`, no scoped enum values), `picker_sections` 383 (render API; falls back to flat `CARD_EDITOR_SECTIONS` 396), `_PRIVATE_DEFAULT_TYPES` 455 + `editor_default_visibility` 458 (mirror of app.py tables), `CARD_EDITOR_MULTI_TYPES` 472 ("+ Add" types), **`_CARD_ORDER_SQL` 484** (Personal→Work→alpha; used by list/public/share), `card_kind` 490, `format_phone_display` 500 (+1 (XXX) XXX-XXXX, display-only). |
-| 518–653 | Boot: `wl_connect` 518 (WAL/FK/Row), `wl_init` 528 (fresh CREATE of every base table). |
-| 656–888 | **profile_fields CHECK-swap heals**: `_VCARD_FIELD_TYPES`/`_VCARD_VISIBILITY` 656/657, v2 674 (base 8 types, anonymous→private), v3 744 (round-2 apps, `address`→`address1`), pass3 805 (identity fields + country), pass5 854 (department/po_box/related_person/event/custom_field/name_prefix+suffix), `_seed_title_company_fields` 890. Detection = distinctive literal in `sqlite_master` DDL. |
-| 929–1128 | Owner profiles: `create_owner_profile` 929 (email field private, owner_id=self), `resolve_owner_by_credentials` 986 (dummy burn on miss), reset tokens 1020–1097 (SHA-256 at rest, single-use, 30min), `set_profile_password` 1099, `get_profile_by_email` 1111. |
-| 1130–1249 | `seed_profile` 1130 (canonical-JSON upsert; org → profiles columns + granted field rows). |
-| 1251–1688 | Grants: **`effective_tier` 1251** ('granted'/'anonymous' oracle), `_fetch_profile` 1291 (fields attached, ORDER BY is contract), fetchers 1306–1328, `find_admitting_grant_id` 1330 (new-vs-dedupe for email push), `create_grant` 1356 (dedupe admits forever), `update_grant_status` 1402, `resolve_handle` 1489 (+aliases), `add_alias` 1511, **`apply_decision` 1554** (pending-only guard, atomic approve+contacts merge). |
-| 1691–1790 | Audit: `_GRANT_LOGS_CHECK` 1691 (action enum), `_grant_logs_ddl` 1697, `ensure_grant_log_actions` 1722 (legacy-CHECK table-swap heal), `_log_action` 1773 (same-commit convention). |
-| 1792–1967 | Contexts (registry + built-ins; UI removed 2026-09-12), `set_grant_context` 1866, `ensure_access_grants_context` 1888, scans 1910–1957 (14-day zero-filled stats), `get_grant_logs` 1959. |
-| 1970–2077 | access_grants migrations: v2 1970 ('revoked' CHECK swap), v3 2013 (quarter_status + last_reviewed_at additive), `revoke_grant` 2042 (granted-only). |
-| 2079–2371 | **Rhythm/badges**: `set_badge_state` 2079 (White→Grey→Black entry point; grey stamps quarter-end marker = internal, never an expiry; always silent), `is_grey` 2139 (granted + any real-timestamp expires_at, future marker included), `mark_grey_pending_review` 2167, grey digests 2198–2251 (lapsed-only), `make_grant_permanent` 2253, `punt_grant` 2284, `bulk_apply` 2320 (per-grant scoping), `find_contact_by_email` 2383. |
-| 2444–2574 | Identity merge: `merge_requester_into_contacts` 2453 (approve → contacts row; provenance append-merge; owner-scoped). |
-| 2576–2833 | Cards: `ensure_cards_schema` 2576 (cards/card_fields/grant_cards), `create_card` 2611, `delete_card` 2659 (lens semantics: profile_fields survive), **`get_card_by_id` 2683** (fields attached), `list_cards` 2696 (`_CARD_ORDER_SQL`), **`cards_for_public_view` 2715** (anonymous = default card + public fields only; granted = all cards, hide zero-visible; `visible_fields` key), `set_grant_cards` 2758 (ownership-checked), `get_active_cards_for_grant` 2812. |
-| 2835–3074 | Bundles/quarantine: TTL 7d (2835–2883), `filter_owned_cards` 2885, **`create_share_bundle` 2906** (data-layer mint only; owner routes retired), `is_blacklisted` 2975 (revoked == blacklisted), `quarantine_request` 3010 (per-email/day dedupe), `cards_for_share_bundle` 3037 (bundle order, Personal leads). |
-| 3076–3233 | Additive heals: bio cols 3076/3083, `ensure_profile_field_labels` 3098, **`ensure_pass2_visibility_heal` 3111** (ONE-TIME marker-gated backfill via `whitelist_meta`), phone labels 3159–3185 (`PHONE_LABEL_CHOICES`, `normalize_field_label`, `label_display`), photo cols 3187/3194, forwardings table 3210. |
-| 3235–3464 | Forwarding (`forward_card` 3235 → pending grant) + notifications: kinds CHECK 3300, **`ensure_notification_kinds` 3304** (table-swap heal), CRUD 3348–3431 (dedupe_key idempotency), `sync_quarterly_notifications` 3433 (runs on dashboard render). |
-| 3467–3577 | Boot order: owner-auth cols 3467, grants owner 3488, contacts owner 3506, **`ensure_whitelist_schema` 3534** — THE single ordered entry point (order load-bearing; ends with `seed_default_cards`). |
-| 3579–3737 | **`seed_default_cards` 3579**: Personal+Work pair ALWAYS for every profile (Personal first = lower id = default public picture); phone→Personal, email→Work links; legacy names (Identity/Contact/…) heal-only; bio updates 3712–3737. |
-| 3739–4003 | Editor writes: `set_card_fields` 3739, `add_profile_field` 3770, `update_card_photo` 3799 (kind default/hs), **`save_card_editor` 3819** (ONE commit; form-keyed rows only — out-of-scope stored fields SURVIVE; IDOR-checked; empty value = unlink). |
-| 4005–4301 | Contact list: `_grant_is_live` 4005 (Python twin of live SQL), **`list_contact_list_rows` 4024** (grants + contacts merged, per-card refs, logo freshness, search haystack = name/email/phone/org + non-private field values, never bios). |
-| 4303–4431 | New connection: `search_new_connections` 4303 (owner-scoped contacts LIKE; degrades to [] without the table), `_slugify_handle` 4373, **`create_contact_vcard` 4380** (curated stub: owner_id = creator, password_hash NULL, defaults seeded). |
-
-### Templates
-
-All extend `base.html` (identity tokens, grey-only buttons — `.wl-btn-*` are
-all slate aliases; mobile-squeeze + fixed alpha-rail CSS at ~175–280;
-visibility-select keyboard JS).
-
-| Template | Role / key spots |
-|---|---|
-| `base.html` (283) | Theme tokens, button aliases, badge trio CSS, mobile squeeze, alpha-rail fixed positioning. |
-| `contact_list.html` (453) | Dashboard: centered title + signout, my-card row, search + `+` button, amber pending box, picture filter tabs, per-card rows (one click target `absolute inset-0`, badge form z-10 above), alpha rail `#letter-rail` + swipe JS (~330–450), pagination, junk footer. |
-| `card_editor.html` (598) | THE editor: placeholders map, `public_default_types`/`private_default_types` sets, macros `vis_select`/`default_visibility`/`phone_label_select`/`label_editor`/`event_label_select`/`field_input`/`field_row` (✕ via formaction, never nested forms)/`empty_row`; photo slots (two on Personal), name inputs, `{% for heading, types in sections %}` with address-block branch (`address_block and heading == 'Addresses'`), po_box standalone, multi-type `<template data-newrow>`, danger-zone delete; JS: addFieldRow/addAddressBlock/label custom/photo circle-cropper. |
-| `profile.html` (247) | Public page: header (+hs photo), bio, Connect button (anonymous only), "Reach me" per-card icon rows (granted only), card-grouped fields via `_field_row` macro, `_field_label` enum-label map, flat fallback. |
-| `contact_card.html` (249) | Owner's view of one contact: all cards continuous, Access block (status = list names, no Expires row), grey quarterly three-button row (Keep GreyList / Add WhiteList / Add BlackList), same macros. |
-| `my_profile.html` (230) | QR + native `navigator.share` (fallback copy/email/SMS), bio + visibility select, My Cards list (+ New card), card preview links. |
-| `share_bundle.html` (91) + `share_cards_fragment.html` (80) | Recipient page: public-tier only, bio always, per-card blocks with inline reach icons, Save-to-contacts vcf, Connect. |
-| `card_preview.html` (72) | Editor's Preview card view. |
-| `new_connection.html` (85) | Search results + create-vCard form. |
-| `junk.html` (38), `admin_review.html`/`admin_decision.html` (46/41), `request_form/success` (34/19), `forward_success` (25), `share_expired` (24), `verify_success` (16), `signin`/`signup`/`forgot_password`/`reset_password` (60/69/53/48) | Small single-purpose pages. |
+| `_PWHASH_ROUNDS`, `hash_password`/`verify_password`, `_dummy_password_hash`/`burn_dummy_password_work`, `_table_exists`, `quarter_end_iso`, `is_current_quarter` | Constants + passwords (pbkdf2 260k, timing parity). |
+| **`_LIVE_GRANT_EXPIRY_SQL`**, **`_ADMITTED_EXPIRY_SQL`** | The two expiry oracles: live = display/logo freshness only; admitted = the admission predicate shared by `effective_tier` + `create_grant` dedupe (granted + any real-timestamp expiry admits forever; grey/black never expire; legacy `'14d'` strings never leak via GLOB guard). |
+| `CARD_EDITOR_FIELD_TYPES` (THE enum, 36 types), `CARD_EDITOR_FIELD_LABELS`, `ADDRESS_BLOCK_TYPES`/`ADDRESS_BLOCK_SCOPES`/`address_blocks`, `EVENT_LABEL_CHOICES`, **`_SCOPE_TEMPLATES`** (vcard/personal/work section layouts; scoping is NAME-based via `card_kind`), `picker_sections` (falls back to flat `CARD_EDITOR_SECTIONS`), `CARD_EDITOR_MULTI_TYPES`, **`_CARD_ORDER_SQL`** (Personal→Work→alpha), `card_kind`, `format_phone_display` | Editor vocabulary. |
+| `wl_connect` (WAL/FK/Row), `wl_init` | Boot: fresh CREATE of every base table. |
+| `ensure_vcard_fields_schema` (v2) → `_v3` → `_pass3` → `_pass5`, `_seed_title_company_fields` | profile_fields CHECK-swap heals (detection = distinctive literal in stored DDL; row-preserving, id/label-preserving). |
+| `create_owner_profile`, `resolve_owner_by_credentials` (dummy burn), reset tokens (`create/peek/consume_password_reset_token`, SHA-256 at rest, 30 min), `set_profile_password`, `get_profile_by_email` | Owner profiles. |
+| `seed_profile` (canonical-JSON upsert) | Seeding. |
+| **`effective_tier`** ('granted'/'anonymous' oracle), `_fetch_profile` (fields attached, ORDER BY is contract), `get_profile`/`get_profile_by_id`/`get_grant`, `find_admitting_grant_id` (new-vs-dedupe), **`create_grant`** (dedupe admits forever), `update_grant_status`, `resolve_handle` (+`add_alias`), **`apply_decision`** (pending-only guard, atomic approve+contacts merge) | Grants. |
+| `_GRANT_LOGS_CHECK`/`_grant_logs_ddl`/`ensure_grant_logs`/`ensure_grant_log_actions`/`_log_action` | Audit log (append-only; same-commit convention). |
+| contexts registry + built-ins, `set_grant_context`, `ensure_access_grants_context`, `record_scan`/`get_scan_stats`, `get_grant_logs` | Contexts (UI removed 2026-09-12; data layer stays) + scans. |
+| `ensure_access_grants_v2` ('revoked' CHECK swap) / `_v3` (quarter cols), `revoke_grant` | access_grants migrations. |
+| **`set_badge_state`** (White→Grey→Black entry point; grey stamps quarter-end marker = internal, never an expiry; always silent), **`is_grey`** (granted + any real-timestamp expires_at, future marker INCLUDED), `mark_grey_pending_review`, grey digests (`get_grey_contacts` lapsed-only), `make_grant_permanent`, `punt_grant`, `bulk_apply`, `find_contact_by_email` | Rhythm/badges. |
+| `merge_requester_into_contacts` | Identity merge (approve → contacts row; provenance append-merge; owner-scoped). |
+| `ensure_cards_schema`, `create_card`, `delete_card` (lens semantics), **`get_card_by_id`** (fields attached), `list_cards` (`_CARD_ORDER_SQL`), **`cards_for_public_view`** (anonymous = default card + public fields only; granted = all cards, hide zero-visible; `visible_fields` key), `set_grant_cards` (ownership-checked), `get_active_cards_for_grant` | Cards. |
+| `_BUNDLE_TTL_DAYS`/`bundle_expiry_iso`/`bundle_is_expired`, `filter_owned_cards`, **`create_share_bundle`** (data-layer mint only; owner routes retired), `is_blacklisted` (revoked == blacklisted), `quarantine_request` (per-email/day dedupe), **`cards_for_share_bundle`** (bundle order, Personal leads) | Bundles/quarantine. |
+| bio cols, `ensure_profile_field_labels`, **`ensure_pass2_visibility_heal`** (ONE-TIME marker-gated backfill), phone labels (`PHONE_LABEL_CHOICES`/`normalize_field_label`/`label_display`), photo cols, forwardings table | Additive heals. |
+| `forward_card`, notifications (`_NOTIFICATION_KINDS`, `ensure_notification_kinds` table-swap heal, CRUD + dedupe_key, **`sync_quarterly_notifications`** — runs on dashboard render) | Forwarding + notifications. |
+| `ensure_owner_auth_schema`, `ensure_access_grants_owner`, `ensure_contacts_owner`, **`ensure_whitelist_schema`** — THE single ordered entry point (order load-bearing; ends with `seed_default_cards`) | Boot order. |
+| **`seed_default_cards`** (Personal+Work ALWAYS for every profile; Personal first = lower id = default public picture; phone→Personal, email→Work; legacy names heal-only), `update_bio`/`update_bio_visibility`/`get_bio_visibility` | Seeding + bio. |
+| `set_card_fields`, `add_profile_field`, `update_card_photo`, **`save_card_editor`** (ONE commit; form-keyed rows only — out-of-scope stored fields SURVIVE; IDOR-checked; empty value = unlink) | Editor writes. |
+| `_grant_is_live`, **`list_contact_list_rows`** (grants + contacts merged, per-card refs, logo freshness, search haystack) | Contact list. |
+| `search_new_connections` (degrades to [] without the table), `_slugify_handle`, **`create_contact_vcard`** (curated stub: owner_id = creator, password_hash NULL) | New connection. |
 
 ## 3. "Where do I change X" — the 20 most likely edits
 
-1. **Add a field type**: `CARD_EDITOR_FIELD_TYPES` + `CARD_EDITOR_FIELD_LABELS` (whitelist_db 161/185) → new `ensure_vcard_fields_<pass>_schema` CHECK-swap heal + call in `ensure_whitelist_schema` (3534) → add to the relevant `_SCOPE_TEMPLATES` scope(s) (250; and `CARD_EDITOR_SECTIONS` 396 fallback) → placeholders map in `card_editor.html` (~4) → label rendering in the three display templates' `_field_label` macros → vCard export mapping in `_build_vcard` (app.py 390) → decide default visibility in BOTH tables (whitelist_db 455 + app.py 2086 + card_editor sets) → tests.
-2. **Change which fields Personal/Work/vCard cards show**: `_SCOPE_TEMPLATES` (whitelist_db 250) only — scoping is name-based (`card_kind` 490), never add scoped enum values (an earlier PR-22 iteration did; it was replaced).
-3. **Change address-block rendering**: `ADDRESS_BLOCK_TYPES`/`ADDRESS_BLOCK_SCOPES` (229/231) + the `Addresses` branch in `card_editor.html`; block branch fires ONLY on heading `'Addresses'` from scoped sections.
-4. **Change card template look (public view)**: `profile.html` `_field_row`/`_field_label`; owner detail: `contact_card.html`; share: `share_cards_fragment.html`. Three copies of the label map exist — keep them in sync.
-5. **Editor save/delete semantics**: `_parse_editor_form` (app.py 2103) + `save_card_editor` (whitelist_db 3819). Any new write path MUST go through `save_card_editor`; the ✕ delete route (2205) must keep applying the full parsed body.
-6. **Add an owner route**: nested def in `create_app` after its siblings; resolve with `_resolve_owner` (219), verify grants with `_verify_grant_ownership` (273), 403/404 conventions as in neighbors; add to route table below + tests.
-7. **Contact-list rows/filters/rail**: route `owner_dashboard` (1251) for data/params; `contact_list.html` for markup; `_rail_letter` (app.py 76) for letters; `list_contact_list_rows` (whitelist_db 4024) for the row shape.
-8. **Badge cycle**: `set_badge_state` (whitelist_db 2079) + badge form in `contact_list.html`; confirmations say WhiteList/GreyList/BlackList; contacts are NEVER notified.
-9. **Quarterly review**: grey trio = `is_grey` 2139, `make_grant_permanent`/`punt_grant` 2253/2284, quarter routes (app.py 2700–2801), buttons in `contact_card.html`, digest in `notify.py` + `sync_quarterly_notifications` 3433.
-10. **Sharing/QR**: QR + native share live in `my_profile.html` + `_my_profile_html` (1708); bundle serving `/s/{id}` (1089) + `cards_for_share_bundle` (3037); bundle minting is data-layer only (`create_share_bundle` 2906).
-11. **Connect-request flow / quarantine**: POST `/p/{handle}/request` (925), `create_grant` (1356), `quarantine_request` (3010), `is_blacklisted` (2975); success page must stay indistinguishable.
-12. **Visibility defaults**: whitelist_db 455–470 + app.py 2086–2101 + `card_editor.html` sets — one decision, three mirrors. Never re-heal existing data (pass2 heal is one-time by design).
-13. **Tier/field exposure**: `effective_tier` (1251) + `visible_fields` filtering in `cards_for_public_view` (2715) / `cards_for_share_bundle` (3037); public surfaces must go through those, never raw `fields`.
-14. **Photos**: upload route (2294) + `_encode_square_jpeg` (113) + cropper JS in `card_editor.html`; serving predicate `_photo_allowed` (2410); files `uploads/{pid}_{cid}[_hs].jpg`.
-15. **Add a notification kind**: `_NOTIFICATION_KINDS` (3300) — CHECK lives in two DDLs (`wl_init` 528 + `ensure_notification_kinds` 3304 table-swap heal), writer `create_notification` 3348; there is NO notification page — requests surface in the amber box.
-16. **Email sending**: `mailer.send_email` / `app_base_url` (mailer.py); push call sites `_send_connection_request_email` (321), reset (739); never block responses — BackgroundTask.
-17. **Auth/session**: `_make_session_cookie`/`_consume_session_cookie` (175/186), `_resolve_owner` (219), `wl_tokens.make_token/consume_token`; scopes: `owner_dashboard`, `grant_review`, `verify`.
-18. **Schema change**: additive column → own idempotent `ensure_*` + call in `ensure_whitelist_schema` (3534, order matters); new enum value → row-preserving table-swap heal (copy pattern from 854); copy EVERY column (labels, ids) so `card_fields` links and phone labels survive.
-19. **Phone display/labels**: `format_phone_display` (500) + `phone_fmt` global; labels `PHONE_LABEL_CHOICES`/`normalize_field_label`/`label_display` (3159–3185); editor macro `phone_label_select`.
-20. **Rate limiting/security headers**: `_RATE_RULES`/`_rate_limited` (484/490) + `_security_middleware` (517); off-switch `WHITELIST_RATELIMIT_DISABLED`.
+1. **Add a field type**: `CARD_EDITOR_FIELD_TYPES` + `CARD_EDITOR_FIELD_LABELS` → new `ensure_vcard_fields_<pass>_schema` CHECK-swap heal + call in `ensure_whitelist_schema` → add to the relevant `_SCOPE_TEMPLATES` scope(s) (and `CARD_EDITOR_SECTIONS` fallback) → placeholders map in `card_editor.html` → label rendering in `templates/_fields.html` `field_label` (the ONE copy) → vCard export mapping in `web_support._build_vcard` → decide default visibility in BOTH tables (routes_editor `_PUBLIC_DEFAULT_TYPES` + `card_editor.html` sets) → tests.
+2. **Change which fields Personal/Work/vCard cards show**: `_SCOPE_TEMPLATES` only — scoping is name-based (`card_kind`), never add scoped enum values.
+3. **Change address-block rendering**: `ADDRESS_BLOCK_TYPES`/`ADDRESS_BLOCK_SCOPES` + the `Addresses` branch in `card_editor.html`; block branch fires ONLY on heading `'Addresses'` from scoped sections.
+4. **Change card template look (public view)**: `_fields.html` `field_row`/`field_label` (shared by profile + contact_card; share fragment has its own inline row). Verify with `scripts/render_snapshot.py`.
+5. **Editor save/delete semantics**: `_parse_editor_form` (routes_editor) + `save_card_editor` (whitelist_db). Any new write path MUST go through `save_card_editor`; the ✕ delete route must keep applying the full parsed body.
+6. **Add an owner route**: nested def in the matching `routes_*.py` module's register function after its siblings; resolve with `web_support._resolve_owner`, verify grants with `_verify_grant_ownership`, 403/404 conventions as in neighbors; add to route table below + tests.
+7. **Contact-list rows/filters/rail**: route `owner_dashboard` (routes_dashboard) for data/params; `contact_list.html` for markup; `web_support._rail_letter` for letters; `list_contact_list_rows` for the row shape.
+8. **Badge cycle**: `set_badge_state` + badge form in `contact_list.html`; confirmations say WhiteList/GreyList/BlackList; contacts are NEVER notified.
+9. **Quarterly review**: grey trio = `is_grey`, `make_grant_permanent`/`punt_grant`, quarter routes (routes_decisions), buttons in `contact_card.html`, digest in `notify.py` + `sync_quarterly_notifications`.
+10. **Sharing/QR**: QR + native share live in `my_profile.html` + `_my_profile_html` (routes_profile); bundle serving `/s/{id}` (routes_share) + `cards_for_share_bundle`; bundle minting is data-layer only.
+11. **Connect-request flow / quarantine**: POST `/p/{handle}/request` (routes_public), `create_grant`, `quarantine_request`, `is_blacklisted`; success page must stay indistinguishable.
+12. **Visibility defaults**: routes_editor `_PUBLIC_DEFAULT_TYPES`/`_PRIVATE_DEFAULT_TYPES` + `card_editor.html` sets — one decision, two mirrors. Never re-heal existing data (pass2 heal is one-time by design).
+13. **Tier/field exposure**: `effective_tier` + `visible_fields` filtering in `cards_for_public_view` / `cards_for_share_bundle`; public surfaces must go through those, never raw `fields`.
+14. **Photos**: upload route (routes_editor) + `web_support._encode_square_jpeg` + cropper JS in `card_editor.html`; serving predicate `_photo_allowed` (routes_media); files `uploads/{pid}_{cid}[_hs].jpg`.
+15. **Add a notification kind**: `_NOTIFICATION_KINDS` — CHECK lives in two DDLs (`wl_init` + `ensure_notification_kinds` table-swap heal), writer `create_notification`; there is NO notification page — requests surface in the amber box.
+16. **Email sending**: `mailer.send_email` / `app_base_url`; push call sites `_send_connection_request_email` (web_support; injected via `WebContext.push_connection_email` so tests can patch `app._send_connection_request_email` pre-create_app), reset (routes_auth); never block responses — BackgroundTask.
+17. **Auth/session**: `_make_session_cookie`/`_consume_session_cookie` (web_support), `_resolve_owner`, `wl_tokens.make_token/consume_token`; scopes: `owner_dashboard`, `grant_review`, `verify`.
+18. **Schema change**: additive column → own idempotent `ensure_*` + call in `ensure_whitelist_schema` (order matters); new enum value → row-preserving table-swap heal; copy EVERY column (labels, ids) so `card_fields` links and phone labels survive.
+19. **Phone display/labels**: `format_phone_display` + `phone_fmt` global; labels `PHONE_LABEL_CHOICES`/`normalize_field_label`/`label_display`; editor macro `phone_label_select`.
+20. **Rate limiting/security headers**: `_rate_limited` + `_security_middleware` (app.py — the ONE middleware); off-switch `WHITELIST_RATELIMIT_DISABLED`.
 
 ## 4. Route table
 
-Every URL `app` serves (method path — line — one-liner).
+Every URL `app` serves (method path — module — one-liner).
 
 ```
-GET  /                                          813   landing: session→dashboard else /signin
-GET  /signin                                    565   sign-in page
-POST /signin                                    571   credentials → wl_session cookie → 303 /
-GET  /signup                                    601   sign-up page
-POST /signup                                    607   create owner → session → 303 /
-POST /signout                                   663   clear session → 303 /signin
-GET  /forgot-password                           701   request-reset page
-POST /forgot-password                           705   mint+mail reset in background; same response always
-GET  /reset-password/{token}                    762   set-new-password page (peek token)
-POST /reset-password/{token}                    775   consume token, set password → /signin?reset=1
-GET  /owner/                                    828   session → /owner/{fresh token}
-GET  /p/{handle}                                843   public profile (tier via ?e=; owner via ?ot=/session)
-GET  /p/{handle}/request-form                   913   Connect request form
-POST /p/{handle}/request                        925   create grant (or silent quarantine if blacklisted)
-POST /p/{handle}/forward                        982   granted contact forwards card → pending grant
-GET  /s/{bundle_id}                             1089  share link: ALWAYS public-tier page; expired page
-GET  /s/{bundle_id}/card.vcf                    1058  public-fields-only vCard download
-GET  /a/{token}                                 1196  emailed grant-review page (grant_review token)
-POST /a/{token}/decision                        1215  approve/deny from email link
-GET  /verify/{token}                            1233  verify token → stamp verified_at
-GET  /photos/{owner_pid}/{card_id}              2498  guarded photo JPEG (default slot)
-GET  /photos/{owner_pid}/{card_id}/hs           2502  guarded photo JPEG (high-school slot)
-GET  /qr/share/{bundle_id}                      2507  QR PNG for /s/{bundle_id}
-GET  /qr/{handle}                               2520  QR PNG for /p/{handle}
-     /static/*                                  539   mounted static dir
-GET  /owner/{token}                             1251  contact list dashboard (q,page,letter,f params)
-POST /owner/{token}/badge                       1161  White/Grey/Black badge flip (silent)
-POST /owner/{token}/approve                     1502  approve pending + choose cards
-GET  /owner/{token}/junk                        1549  denied-grants list
-GET  /owner/{token}/new-connection              1587  search contacts for new connection
-POST /owner/{token}/new-connection              1604  create curated vCard → its editor
-POST /owner/{token}/access                      1647  change expiry/cards of a granted contact
-GET  /owner/{token}/profile                     1784  My Profile page
-POST /owner/{token}/bio                         1802  save bio (≤500 chars, reject over)
-POST /owner/{token}/bio-visibility              1851  bio public/private toggle
-POST /owner/{token}/cards/new                   1885  create named card
-POST /owner/{token}/cards/{cid}/fields          1920  set card field membership (My Profile path)
-POST /owner/{token}/fields/new                  1955  add profile email/phone field (My Profile path)
-GET  /owner/{token}/cards/{cid}/edit            2067  card editor
-POST /owner/{token}/cards/{cid}/edit            2173  save editor form
-POST /owner/{token}/cards/{cid}/fields/{fid}/delete  2205  per-row ✕: full form + removal
-POST /owner/{token}/cards/{cid}/delete          2263  delete card (two-step confirm UI)
-POST /owner/{token}/cards/{cid}/photo           2294  upload/remove photo (?photo_kind=hs)
-GET  /owner/{token}/profile/card/{cid}          2381  card preview
-POST /owner/{token}/decision                    2534  approve/deny from dashboard
-GET  /owner/{token}/contact/{grant_id}          2567  contact card detail (?card= selected)
-POST /owner/{token}/bulk                        2625  bulk approve/deny/revoke
-POST /owner/{token}/revoke                      2666  revoke granted access
-POST /owner/{token}/quarter/make_permanent      2700  grey → lifetime
-POST /owner/{token}/quarter/revoke              2735  grey → revoked
-POST /owner/{token}/quarter/punt                2765  grey → next quarter
+GET  /                                          routes_public     landing: session→dashboard else /signin
+GET  /signin                                    routes_auth       sign-in page
+POST /signin                                    routes_auth       credentials → wl_session cookie → 303 /
+GET  /signup                                    routes_auth       sign-up page
+POST /signup                                    routes_auth       create owner → session → 303 /
+POST /signout                                   routes_auth       clear session → 303 /signin
+GET  /forgot-password                           routes_auth       request-reset page
+POST /forgot-password                           routes_auth       mint+mail reset in background; same response always
+GET  /reset-password/{token}                    routes_auth       set-new-password page (peek token)
+POST /reset-password/{token}                    routes_auth       consume token, set password → /signin?reset=1
+GET  /owner/                                    routes_public     session → /owner/{fresh token}
+GET  /p/{handle}                                routes_public     public profile (tier via ?e=; owner via ?ot=/session)
+GET  /p/{handle}/request-form                   routes_public     Connect request form
+POST /p/{handle}/request                        routes_public     create grant (or silent quarantine if blacklisted)
+POST /p/{handle}/forward                        routes_public     granted contact forwards card → pending grant
+GET  /s/{bundle_id}                             routes_share      share link: ALWAYS public-tier page; expired page
+GET  /s/{bundle_id}/card.vcf                    routes_share      public-fields-only vCard download
+GET  /a/{token}                                 routes_review     emailed grant-review page (grant_review token)
+POST /a/{token}/decision                        routes_review     approve/deny from email link
+GET  /verify/{token}                            routes_review     verify token → stamp verified_at
+GET  /photos/{owner_pid}/{card_id}              routes_media      guarded photo JPEG (default slot)
+GET  /photos/{owner_pid}/{card_id}/hs           routes_media      guarded photo JPEG (high-school slot)
+GET  /qr/share/{bundle_id}                      routes_media      QR PNG for /s/{bundle_id}
+GET  /qr/{handle}                               routes_media      QR PNG for /p/{handle}
+     /static/*                                  app.py            mounted static dir
+GET  /owner/{token}                             routes_dashboard  contact list dashboard (q,page,letter,f params)
+POST /owner/{token}/badge                       routes_dashboard  White/Grey/Black badge flip (silent)
+POST /owner/{token}/approve                     routes_dashboard  approve pending + choose cards
+GET  /owner/{token}/junk                        routes_dashboard  denied-grants list
+GET  /owner/{token}/new-connection              routes_dashboard  search contacts for new connection
+POST /owner/{token}/new-connection              routes_dashboard  create curated vCard → its editor
+POST /owner/{token}/access                      routes_dashboard  change expiry/cards of a granted contact
+GET  /owner/{token}/profile                     routes_profile    My Profile page
+POST /owner/{token}/bio                         routes_profile    save bio (≤500 chars, reject over)
+POST /owner/{token}/bio-visibility              routes_profile    bio public/private toggle
+POST /owner/{token}/cards/new                   routes_profile    create named card
+POST /owner/{token}/cards/{cid}/fields          routes_profile    set card field membership (My Profile path)
+POST /owner/{token}/fields/new                  routes_profile    add profile email/phone field (My Profile path)
+GET  /owner/{token}/cards/{cid}/edit            routes_editor     card editor
+POST /owner/{token}/cards/{cid}/edit            routes_editor     save editor form
+POST /owner/{token}/cards/{cid}/fields/{fid}/delete  routes_editor per-row ✕: full form + removal
+POST /owner/{token}/cards/{cid}/delete          routes_editor     delete card (two-step confirm UI)
+POST /owner/{token}/cards/{cid}/photo           routes_editor     upload/remove photo (?photo_kind=hs)
+GET  /owner/{token}/profile/card/{cid}          routes_editor     card preview
+POST /owner/{token}/decision                    routes_decisions  approve/deny from dashboard
+GET  /owner/{token}/contact/{grant_id}          routes_dashboard  contact card detail (?card= selected)
+POST /owner/{token}/bulk                        routes_decisions  bulk approve/deny/revoke
+POST /owner/{token}/revoke                      routes_decisions  revoke granted access
+POST /owner/{token}/quarter/make_permanent      routes_decisions  grey → lifetime
+POST /owner/{token}/quarter/revoke              routes_decisions  grey → revoked
+POST /owner/{token}/quarter/punt                routes_decisions  grey → next quarter
 ```
 
 ## 5. Database schema in brief
@@ -223,9 +193,7 @@ Whitelist tables (all created/healed only through `ensure_whitelist_schema`):
   v2 (base 8) → v3 (round-2 apps, `address`→`address1`) → pass3 (identity +
   country) → pass5 (department, po_box, related_person, event, custom_field,
   name_prefix/suffix). Card scoping is NOT in the schema: `card_kind()` reads
-  the card NAME and `_SCOPE_TEMPLATES` decides which types each scope renders
-  (an early pass-4 draft added `email_personal`-style scoped enum values; the
-  43b27b9 repair removed them — keep it that way).
+  the card NAME and `_SCOPE_TEMPLATES` decides which types each scope renders.
   **Why preservation matters**: the swap copies rows id-for-id with FKs off,
   because `card_fields` and grant card sets reference `profile_fields.id` and
   the `label` column carries user-typed phone/role labels — a rebuild that
@@ -244,13 +212,34 @@ Whitelist tables (all created/healed only through `ensure_whitelist_schema`):
   audit), `share_bundles` (card_ids JSON, expires_at = +7d),
   `quarantined_requests` (blacklist silence), `whitelist_meta` (heal markers).
 
-## 6. Test map
+## 6. Templates
 
-Run: `.venv/bin/python -m pytest tests/ -q` (in the primary checkout; a
-worktree has no venv). `tests/conftest.py` forces `RELMGR_DB_PATH` to a
-scratch file BEFORE any import so the module-level `app = create_app()` never
-boots against prod. Tests set `WHITELIST_SECRET` before importing `app` and
-call `TestClient(create_app(tmp_db))`.
+All extend `base.html` (identity tokens, grey-only buttons — the `.wl-btn-*`
+aliases are all slate gray and pinned one-rule-per-class by tests;
+mobile-squeeze + fixed alpha-rail CSS; visibility-select keyboard JS).
+
+| Template | Role / key spots |
+|---|---|
+| `base.html` (~250) | Theme tokens, button aliases (one rule per alias — tests parse them), badge trio note, mobile squeeze, alpha-rail fixed positioning. Dead-rule pruned 2026-09-26. |
+| `_fields.html` | SHARED MACROS (2026-09-26): `field_label` (the one field-type label map — was 3 copies), `field_row` (display row), `reach_icon` (ink SVG contact icons), `profile_header` (picture/name/title/verified badge; parameterized). |
+| `contact_list.html` (~450) | Dashboard: centered title + signout, my-card row, search + `+` button, amber pending box, picture filter tabs, per-card rows (one click target `absolute inset-0`, badge form z-10 above), alpha rail `#letter-rail` + swipe JS, pagination, junk footer. |
+| `card_editor.html` (~580) | THE editor: placeholders map, `public_default_types`/`private_default_types` sets (mirror of routes_editor tables), macros `vis_select`/`default_visibility`/`phone_label_select`/`label_editor`/`field_input`/`field_row`/`empty_row` (✕ via formaction, never nested forms); photo slots (two on Personal), name inputs, `{% for heading, types in sections %}` with address-block branch, po_box standalone, multi-type `<template data-newrow>`, danger-zone delete; JS: addFieldRow/addAddressBlock/label custom/photo circle-cropper. |
+| `profile.html` (~150) | Public page: header via `_fields.profile_header` (+hs), bio, Connect button (anonymous only), "Reach me" per-card icon rows via `_fields.reach_icon`, card-grouped fields via `_fields.field_row`, flat fallback. |
+| `contact_card.html` (~180) | Owner's view of one contact: all cards continuous, Access block (status = list names, no Expires row), grey quarterly three-button row (Keep GreyList / Add WhiteList / Add BlackList), shared macros. |
+| `my_profile.html` (~230) | QR + native `navigator.share` (fallback copy/email/SMS), bio + visibility select, My Cards list (+ New card), card preview links. |
+| `share_bundle.html` (~90) + `share_cards_fragment.html` (~60) | Recipient page: public-tier only, bio always, per-card blocks with inline reach icons (`_fields.reach_icon`), Save-to-contacts vcf, Connect. |
+| `card_preview.html` (~35) | Editor's Preview card view (`_fields.field_label`). |
+| `new_connection.html` (85) | Search results + create-vCard form. |
+| `junk.html` (38), `admin_review.html`/`admin_decision.html` (46/41), `request_form/success` (34/19), `forward_success` (25), `share_expired` (24), `verify_success` (16), `signin`/`signup`/`forgot_password`/`reset_password` (60/69/53/48) | Small single-purpose pages. |
+
+## 7. Test map
+
+Run: `.venv/bin/python -m pytest tests/ -q`. `tests/conftest.py` forces
+`RELMGR_DB_PATH` to a scratch file BEFORE any import so the module-level
+`app = create_app()` never boots against prod. Tests set `WHITELIST_SECRET`
+before importing `app` and call `TestClient(create_app(tmp_db))`. Template
+refactors verify render-equivalence with `scripts/render_snapshot.py`
+(seed a world, dump 17 normalized pages, diff).
 
 | File | Covers |
 |---|---|
@@ -264,7 +253,7 @@ call `TestClient(create_app(tmp_db))`.
 | `test_owner_dashboard.py` / `test_p5_contact_list.py` / `test_contact_list.py` | Contact-list surface: pagination, search, logo freshness, per-card rows. |
 | `test_my_profile.py` (386) | My Profile: bio, cards, fields, photo, preview, scan stats. |
 | `test_p5_cards.py` / `test_public_cards.py` | Cards CRUD + public tier filtering (B4). |
-| `test_security_audit.py` (376) | 2026-09-25 audit: owner-email takeover, quarter IDOR, photo enumeration, headers, rate limit. |
+| `test_security_audit.py` (376) | 2026-09-25 audit: owner-email takeover, quarter IDOR, photo enumeration, headers, rate limit, S5 email-push dedupe (patches `app._send_connection_request_email` BEFORE create_app — `WebContext.push_connection_email` exists to keep that working). |
 | `test_p3_*` (refactor/revocation/logs/scans/contexts) | P3 lane: revoke semantics, audit log, scan events, contexts. |
 | `test_p4_categories_bulk.py` | Custom context categories + bulk actions. |
 | `test_p5_audit_schema.py`, `test_p5_identity.py`, `test_p5_merge_wiring.py`, `test_p5_review_email.py`, `test_p5_templates.py` | grant_logs CHECK heal, identity join/merge, approve→merge wiring, quarterly email, template pins. |
