@@ -79,7 +79,11 @@ def create_app(db_path: Path = None) -> FastAPI:
     path = Path(db_path or os.environ.get("RELMGR_DB_PATH")
                 or Path(__file__).parent / "contacts.db")
     jinja = _make_jinja()
-    application = FastAPI(title="WhiteList")
+    # Security audit 2 (2026-09-26): FastAPI's default /docs, /redoc and
+    # /openapi.json are disabled — they served the full route map (44
+    # paths) to unauthenticated visitors for zero product value.
+    application = FastAPI(title="WhiteList", docs_url=None, redoc_url=None,
+                          openapi_url=None)
     # Tests (and tooling) recover the tmp db path from the bound app.
     application.state.relmgr_db_path = path
 

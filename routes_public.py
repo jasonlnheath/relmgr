@@ -230,7 +230,8 @@ def register_public_routes(application, ctx: WebContext) -> None:
             grant_id = whitelist_db.forward_card(
                 conn, profile["id"],
                 forwarder_email, forwarder_name,
-                recipient_email, recipient_name)
+                recipient_email, recipient_name,
+                owner_id=profile.get("owner_id") or profile["id"])
 
             # Two-layer notification for the forward, same as a direct
             # request: in-app row now, email push after the response.
