@@ -197,7 +197,10 @@ def test_seed_demo_full_suite_does_not_touch_prod_db(tmp_path):
 # ============================================================ A3: admin parity
 
 def test_admin_review_page_offers_expiry_choice(tmp_path):
-    """GET /a/{token} must offer the same 14/90/lifetime choices as the dashboard."""
+    """GET /a/{token} must offer the SAME three-way decision as the
+    amber box (2026-09-26 redesign): WhiteList = lifetime, GreyList =
+    quarter, BlackList — the expiry select is retired (the list choice
+    IS the expiry)."""
     from app import create_app
     from fastapi.testclient import TestClient
     import wl_tokens
@@ -220,9 +223,11 @@ def test_admin_review_page_offers_expiry_choice(tmp_path):
     client = TestClient(create_app(db))
     resp = client.get(f"/a/{wl_tokens.make_token(b'test-secret', 'grant_review', gid, expires_days=7)}")
     assert resp.status_code == 200
-    assert 'name="expiry"' in resp.text, "admin review page must include the expiry select"
-    for choice in ("14", "90", "lifetime"):
-        assert f'value="{choice}"' in resp.text
+    for choice in ("whitelist", "greylist", "blacklist"):
+        assert f'name="decision" value="{choice}"' in resp.text, \
+            "admin review page carries the three-way decision"
+    assert 'name="card_ids"' in resp.text, "checkbox card selection"
+    assert 'name="expiry"' not in resp.text, "the expiry select is retired"
 
 
 def test_admin_route_goes_through_apply_decision(tmp_path):

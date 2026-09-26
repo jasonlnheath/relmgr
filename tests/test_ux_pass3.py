@@ -368,7 +368,13 @@ class TestPendingAmberBox:
         html = client.get(f"/owner/{_owner_token()}").text
         assert "var(--wl-amber-field)" in html, "the box wears amber"
         assert "New Bee" in html
-        assert "Approve" in html and "Deny" in html
+        # 2026-09-26 redesign: three badge actions replace approve/deny.
+        assert 'value="blacklist"' in html
+        assert "WhiteList" in html and "GreyList" in html and "BlackList" in html
+        assert 'value="deny"' not in html, "deny is retired from the amber box"
+        # White/Grey open the choose-cards modal; BlackList acts directly.
+        assert 'data-cards-open' in html
+        assert "Choose cards to share" in html
         # pending rows live ABOVE the filter tabs (top of the list)
         assert html.index("Requests") < html.index("Filter contacts")
 

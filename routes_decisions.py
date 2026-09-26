@@ -20,6 +20,13 @@ from web_support import (
 )
 
 
+# Amber-box three-way vocabulary (2026-09-26): WhiteList = approve at
+# lifetime access, GreyList = approve at the quarter marker (the grey
+# badge's internal expires_at semantics, unchanged). Legacy approve/deny
+# values keep working for older links and tests.
+_TRIO_EXPIRY = {"whitelist": "lifetime", "greylist": "quarter"}
+
+
 def register_decision_routes(application, ctx: WebContext) -> None:
     path = ctx.db_path
     jinja = ctx.jinja
@@ -30,6 +37,7 @@ def register_decision_routes(application, ctx: WebContext) -> None:
         grant_id = form.get("grant_id", "")
         decision = form.get("decision", "")
         expiry = form.get("expiry", "90")
+        return_to = form.get("return_to", "")
 
         conn = whitelist_db.wl_connect(path)
         try:
@@ -48,8 +56,32 @@ def register_decision_routes(application, ctx: WebContext) -> None:
             if not _verify_grant_ownership(conn, grant, profile_id, is_explicit):
                 return HTMLResponse("Not found", status_code=404)
 
-            return _decision_outcome(conn, jinja, request, grant_id,
-                                     decision, expiry)
+            if decision in _TRIO_EXPIRY:
+                expiry = _TRIO_EXPIRY[decision]
+                decision = "approve"
+            elif decision == "blacklist":
+                # The badge machinery IS the blacklist entry point (ruling:
+                # set_badge_state is the single state-cycle API) — ALWAYS
+                # SILENT, like every badge move. A pending grant lands
+                # revoked (== blacklisted, one state): the requester joins
+                # the contact list under the round black badge and any
+                # re-request is quarantined with an indistinguishable
+                # success page.
+                updated = whitelist_db.set_badge_state(conn, grant_id, "blocked")
+                if updated is None:
+                    return HTMLResponse("Grant not found", status_code=404)
+                if return_to == "list":
+                    return RedirectResponse(url=f"/owner/{token}", status_code=303)
+                grant = whitelist_db.get_grant(conn, grant_id)
+                profile = whitelist_db.get_profile_by_id(conn, grant["profile_id"])
+                return HTMLResponse(jinja.get_template("admin_decision.html").render(
+                    request=request, grant=grant, profile=profile, decision="revoke"))
+
+            outcome = _decision_outcome(conn, jinja, request, grant_id,
+                                        decision, expiry)
+            if return_to == "list" and outcome.status_code == 200:
+                return RedirectResponse(url=f"/owner/{token}", status_code=303)
+            return outcome
         finally:
             conn.close()
 

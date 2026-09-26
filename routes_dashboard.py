@@ -197,6 +197,14 @@ def register_dashboard_routes(application, ctx: WebContext) -> None:
                     expanded_rows.append(r)
             all_rows = expanded_rows
 
+            # Amber-box redesign (2026-09-26): when the requester is also a
+            # RelMgr profile owner, their bio introduces them on the request
+            # row; rows without one keep the name + email fallback.
+            for r in pending_rows:
+                req_profile = whitelist_db.find_requester_profile(
+                    conn, r.get("email") or "")
+                r["requester_bio"] = (req_profile or {}).get("bio") or ""
+
             # UX pass 3 (2026-09-23): PICTURE-BASED MULTI-SELECT FILTER TABS
             # below the search bar. Card tabs carry the card's own picture
             # (Personal first, then Work, then the rest alphabetical); list
@@ -315,6 +323,9 @@ def register_dashboard_routes(application, ctx: WebContext) -> None:
             conn.close()
 
     # ------------------------------------------------------------------ Approve with cards (P5-T3)
+    # Amber-box redesign (2026-09-26): the WhiteList/GreyList modal posts
+    # here with decision=approve + access=lifetime|quarter + the chosen
+    # card_ids; return_to=list lands back on the dashboard — "that's it".
     @application.post("/owner/{token}/approve", response_class=HTMLResponse)
     async def owner_approve(request: Request, token: str):
         form = await request.form()
@@ -322,6 +333,7 @@ def register_dashboard_routes(application, ctx: WebContext) -> None:
         decision = form.get("decision", "")
         card_ids_raw = form.getlist("card_ids")
         access = form.get("access", "quarter")
+        return_to = form.get("return_to", "")
 
         # Validate: at least one card required
         if not card_ids_raw:
@@ -357,6 +369,9 @@ def register_dashboard_routes(application, ctx: WebContext) -> None:
                     whitelist_db.set_grant_cards(conn, grant_id, card_ids)
                 except ValueError:
                     return HTMLResponse("Invalid card selection", status_code=400)
+            if return_to == "list" and outcome.status_code == 200:
+                # Modal 'Done' flow: land back on the list, no stopover page.
+                return RedirectResponse(url=f"/owner/{token}", status_code=303)
             return outcome
         finally:
             conn.close()
