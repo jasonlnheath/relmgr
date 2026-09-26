@@ -1955,7 +1955,6 @@ def create_app(db_path: Path = None) -> FastAPI:
             BASE_URL=base_url,
             address_block=address_block,
             address_block_types=whitelist_db.ADDRESS_BLOCK_TYPES,
-            picker_sections=whitelist_db.picker_sections(card_scope or "vcard"),
             label_choices=whitelist_db.PHONE_LABEL_CHOICES,
             event_label_choices=whitelist_db.EVENT_LABEL_CHOICES,
         ), status_code=status_code)

@@ -375,22 +375,6 @@
             </div>
         </form>
 
-        {# ============ Field picker (UX pass 4/5) ============ #}
-        <div class="mb-4 pb-4" style="border-bottom: 1px solid var(--wl-glass-border);">
-            <label class="block text-sm font-medium wl-text-sub mb-2">Add field</label>
-            <select id="add-field-picker"
-                    class="wl-select w-full border border-gray-600 rounded-lg px-3 py-2 text-sm bg-slate-900 wl-text focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]">
-                <option value="">— Select a field type —</option>
-                {% for heading, types in picker_sections %}
-                <optgroup label="{{ heading }}">
-                    {% for t, sublabel in types %}
-                    <option value="{{ t }}">{{ labels[t] }}{% if sublabel %} — {{ sublabel }}{% endif %}</option>
-                    {% endfor %}
-                </optgroup>
-                {% endfor %}
-            </select>
-        </div>
-
         {# ============ Danger zone: delete card (two-step confirm) ============ #}
         <div class="mt-6 pt-4" style="border-top: 1px solid var(--wl-glass-border);">
             <button type="button" id="delete-card-btn" onclick="showDeleteCard()"
@@ -449,39 +433,6 @@ function addAddressBlock() {
     const inp = last.querySelector('input[type="text"], input[type="date"]');
     if (inp) inp.focus();
 }
-
-// ---- Field picker (UX pass 4/5): select a type, append starter row ----
-document.addEventListener('DOMContentLoaded', function () {
-    const picker = document.getElementById('add-field-picker');
-    if (!picker) return;
-    picker.addEventListener('change', function () {
-        const type = picker.value;
-        if (!type) return;
-        // Find the section for this type.
-        const sections = document.querySelectorAll('[data-type]');
-        let targetSection = null;
-        for (const s of sections) {
-            if (s.dataset.type === type) {
-                targetSection = s;
-                break;
-            }
-        }
-        if (!targetSection) return;
-        const rows = targetSection.querySelector('.rows');
-        if (!rows) return;
-        // Clone the empty_row template for this type.
-        const tpl = document.querySelector('template[data-newrow="' + type + '"]');
-        if (!tpl) return;
-        rows.appendChild(tpl.content.cloneNode(true));
-        // Scroll to the new row.
-        const newRows = rows.querySelectorAll('.flex');
-        if (newRows.length) {
-            newRows[newRows.length - 1].scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-        // Reset picker.
-        picker.value = '';
-    });
-});
 
 // ---- Phone labels (UX pass 2): Custom… reveals the custom-name input ----
 function syncPhoneLabelCustom(select) {
