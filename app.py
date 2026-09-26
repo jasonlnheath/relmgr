@@ -93,8 +93,12 @@ def create_app(db_path: Path = None) -> FastAPI:
     # anonymous POST surfaces (connection requests, forwards, auth).
     # ============================================================
     _MAX_BODY_BYTES = 16 * 1024 * 1024  # 16 MB across every request
-    _RATELIMIT_OFF = bool(
-        wl_env.get_secret("WHITELIST_RATELIMIT_DISABLED"))
+    # Truthy-set parse (tool attack 2026-09-26): bool(value) made
+    # WHITELIST_RATELIMIT_DISABLED=0 / =false / =no silently DISABLE the
+    # limiter — a deployer writing the natural "off" spelling killed a
+    # security control. Only explicit 1/true/yes/on now switch it off.
+    _rate_flag = (wl_env.get_secret("WHITELIST_RATELIMIT_DISABLED") or "").strip().lower()
+    _RATELIMIT_OFF = _rate_flag in ("1", "true", "yes", "on")
     _rate_buckets: dict[tuple[str, str], list[float]] = {}
     _RATE_RULES = {
         # path-prefix -> (max requests, window seconds) per client IP
