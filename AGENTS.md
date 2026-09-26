@@ -4,6 +4,10 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 
 - Add durable project-specific notes here as they are discovered through real work.
 
+## Orientation (required reading)
+
+- **`docs/CODEMAP.md`** — read it FIRST in any new session: architecture summary, section maps of `app.py`/`whitelist_db.py` with key line ranges, the 20 most-likely-edits index, full route table, schema story (CHECK-swap pattern, label/id preservation), and test map.
+
 ## Build & test
 
 - Python deps live in `.venv/` (no system pytest): run tests with `.venv/bin/python -m pytest tests/ -q`.
