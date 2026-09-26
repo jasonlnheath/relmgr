@@ -79,7 +79,7 @@ Both fixed on this branch, minimal and behavior-preserving, regression tests in 
 
 **Live proof of fix**: 800-GET flood now stores exactly 500 rows.
 
-## 8. Informational (no code change)
+## 6. Informational (no code change)
 
 | # | Note |
 |---|---|
@@ -87,17 +87,17 @@ Both fixed on this branch, minimal and behavior-preserving, regression tests in 
 | N2 | Blacklist exact-email matching can't catch plus-tag/punctuation variants of a blacklisted address (different addresses; recipient controls the domain). Inherent model limit. |
 | N3 | Prior audits' informational residuals re-confirmed unchanged: signup enumeration oracle (I1), cookie `secure` behind TLS proxy (I2), expired-bundle QR (I3), rate-bucket growth (I4). Dependency stack current (fastapi 0.141.1, jinja2 3.1.6, pillow 12.3.0, python-multipart 0.0.32) — no known open CVEs at these versions. |
 
-## 9. Validation
+## 7. Validation
 
 - New tests: `tests/test_tool_attack.py` — 7 tests (4× T1 flag-parse matrix incl. regression pins for `=1`/`=true`, 3× T2 cap behavior incl. chart saturation + cross-profile isolation).
 - Full suite: **672 passed** × 2 consecutive runs (665 pre-existing + 7 new). One intermittent `test_ux_pass2::…my_card_above_search` failure on the first run is the documented pre-existing order-dependence flake (audit-2 I5) — passes in isolation on pristine code and in both follow-up full runs.
 - Both fixes verified live on the throwaway instance (proofs above).
 - Live server untouched; throwaway instance and container to be torn down after the PR.
 
-## 10. Operational incident (owned)
+## 8. Operational incident (owned)
 
 While restarting the throwaway instance mid-evaluation, a `pkill -f "uvicorn app:app"` meant to stop the :8124 instance also matched the **live** server's command line and killed it at 14:53 UTC (outage ≈ 58 min, until 15:51 UTC). The live server was restored with its exact documented invocation from `/home/jason/relmgr` (checkout verified still at `e9f8ab7` = main HEAD, DB untouched — the process was killed, nothing modified); a phone client served a 307 within seconds of restore. Lesson: pattern-based `pkill` on shared hosts must never use a command substring that other instances share; scope by exact PID. No data was lost (SQLite WAL, clean shutdown signal).
 
-## 11. Baseline regression spot-checks (S/A items probed live this session)
+## 9. Baseline regression spot-checks (S/A items probed live this session)
 
 S1 `?e=` owner-takeover: dead (no owner link, no tier lift). S2 quarter IDOR: 404s. S3 photo enumeration: default-card 200 / foreign 404. S5 duplicate-request email push: deduped (single notification path). S6 bombs: 45 MP rejected, 16 MB cap live. S7 headers: all four present on every response. A1 email cap: max stored 306 chars. A3 docs: 404. A4 stub-forward: ownership carried (code path re-read).
