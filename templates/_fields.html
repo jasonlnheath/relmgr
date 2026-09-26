@@ -1,0 +1,144 @@
+{# ============================================================
+   Shared field-display macros (2026-09-26 refactor).
+
+   field_label: the field_type → human label map. ONE copy — it used to
+   live in three templates (profile.html, contact_card.html,
+   card_preview.html); keep changes here only. Rendering must stay
+   byte-identical (verified via scripts/render_snapshot.py).
+
+   field_row: one display row (label on top, value below). Shared by
+   profile.html and contact_card.html. Uses the Jinja globals
+   label_display + phone_fmt (installed by web_support._make_jinja).
+   ============================================================ #}
+
+{% macro field_label(field_type) %}
+    {%- if field_type == 'email' -%}email
+    {%- elif field_type == 'phone' -%}phone
+    {%- elif field_type == 'text_number' -%}text number
+    {%- elif field_type == 'facetime_number' -%}FaceTime number
+    {%- elif field_type == 'facetime' -%}FaceTime
+    {%- elif field_type == 'skype' -%}skype
+    {%- elif field_type == 'video_app' -%}video app
+    {%- elif field_type == 'messenger' -%}messenger
+    {%- elif field_type == 'messaging_app' -%}messaging app
+    {%- elif field_type == 'facebook' -%}facebook
+    {%- elif field_type == 'instagram' -%}instagram
+    {%- elif field_type == 'social_other' -%}social
+    {%- elif field_type == 'title' -%}title
+    {%- elif field_type == 'company' -%}company
+    {%- elif field_type == 'address1' -%}address 1
+    {%- elif field_type == 'address2' -%}address 2
+    {%- elif field_type == 'city' -%}city
+    {%- elif field_type == 'state' -%}state/province
+    {%- elif field_type == 'zip' -%}zip/postal code
+    {%- elif field_type == 'country' -%}country
+    {%- elif field_type == 'address' -%}address
+    {%- elif field_type == 'website' -%}website
+    {%- elif field_type == 'birthday' -%}birthday
+    {%- elif field_type == 'note' -%}note
+    {%- elif field_type == 'high_school' -%}high school
+    {%- elif field_type == 'maiden_name' -%}maiden name
+    {%- elif field_type == 'nickname' -%}nickname
+    {%- elif field_type == 'childhood_address1' -%}childhood address
+    {%- elif field_type == 'childhood_city' -%}childhood city
+    {%- elif field_type == 'childhood_state' -%}childhood state
+    {%- else -%}{{ field_type }}
+    {%- endif -%}
+{% endmacro %}
+
+{# One display row. UX pass 8 (2026-10-xx): label on its own top row,
+   value on the row below, single-spaced, one blank line (space-y-3)
+   between fields, everything left-justified. #}
+{% macro field_row(f) %}
+<div class="flex flex-col space-y-0.5">
+    <span class="text-xs wl-text-faint uppercase tracking-wide">
+        {% if f.field_type == 'phone' and f.get('label') %}{{ label_display(f.label) }}{% else %}{{ field_label(f.field_type) }}{% endif %}
+    </span>
+    <span class="wl-text break-words">
+        {% if f.field_type in ('phone', 'text_number', 'facetime_number') %}{{ phone_fmt(f.field_value) }}{% else %}{{ f.field_value }}{% endif %}
+    </span>
+    {% if f.visibility == 'private' %}
+    <span class="text-xs wl-text-faint" title="Private field">🔒</span>
+    {% endif %}
+</div>
+{% endmacro %}
+
+{# One reach-me action icon (ink currentColor SVG — never the red-rendering
+   📤-family emoji). Shared by the profile Reach-me rows and the share
+   bundle's per-card blocks; sizes/titles/hrefs differ per surface.
+   kind: phone | sms | video | email #}
+{% macro reach_icon(kind, href, title, a_cls, svg_cls) -%}
+<a href="{{ href }}" title="{{ title }}"
+   class="{{ a_cls }}"
+   style="background: var(--wl-btn-slate);">
+    <svg class="{{ svg_cls }} wl-text" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="{{ {
+            'phone': 'M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z',
+            'sms': 'M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z',
+            'video': 'M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z',
+            'email': 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z',
+        }[kind] }}"/>
+    </svg>
+</a>
+{%- endmacro %}
+
+{# Profile header: main picture (or initials), name, title/company line,
+   and the verified/stale badge. Shared by the public profile page, the
+   owner's contact-card view, and the share-bundle page — which differ
+   only in photo URL params, the high-school companion picture, and the
+   badge aria attribute (contact_card.html predates the aria ruling).
+   The legacy avatar_url branch (never populated by the data layer) was
+   dropped in the 2026-09-26 consolidation. #}
+{% macro profile_header(profile, cards, main_photo_url, main_photo_hs_url=None, stale=False, days=0, show_hs=False, badge_aria=True) -%}
+<div class="flex items-start gap-4 mb-6">
+    {% if cards %}
+    {% set main_card = cards[0] %}
+    {% if main_card.photo_path %}
+    <img src="{{ main_photo_url }}"
+         alt="{{ profile.display_name }} photo"
+         class="w-16 h-16 rounded-full object-cover flex-shrink-0">
+    {% else %}
+    <div class="w-16 h-16 rounded-full flex items-center justify-center flex-shrink-0"
+         style="background: var(--wl-btn-slate);">
+        <span class="wl-text text-xl">{{ profile.display_name[:2].upper() }}</span>
+    </div>
+    {% endif %}
+    {% if show_hs and main_card.hs_photo_path %}
+    {# UX pass 3: the HIGH-SCHOOL picture rides next to the default
+       picture on personal cards — both default PUBLIC. #}
+    <div class="relative flex-shrink-0 -ml-10 mt-10">
+        <img src="{{ main_photo_hs_url }}"
+             alt="{{ profile.display_name }} high school picture"
+             title="High school"
+             class="w-12 h-12 rounded-full object-cover"
+             style="border: 2px solid var(--wl-surface-base);">
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="w-16 h-16 rounded-full flex items-center justify-center flex-shrink-0"
+         style="background: var(--wl-btn-slate);">
+        <span class="wl-text text-xl">{{ profile.display_name[:2].upper() }}</span>
+    </div>
+    {% endif %}
+    <div class="flex-1">
+        <h1 class="wl-heading wl-heading-md">{{ profile.display_name }}</h1>
+        {% if profile.title or profile.company %}
+        <p class="wl-text-sub text-sm mt-0.5">
+            {% if profile.title %}{{ profile.title }}{% endif %}
+            {% if profile.title and profile.company %} at {% endif %}
+            {% if profile.company %}{{ profile.company }}{% endif %}
+        </p>
+        {% endif %}
+        {% if profile.verified_at %}
+        <div class="mt-1">
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs"
+                  style="background: {% if stale %}var(--wl-btn-slate){% else %}var(--wl-success-field){% endif %};
+                  color: {% if stale %}var(--wl-ink-muted){% else %}var(--wl-success){% endif %};"
+                  {% if badge_aria %}aria-label="{% if stale %}Stale{% else %}Verified{% endif %}"{% endif %}>
+                {% if stale %}⚠ Stale ({{ days }}d){% else %}✓ Verified ({{ days }}d){% endif %}
+            </span>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{%- endmacro %}

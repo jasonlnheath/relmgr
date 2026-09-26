@@ -37,8 +37,6 @@
 
             /* Surfaces */
             --wl-surface-base: #1A1A1C;
-            --wl-surface-deep: #0B0B0C;
-            --wl-surface-true-black: #000000;
             --wl-surface-light: #F4F4F5;
 
             /* Ink */
@@ -69,10 +67,8 @@
             --wl-success: #22C55E;
             --wl-success-field: rgba(34,197,94,0.15);
 
-            /* Legacy aliases */
+            /* Legacy aliases (still referenced by inline styles) */
             --wl-bg: var(--wl-surface-base);
-            --wl-charcoal: var(--wl-ink-muted);
-            --wl-charcoal-deep: var(--wl-ink-faint);
             --wl-glass-border: var(--wl-glass-edge);
         }
 
@@ -87,9 +83,7 @@
         }
         .wl-text { color: var(--wl-ink); }
         .wl-text-sub { color: var(--wl-ink-muted); }
-        .wl-text-muted { color: var(--wl-ink-faint); }
-        .wl-text-faint { color: var(--wl-ink-faint); }
-        .wl-border { border-color: var(--wl-glass-edge); }
+        .wl-text-muted, .wl-text-faint { color: var(--wl-ink-faint); }
         .wl-link { color: var(--wl-ink); text-decoration: underline; }
         .wl-link:hover { opacity: 0.75; }
 
@@ -106,10 +100,12 @@
             color: var(--wl-ink);
         }
 
-        /* Buttons — style rulings 2026-09-22: NO green, red, or blue
+        /* Buttons — style ruling 2026-09-22: NO green, red, or blue
            buttons anywhere — grey everywhere (pass 2). Every action
            button (approve/deny included) wears the default slate gray;
-           the class names stay for template stability. */
+           the class names stay as separate aliases for template stability
+           (and are pinned one-per-rule by the grey-everywhere tests —
+           test_ux_pass1/2 parse these blocks). */
         .wl-btn-approve { background: var(--wl-btn-slate); color: var(--wl-ink); border: 1px solid var(--wl-glass-edge); }
         .wl-btn-approve:hover { background: var(--wl-btn-slate-hover); }
         .wl-btn-deny { background: var(--wl-btn-slate); color: var(--wl-ink); border: 1px solid var(--wl-glass-edge); }
@@ -122,40 +118,12 @@
         .wl-btn-submit:hover { background: var(--wl-btn-slate-hover); }
         .wl-btn-ink { background: var(--wl-btn-slate); color: var(--wl-ink); border: 1px solid var(--wl-glass-edge); }
         .wl-btn-ink:hover { background: var(--wl-btn-slate-hover); }
-        .wl-btn-gray { background: var(--wl-btn-slate); color: var(--wl-ink); border: 1px solid var(--wl-glass-edge); }
-        .wl-btn-gray:hover { background: var(--wl-btn-slate-hover); }
 
-        /* Badge trio — scroll silhouette on colored button background */
-        .wl-badge-scroll {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 20px;
-            height: 20px;
-            border-radius: 4px;
-            border: 1px solid var(--wl-glass-edge);
-            transition: opacity 0.15s;
-        }
-        button.wl-badge-scroll { cursor: pointer; }
-        button.wl-badge-scroll:hover { opacity: 0.8; }
-        .wl-badge-scroll img { width: 12px; height: 12px; object-fit: contain; }
-        .wl-badge-scroll[data-state="whitelist"] { background: var(--wl-badge-white); }
-        .wl-badge-scroll[data-state="whitelist"] svg { color: var(--wl-surface-base); }
-        .wl-badge-scroll[data-state="greylist"] { background: var(--wl-badge-grey); }
-        .wl-badge-scroll[data-state="greylist"] svg { color: var(--wl-surface-base); }
-        .wl-badge-scroll[data-state="blacklist"] { background: var(--wl-badge-black); }
-        .wl-badge-scroll[data-state="blacklist"] svg { color: var(--wl-surface-light); }
-
-        /* Legacy badge classes (kept for non-scroll badges like notifications) */
-        .wl-badge-amber { background: var(--wl-amber-field); color: var(--wl-amber); }
-
-        /* Glass effect */
-        .wl-glass-rail {
-            background: var(--wl-glass-fill);
-            backdrop-filter: blur(var(--wl-glass-blur));
-            -webkit-backdrop-filter: blur(var(--wl-glass-blur));
-            border-bottom: 1px solid var(--wl-glass-edge);
-        }
+        /* Badge trio — the round list badges are inline-styled per state
+           (contact_list.html/contact_card.html): background from
+           --wl-badge-white/grey/black, icon from /static/badge-*.png.
+           The old scroll-silhouette .wl-badge-scroll rules were removed
+           with the pass-3 badge redesign. */
 
         /* Heading scale — all Arapey 400 weight */
         .wl-heading { font-family: "Arapey", Georgia, serif; font-weight: 400; color: var(--wl-ink); }

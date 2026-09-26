@@ -171,7 +171,9 @@ class TestLogoLiveOnly:
         assert "Grantee" in html, "expired row must stay visible in history"
         # shield path on expired grant row is a regression
         assert 'M12 2L3 7v5' not in html, "shield logo leaked on an expired grant"
-        assert 'data-state="greylist"' in html, "expired grants dissolve into grey/pending-quarterly"
+        # the rendered BADGE MARKUP carries the greylist icon (stylesheet
+        # text no longer satisfies this — dead CSS removed 2026-09-26)
+        assert 'badge-greylist.png?v=' in html, "expired grants dissolve into grey/pending-quarterly"
 
     def test_live_grant_still_gets_logo(self, tmp_path):
         """Regression: a live (unexpired) granted contact keeps its logo."""

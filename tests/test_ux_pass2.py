@@ -715,8 +715,10 @@ class TestNewConnection:
     def test_plus_button_carries_search_query(self, tmp_path):
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
-        html = client.get(f"/owner/{_owner_token()}?q=jordan").text
-        assert "/owner/%s/new-connection?q=jordan" % _owner_token() in html
+        token = _owner_token()  # mint ONCE: two mints straddling a second
+        # boundary produce different tokens (make_token embeds expiry)
+        html = client.get(f"/owner/{token}?q=jordan").text
+        assert "/owner/%s/new-connection?q=jordan" % token in html
 
 
 # ============================================================
