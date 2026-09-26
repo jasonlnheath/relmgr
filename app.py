@@ -1936,7 +1936,10 @@ def create_app(db_path: Path = None) -> FastAPI:
         for f in card.get("fields", []):
             if f["field_type"] in by_type:
                 by_type[f["field_type"]].append(dict(f))
-        base_url = wl_env.get_secret("BASE_URL") or "https://whitelist.app"
+        base_url = wl_env.get_secret("BASE_URL") or "http://100.81.77.168:8099"
+        # UX pass 5: determine card scope for scoped sections + address blocks
+        card_scope = whitelist_db.card_kind(card)
+        address_block = whitelist_db.address_blocks(card_scope)
         return HTMLResponse(jinja.get_template("card_editor.html").render(
             request=request,
             profile=profile,
@@ -1950,6 +1953,11 @@ def create_app(db_path: Path = None) -> FastAPI:
             owner_id=profile["id"],
             error=error,
             BASE_URL=base_url,
+            address_block=address_block,
+            address_block_types=whitelist_db.ADDRESS_BLOCK_TYPES,
+            picker_sections=whitelist_db.picker_sections(card_scope or "vcard"),
+            label_choices=whitelist_db.PHONE_LABEL_CHOICES,
+            event_label_choices=whitelist_db.EVENT_LABEL_CHOICES,
         ), status_code=status_code)
 
     @application.get("/owner/{token}/cards/{card_id}/edit", response_class=HTMLResponse)

@@ -222,6 +222,11 @@ CARD_EDITOR_FIELD_LABELS = {
     'name_suffix': 'Name suffix',
 }
 
+# UX pass 5: address block component types (vcard + personal scopes).
+ADDRESS_BLOCK_TYPES: tuple[str, ...] = (
+    'address1', 'address2', 'city', 'state', 'zip', 'country',
+)
+
 # UX pass 5: card scopes whose Address section renders as grouped blocks.
 ADDRESS_BLOCK_SCOPES = ('vcard', 'personal')
 
