@@ -94,6 +94,10 @@ Both fixed on this branch, minimal and behavior-preserving, regression tests in 
 - Both fixes verified live on the throwaway instance (proofs above).
 - Live server untouched; throwaway instance and container to be torn down after the PR.
 
-## 8. Baseline regression spot-checks (S/A items probed live this session)
+## 9. Operational incident (owned)
+
+While restarting the throwaway instance mid-evaluation, a `pkill -f "uvicorn app:app"` meant to stop the :8124 instance also matched the **live** server's command line and killed it at 14:53 UTC (outage ≈ 58 min, until 15:51 UTC). The live server was restored with its exact documented invocation from `/home/jason/relmgr` (checkout verified still at `e9f8ab7` = main HEAD, DB untouched — the process was killed, nothing modified); a phone client served a 307 within seconds of restore. Lesson: pattern-based `pkill` on shared hosts must never use a command substring that other instances share; scope by exact PID. No data was lost (SQLite WAL, clean shutdown signal).
+
+## 10. Baseline regression spot-checks (S/A items probed live this session)
 
 S1 `?e=` owner-takeover: dead (no owner link, no tier lift). S2 quarter IDOR: 404s. S3 photo enumeration: default-card 200 / foreign 404. S5 duplicate-request email push: deduped (single notification path). S6 bombs: 45 MP rejected, 16 MB cap live. S7 headers: all four present on every response. A1 email cap: max stored 306 chars. A3 docs: 404. A4 stub-forward: ownership carried (code path re-read).
