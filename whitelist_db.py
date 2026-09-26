@@ -171,6 +171,15 @@ CARD_EDITOR_FIELD_TYPES = (
     # public by default (street-level childhood address defaults granted).
     'high_school', 'maiden_name', 'nickname',
     'childhood_address1', 'childhood_city', 'childhood_state',
+    # UX pass 5 (2026-09-24) Google-parity six-field addition
+    # (data/whitelist-field-gap-analysis/report.md §6):
+    'department',        # Work/vCard — Organization Department
+    'po_box',            # shared address component — NOT folded into address2
+    'related_person',    # Personal — related person (label = role, free text)
+    'event',             # Personal — significant date (label = anniversary/other)
+    'custom_field',      # vCard — label+value; defaults PRIVATE (arbitrary content)
+    'name_prefix',       # vCard — Mr / Dr / …
+    'name_suffix',       # vCard — Jr. / III / …
 )
 
 CARD_EDITOR_FIELD_LABELS = {
@@ -203,7 +212,187 @@ CARD_EDITOR_FIELD_LABELS = {
     'childhood_address1': 'Childhood address',
     'childhood_city': 'Childhood city',
     'childhood_state': 'Childhood state',
+    # UX pass 5: Google-parity additions
+    'department': 'Department',
+    'po_box': 'PO Box',
+    'related_person': 'Related person',
+    'event': 'Significant date',
+    'custom_field': 'Custom field',
+    'name_prefix': 'Name prefix',
+    'name_suffix': 'Name suffix',
 }
+
+# UX pass 5: address block component types (vcard + personal scopes).
+ADDRESS_BLOCK_TYPES: tuple[str, ...] = (
+    'address1', 'address2', 'city', 'state', 'zip', 'country',
+)
+
+# UX pass 5: card scopes whose Address section renders as grouped blocks.
+# Regression-verify 2026-09-26: 'work' added — an address is a six-line
+# block on every card kind; the new-connection flow lands in the stub's
+# Work editor when an email was provided, and the captain saw no address
+# block / + Add address control there. Every _SCOPE_TEMPLATES Addresses
+# section carries the same six block components, so grouping is uniform.
+ADDRESS_BLOCK_SCOPES = ('vcard', 'personal', 'work')
+
+
+def address_blocks(scope: str) -> bool:
+    """True when this card scope's Address section renders as blocks."""
+    return scope in ADDRESS_BLOCK_SCOPES
+
+
+# UX pass 5: scoped event labels (Google's Significant-date enum).
+EVENT_LABEL_CHOICES = ('anniversary', 'other')
+
+
+# UX pass 5: scope templates — section layout per card scope.
+# Shape: same as CARD_EDITOR_SECTIONS: [(heading, ((type, sublabel), …)), …]
+# Context-filtered six-field addition (gap-analysis report §6):
+#   vcard    — all six (department, po_box, related_person, event,
+#              custom_field, name prefix/suffix)
+#   personal — po_box, related_person, event
+#   work     — department, po_box
+_SCOPE_TEMPLATES: tuple[tuple[str, tuple[tuple[str, str | None], ...], ...], ...] = (
+    # ── vcard (generic contact vCard — NO identity fields) ──
+    ('vcard', (
+        ('Emails', (('email', None),)),
+        ('Phone numbers', (
+            ('phone', None),
+            ('text_number', 'Text number'),
+            ('facetime_number', 'FaceTime number'),
+        )),
+        ('Video apps', (
+            ('facetime', 'FaceTime'),
+            ('skype', 'Skype'),
+            ('video_app', 'Video app'),
+        )),
+        ('Messaging apps', (
+            ('messenger', 'Messenger'),
+            ('messaging_app', 'Messaging app'),
+        )),
+        ('Social', (
+            ('facebook', 'Facebook'),
+            ('instagram', 'Instagram'),
+            ('social_other', 'Social'),
+        )),
+        ('Addresses', (
+            ('address1', 'Address 1'),
+            ('address2', 'Address 2'),
+            ('city', 'City'),
+            ('state', 'State/Province'),
+            ('zip', 'Zip/Postal Code'),
+            ('country', 'Country'),
+            ('po_box', 'PO Box'),
+        )),
+        ('Name', (
+            ('name_prefix', 'Prefix'),
+            ('name_suffix', 'Suffix'),
+        )),
+        ('Title', (('title', None),)),
+        ('Company', (('company', None),)),
+        ('Department', (('department', None),)),
+        ('Website', (('website', None),)),
+        ('Birthday', (('birthday', None),)),
+        ('Significant dates', (('event', None),)),
+        ('Related people', (('related_person', None),)),
+        ('Custom fields', (('custom_field', None),)),
+        ('Note', (('note', None),)),
+    )),
+    # ── personal (NO professional — no title/company/department/website;
+    #    identity fields stay here) ──
+    ('personal', (
+        ('Emails', (('email', None),)),
+        ('Phone numbers', (
+            ('phone', None),
+            ('text_number', 'Text number'),
+            ('facetime_number', 'FaceTime number'),
+        )),
+        ('Video apps', (
+            ('facetime', 'FaceTime'),
+            ('skype', 'Skype'),
+            ('video_app', 'Video app'),
+        )),
+        ('Messaging apps', (
+            ('messenger', 'Messenger'),
+            ('messaging_app', 'Messaging app'),
+        )),
+        ('Social', (
+            ('facebook', 'Facebook'),
+            ('instagram', 'Instagram'),
+            ('social_other', 'Social'),
+        )),
+        ('Addresses', (
+            ('address1', 'Address 1'),
+            ('address2', 'Address 2'),
+            ('city', 'City'),
+            ('state', 'State/Province'),
+            ('zip', 'Zip/Postal Code'),
+            ('country', 'Country'),
+            ('po_box', 'PO Box'),
+        )),
+        ('Birthday', (('birthday', None),)),
+        ('Significant dates', (('event', None),)),
+        ('Related people', (('related_person', None),)),
+        ('Note', (('note', None),)),
+        ('Personal history', (
+            ('high_school', 'High school'),
+            ('maiden_name', 'Maiden/Surname'),
+            ('nickname', 'Nickname'),
+        )),
+        ('Childhood home', (
+            ('childhood_address1', 'Childhood address'),
+            ('childhood_city', 'Childhood city'),
+            ('childhood_state', 'Childhood state'),
+        )),
+    )),
+    # ── work (professional — no identity fields; title/company/department) ──
+    ('work', (
+        ('Emails', (('email', None),)),
+        ('Phone numbers', (
+            ('phone', None),
+            ('text_number', 'Text number'),
+            ('facetime_number', 'FaceTime number'),
+        )),
+        ('Video apps', (
+            ('facetime', 'FaceTime'),
+            ('skype', 'Skype'),
+            ('video_app', 'Video app'),
+        )),
+        ('Messaging apps', (
+            ('messenger', 'Messenger'),
+            ('messaging_app', 'Messaging app'),
+        )),
+        ('Social', (
+            ('facebook', 'Facebook'),
+            ('instagram', 'Instagram'),
+            ('social_other', 'Social'),
+        )),
+        ('Addresses', (
+            ('address1', 'Address 1'),
+            ('address2', 'Address 2'),
+            ('city', 'City'),
+            ('state', 'State/Province'),
+            ('zip', 'Zip/Postal Code'),
+            ('country', 'Country'),
+            ('po_box', 'PO Box'),
+        )),
+        ('Title', (('title', None),)),
+        ('Company', (('company', None),)),
+        ('Department', (('department', None),)),
+        ('Website', (('website', None),)),
+        ('Note', (('note', None),)),
+    )),
+)
+
+
+def picker_sections(scope: str) -> list[tuple[str, tuple[tuple[str, str | None], ...]]]:
+    """Return the scope-filtered section list for card-editor rendering."""
+    for key, sections in _SCOPE_TEMPLATES:
+        if key == scope:
+            return list(sections)  # shallow copy
+    # Fallback: flat CARD_EDITOR_SECTIONS (legacy/unknown scopes)
+    return list(CARD_EDITOR_SECTIONS)
+
 
 # Editor sections in render order: (heading, ((field_type, sublabel), …)).
 # sublabel is the per-row channel label shown when one section hosts several
@@ -230,7 +419,7 @@ CARD_EDITOR_SECTIONS = (
         ('instagram', 'Instagram'),
         ('social_other', 'Social'),
     )),
-    ('Address', (
+    ('Address Block 1', (
         ('address1', 'Address 1'),
         ('address2', 'Address 2'),
         ('city', 'City'),
@@ -257,12 +446,38 @@ CARD_EDITOR_SECTIONS = (
         ('childhood_city', 'Childhood city'),
         ('childhood_state', 'Childhood state'),
     )),
+    # UX pass 5: Google-parity six-field additions
+    ('Department', (('department', None),)),
+    ('PO Box', (('po_box', None),)),
+    ('Related people', (('related_person', None),)),
+    ('Significant dates', (('event', None),)),
+    ('Custom fields', (('custom_field', None),)),
+    ('Name prefix', (('name_prefix', None),)),
+    ('Name suffix', (('name_suffix', None),)),
 )
 
+# UX pass 5: private-default field types (custom_field defaults PRIVATE).
+_PRIVATE_DEFAULT_TYPES = ('custom_field',)
+
+
+def editor_default_visibility(field_type: str) -> str:
+    """Default visibility for a NEW field row in the editor."""
+    if field_type in _PRIVATE_DEFAULT_TYPES:
+        return 'private'
+    # Public defaults: identity/friend-finding fields
+    _PUBLIC_DEFAULT_TYPES = ('title', 'company', 'website', 'birthday',
+                             'high_school', 'maiden_name', 'nickname',
+                             'city', 'state',
+                             'childhood_city', 'childhood_state')
+    return 'public' if field_type in _PUBLIC_DEFAULT_TYPES else 'granted'
+
+
 # Repeatable types that get a "+ Add …" row button in the editor.
+# UX pass 5: related_person, event, custom_field are multi.
 CARD_EDITOR_MULTI_TYPES = ('email', 'phone', 'video_app', 'messaging_app', 'social_other',
                            'high_school', 'maiden_name', 'nickname',
-                           'childhood_address1', 'childhood_city', 'childhood_state')
+                           'childhood_address1', 'childhood_city', 'childhood_state',
+                           'related_person', 'event', 'custom_field')
 
 # ============================================================
 # Card ordering + kind (UX pass 3, 2026-09-23): Personal is THE default
@@ -288,7 +503,7 @@ def card_kind(card: dict) -> str | None:
 
 
 def format_phone_display(value) -> str:
-    """UX pass 3: display phones as +1(XXX)XXX-XXXX.
+    """UX pass 7: display phones as +1 (XXX) XXX-XXXX.
 
     10-digit numbers (and 11-digit +1-prefixed) format as US; anything
     else (international, extensions, junk) renders unchanged. Display-time
@@ -301,7 +516,7 @@ def format_phone_display(value) -> str:
     if len(digits) == 11 and digits.startswith("1"):
         digits = digits[1:]
     if len(digits) == 10:
-        return f"+1({digits[0:3]}){digits[3:6]}-{digits[6:10]}"
+        return f"+1 ({digits[0:3]}) {digits[3:6]}-{digits[6:10]}"
     return raw
 
 
@@ -621,6 +836,58 @@ def ensure_vcard_fields_pass3_schema(conn: sqlite3.Connection) -> None:
     """)
     conn.execute("DROP TABLE profile_fields")
     conn.execute("ALTER TABLE profile_fields_pass3 RENAME TO profile_fields")
+    conn.execute("PRAGMA foreign_keys=ON")
+    conn.commit()
+
+
+# UX pass 5: DDL with the six-field addition (department, po_box, etc.).
+_PROFILE_FIELDS_PASS5_DDL = f"""
+CREATE TABLE profile_fields_pass5 (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_id INTEGER NOT NULL,
+    field_type TEXT NOT NULL CHECK(field_type IN {CARD_EDITOR_FIELD_TYPES!r}),
+    field_value TEXT NOT NULL,
+    visibility TEXT NOT NULL CHECK(visibility IN {_VCARD_VISIBILITY!r}),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(profile_id, field_type, field_value),
+    FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+)
+"""
+
+
+def ensure_vcard_fields_pass5_schema(conn: sqlite3.Connection) -> None:
+    """Migrate profile_fields to the pass-5 field-type set (idempotent).
+
+    Adds the Google-parity six-field set: department, po_box,
+    related_person, event, custom_field, name_prefix, name_suffix.
+    Must run AFTER ensure_vcard_fields_pass3_schema (pre-v3 tables are
+    swapped forward by that heal first).
+
+    No value mapping — purely additive vocabulary. Ids and card_fields
+    links survive the swap (same F1 foreign_keys=OFF convention).
+    """
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='profile_fields'"
+    ).fetchone()
+    if row is None or not row[0]:
+        return  # table absent — wl_init creates it fresh this boot
+    if "'department'" in row[0]:
+        return  # already pass-5
+
+    conn.execute("DROP TABLE IF EXISTS profile_fields_pass5")
+    conn.execute(_PROFILE_FIELDS_PASS5_DDL)
+    conn.execute("PRAGMA foreign_keys=OFF")
+    conn.execute("""
+        INSERT INTO profile_fields_pass5
+            (id, profile_id, field_type, field_value,
+             visibility, created_at, updated_at)
+        SELECT id, profile_id, field_type, field_value,
+               visibility, created_at, updated_at
+        FROM profile_fields
+    """)
+    conn.execute("DROP TABLE profile_fields")
+    conn.execute("ALTER TABLE profile_fields_pass5 RENAME TO profile_fields")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.commit()
 
@@ -1006,18 +1273,11 @@ def effective_tier(
     if viewer_email is None:
         return "anonymous"
 
-    # Owner self-view: your own email always resolves to granted — you see
-    # your own profile in full (dashboard 'View profile' passes ?e=). Checked
-    # against this profile's own email fields, case-insensitive.
-    own = conn.execute(
-        """SELECT 1 FROM profile_fields
-           WHERE profile_id = ? AND field_type = 'email'
-             AND LOWER(field_value) = LOWER(?)
-           LIMIT 1""",
-        (profile_id, viewer_email),
-    ).fetchone()
-    if own:
-        return "granted"
+    # Security audit 2026-09-25: the old 'own email → granted' self-view
+    # branch is REMOVED — knowing the owner's signup email must never
+    # equal authentication (it leaked every private field on ?e=).
+    # Owner self-view is handled at the route layer via session cookie or
+    # a signed ?ot= token; ?e= here is the granted-CONTACT tracking param.
 
     # Tier admission via the shared admitted-grant predicate
     # (_ADMITTED_EXPIRY_SQL — grey-aware per the never-expire ruling; see its
@@ -1070,6 +1330,32 @@ def get_grant(conn: sqlite3.Connection, grant_id: str) -> Optional[dict]:
         "SELECT * FROM access_grants WHERE id = ?", (grant_id,)
     ).fetchone()
     return dict(row) if row else None
+
+
+def find_admitting_grant_id(
+    conn: sqlite3.Connection,
+    profile_id: int,
+    requester_email: str,
+) -> Optional[str]:
+    """The id of the grant create_grant's dedupe would collapse onto
+    (pending, or granted-and-admitted — the same predicate), else None.
+
+    Security audit 2026-09-25: lets the request route tell a NEW request
+    apart from a deduped re-POST, so only genuinely new requests push the
+    owner's email (repeat POSTs used to re-send the email every time —
+    a free spam vector against the owner's inbox).
+    """
+    row = conn.execute(
+        f"""SELECT id FROM access_grants
+            WHERE profile_id = ? AND LOWER(requester_email) = LOWER(?)
+              AND (
+                    status = 'pending'
+                    OR (status = 'granted' AND {_ADMITTED_EXPIRY_SQL})
+                  )
+            ORDER BY created_at DESC LIMIT 1""",
+        (profile_id, requester_email, _now_iso()),
+    ).fetchone()
+    return row[0] if row else None
 
 
 def create_grant(
@@ -3280,6 +3566,7 @@ def ensure_whitelist_schema(conn: sqlite3.Connection) -> None:
     ensure_vcard_fields_schema(conn)      # VCard field expansion (field_type + visibility)
     ensure_vcard_fields_v3_schema(conn)   # Round-2 types: 'address'→'address1' + apps (AFTER v2)
     ensure_vcard_fields_pass3_schema(conn)      # UX pass 3: personal-identity types + country
+    ensure_vcard_fields_pass5_schema(conn)      # UX pass 5: six-field set (dept, po_box, etc.)
     ensure_pass2_visibility_heal(conn)    # UX pass 2 F3: one-time visibility defaults backfill
     ensure_profile_field_labels(conn)     # UX pass 2: phone label support (additive column)
     ensure_profile_bio_column(conn)       # Phase A1: profiles.bio

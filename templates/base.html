@@ -4,12 +4,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}WhiteList{% endblock %}</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    {# Tailwind Play CDN, SELF-HOSTED and PINNED to 3.4.17
+       (regression-verify pass 2026-09-26): the app's whole stylesheet
+       previously loaded from cdn.tailwindcss.com, which (a) lets a phone
+       cache it 4h and drift on CDN updates, and (b) can be blocked by iOS
+       content blockers / fail on split-horizon phone networks — leaving
+       every page an unstyled broken stack while the server still logs
+       200s (the captain's 'silently fails' phone symptom). Same script
+       bytes, now same-origin, immutable, and version-busted via asset_v
+       so a stale phone can never mask a fix. Upgrading Tailwind = vendor
+       the new build under static/ and point this tag at it. #}
+    <script src="/static/tailwind-3.4.17.js?v={{ asset_v('tailwind-3.4.17.js') }}"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Arapey:ital@0;1&display=swap" rel="stylesheet">
-    {# Scroll mark favicon — approved identity mark #}
-    <link rel="icon" type="image/png" href="/static/scroll-mark.png">
+    {# Scroll mark favicon — approved identity mark; ?v= busts phone
+       caches when the file changes (see asset_v in app.py) #}
+    <link rel="icon" type="image/png" href="/static/scroll-mark.png?v={{ asset_v('scroll-mark.png') }}">
     <style>
         /* === Whitelist identity tokens (captain approved 2026-09-22) ===
            Source: ~/Downloads/whitelist-identity/design-guide.txt
@@ -19,6 +30,11 @@
            ink-faint=#FFFFFF42, ink-secondary=#FFFFFFB8
         */
         :root {
+            /* Tell mobile browsers to use dark-mode form controls —
+               without this iOS Safari applies its default blue accent
+               to <input> elements, which is the blue-button bug. */
+            color-scheme: dark;
+
             /* Surfaces */
             --wl-surface-base: #1A1A1C;
             --wl-surface-deep: #0B0B0C;
@@ -145,6 +161,106 @@
         .wl-heading { font-family: "Arapey", Georgia, serif; font-weight: 400; color: var(--wl-ink); }
         .wl-heading-sm { font-size: 22px; line-height: 28px; }
         .wl-heading-md { font-size: 30px; line-height: 36px; }
+
+        /* === Mobile squeeze (pass 9): 25% smaller text, tighter padding,
+           wider content area, alpha rail pushed right === */
+        @media (max-width: 640px) {
+            /* Dashboard pages only (not sign-in/signup): reduce padding */
+            .max-w-2xl {
+                padding-top: 1rem !important;
+                padding-left: 0.5rem !important;
+                padding-right: 0.5rem !important;
+            }
+
+            /* 25% text reduction */
+            .wl-heading-sm  { font-size: 16px !important; line-height: 22px !important; }
+            .wl-heading-md  { font-size: 22px !important; line-height: 28px !important; }
+            .wl-heading     { font-size: 18px !important; }
+            .text-sm        { font-size: 10px !important; }
+            .text-xs        { font-size: 8.5px !important; }
+            .text-[10px]    { font-size: 7.5px !important; }
+            .text-[11px]    { font-size: 8.5px !important; }
+
+            /* Tighter card padding */
+            .wl-card { padding: 0.5rem !important; border-radius: 8px !important; }
+            .wl-card.p-6 { padding: 0.75rem !important; }
+            .wl-card.p-4 { padding: 0.5rem !important; }
+            .wl-card.p-3 { padding: 0.4rem !important; }
+
+            /* Reduce gaps */
+            .gap-3 { gap: 0.5rem !important; }
+            .gap-2 { gap: 0.35rem !important; }
+            .gap-6 { gap: 0.5rem !important; }
+
+            /* Alpha rail: push it right, reduce its width */
+            nav[aria-label="Filter by first letter"] {
+                padding-right: 0 !important;
+                margin-right: -0.25rem !important;
+            }
+            /* Shrink the rail container */
+            .flex.gap-3 > div:first-child {
+                min-width: 0 !important;
+            }
+
+            /* Tighter avatar/badge sizes */
+            .w-10 { width: 32px !important; height: 32px !important; }
+            .w-12 { width: 36px !important; height: 36px !important; }
+            .w-16 { width: 44px !important; height: 44px !important; }
+            .h-10 { height: 32px !important; }
+            .h-12 { height: 36px !important; }
+            .h-16 { height: 44px !important; }
+
+            /* Reduce form/input padding */
+            input, textarea, select {
+                padding: 0.25rem 0.4rem !important;
+                font-size: 10px !important;
+            }
+
+            /* Reduce button padding */
+            button, .wl-btn-ink, .wl-btn-approve, .wl-btn-deny,
+            .wl-btn-revoke, .wl-btn-punt, .wl-btn-submit {
+                padding: 0.2rem 0.5rem !important;
+                font-size: 10px !important;
+            }
+
+            /* Card editor: shrink sublabel spans on mobile so field + dropdown
+               + ✕ fit on one row. w-28 → 56px on mobile. */
+            span.w-28 { width: 56px !important; min-width: 56px !important; }
+
+            /* Card editor: shrink the ✕ button slightly */
+            button.w-6.h-6 { width: 24px !important; height: 24px !important; }
+
+            /* Card editor: shrink visibility select */
+            select.wl-select.text-xs { width: auto !important; min-width: 60px !important; }
+
+            /* Thinner borders on dashboard cards/inputs/buttons (not sign-in) */
+            .max-w-2xl .wl-card { border-width: 0.5px !important; }
+            .max-w-2xl input, .max-w-2xl textarea, .max-w-2xl select {
+                border-width: 0.5px !important;
+            }
+            .max-w-2xl button { border-width: 0.5px !important; }
+
+            /* Remove visible outlines from text boxes on mobile
+               (captain: "Text boxes are visible everywhere on MOBILE web") */
+            .max-w-2xl input:focus, .max-w-2xl textarea:focus,
+            .max-w-2xl select:focus {
+                outline: none !important;
+                box-shadow: none !important;
+            }
+
+            /* Alpha rail: position:fixed on mobile so swipe doesn't scroll page,
+               touch-action:none to prevent scroll during drag */
+            .alpha-rail {
+                position: fixed !important;
+                top: 0 !important;
+                right: 0 !important;
+                z-index: 50 !important;
+                background: var(--wl-surface-base) !important;
+                touch-action: none !important;
+                height: 100vh !important;
+                padding-top: 4rem !important;
+            }
+        }
     </style>
 </head>
 <body class="wl-page-bg min-h-screen wl-text">

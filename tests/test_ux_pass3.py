@@ -5,7 +5,7 @@ Covers:
 2. BUG FIX: contact-card Status shows GreyList for badge-grey contacts
    (a future quarter marker is still the grey STATE)
 3. Country field on every card editor
-4. Phone formatting +1(XXX)XXX-XXXX on display surfaces
+4. Phone formatting +1 (XXX) XXX-XXXX on display surfaces
 5. Default cards: EVERY profile gets Personal + Work (always, even empty);
    Personal is the TOP card (default public picture) on every surface
 6. Personal-only identity fields (high school / maiden name / nickname /
@@ -91,10 +91,18 @@ class TestCreateVCardFlow:
             "create must land in the new vCard's editor"
         editor = client.get(loc)
         assert editor.status_code == 200
-        # ALL field sections ready to populate
-        for heading in ("Emails", "Phone numbers", "Address", "Personal history",
-                        "Childhood home", "Birthday", "Note"):
+        # Scoped templates: the email lands on the WORK card, whose
+        # professional-appropriate sections are ready to populate. Identity
+        # fields (Personal history / Childhood home / Birthday) stay on
+        # Personal and never render on Work.
+        for heading in ("Emails", "Phone numbers", "Addresses", "Title",
+                        "Company", "Department", "Website", "Note"):
             assert heading in editor.text, f"editor missing '{heading}'"
+        for absent in ("Personal history", "Childhood home", "Birthday",
+                       "Significant dates", "Related people",
+                       "Custom fields"):
+            assert absent not in editor.text, \
+                f"non-professional section '{absent}' leaked onto Work"
         assert "Jane Rivers" in editor.text
 
     def test_curated_stub_editable_by_creating_owner_only(self, tmp_path):
@@ -147,7 +155,7 @@ class TestGreyStateDisplay:
         html = client.get(f"/owner/{_owner_token()}/contact/{gid}").text
         assert "GreyList" in html, "card must agree with the list badge"
         # review actions surface for grey contacts
-        assert "Make Permanent" in html
+        assert "Add to WhiteList" in html
 
     def test_whitelist_badge_contact_shows_whitelist(self, tmp_path):
         db = _make_db(tmp_path)
@@ -176,9 +184,9 @@ class TestCountryAndPhoneFormat:
 
     def test_phone_format_helper(self, tmp_path):
         f = whitelist_db.format_phone_display
-        assert f("5551234567") == "+1(555)123-4567"
-        assert f("+15551234567") == "+1(555)123-4567"
-        assert f("(555) 123-4567") == "+1(555)123-4567"
+        assert f("5551234567") == "+1 (555) 123-4567"
+        assert f("+15551234567") == "+1 (555) 123-4567"
+        assert f("(555) 123-4567") == "+1 (555) 123-4567"
         assert f("+442079460958") == "+442079460958", "non-US unchanged"
         assert f("555") == "555"
 
@@ -194,7 +202,7 @@ class TestCountryAndPhoneFormat:
         conn.close()
         client = TestClient(create_app(db))
         html = client.get("/p/jasonheath").text
-        assert "+1(312)555-0123" in html
+        assert "+1 (312) 555-0123" in html
 
 
 # ============================================================

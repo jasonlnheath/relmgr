@@ -160,26 +160,33 @@ class TestVisibilityDefaults:
     def test_new_row_select_defaults(self, tmp_path):
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
-        # UX pass 3: the Personal card has no title/company/website rows, so
-        # the dedicated add-row slots (and their default-visibility selects)
-        # render there.
+        # Scoped templates: Personal renders the identity-scope add-row
+        # slots (never title/company/website — those live on the vcard/
+        # work scopes). The public-default ruling is pinned on a fresh,
+        # fieldless vCard-scope card, whose dedicated slots all render.
         html, _ = _editor_gets(db, client, "Personal")
+        conn = whitelist_db.wl_connect(db)
+        fresh = whitelist_db.create_card(conn, 1, "Field Audit", [])
+        conn.commit()
+        conn.close()
+        fresh_html = client.get(
+            f"/owner/{_owner_token()}/cards/{fresh['id']}/edit").text
 
-        def _selected_default(name: str) -> str:
+        def _selected_default(name: str, page: str) -> str:
             m = re.search(
-                r'name="' + name + r'".*?</select>', html, re.DOTALL)
+                r'name="' + name + r'".*?</select>', page, re.DOTALL)
             assert m, f"{name} select renders"
             sel = re.search(
                 r'<option value="(\w+)" selected>(\w+)</option>', m.group(0))
             return sel.group(1) if sel else "(none)"
 
-        assert _selected_default("new_email_visibility") == "granted", \
+        assert _selected_default("new_email_visibility", html) == "granted", \
             "email add-row defaults to granted"
-        assert _selected_default("new_title_visibility") == "public", \
+        assert _selected_default("new_phone_visibility", html) == "granted"
+        assert _selected_default("new_title_visibility", fresh_html) == "public", \
             "title add-row defaults to public (UX pass 2 defaults ruling)"
-        assert _selected_default("new_company_visibility") == "public"
-        assert _selected_default("new_website_visibility") == "public"
-        assert _selected_default("new_phone_visibility") == "granted"
+        assert _selected_default("new_company_visibility", fresh_html) == "public"
+        assert _selected_default("new_website_visibility", fresh_html) == "public"
 
     def test_save_without_visibility_defaults_granted(self, tmp_path):
         db = _make_db(tmp_path)
@@ -340,12 +347,12 @@ class TestViewProfileFieldRows:
         client = TestClient(create_app(db))
         return client
 
-    def test_labels_right_justified_with_spacing(self, tmp_path):
+    def test_labels_two_row_left_justified(self, tmp_path):
         db = _make_db(tmp_path)
         client = self._granted_client(db)
         html = client.get("/p/jasonheath?e=friend%40x.com").text
-        assert "text-right pr-4" in html, \
-            "field names RIGHT-justified with spacing (never overwrite values)"
+        assert "space-y-3" in html, \
+            "fields use two-row layout with blank line between (UX pass 8)"
 
     def test_no_forward_section(self, tmp_path):
         db = _make_db(tmp_path)
@@ -485,9 +492,9 @@ class TestContactCardAccessSection:
         conn.close()
         html = client.get(f"/owner/{_owner_token()}/contact/{gid}").text
         assert "GreyList" in html
-        assert "Make Permanent" in html, "grey keeps its review choices"
-        assert "Punt Another Quarter" in html
-        assert "Revoke" not in html
+        assert "Keep on GreyList" in html, "grey keeps its review choices"
+        assert "Add to WhiteList" in html
+        assert "Add to BlackList" in html
 
     def test_blacklist_state_shows_blacklist(self, tmp_path):
         db = _make_db(tmp_path)
@@ -657,6 +664,45 @@ class TestNewConnection:
         assert ("phone", "+1-555-777-1234", "granted") in fields
         assert ("email", "casey@new.com", "granted") in fields
         assert cards >= 2, "default cards seeded for the new vCard"
+
+    def test_create_vcard_redirects_to_work_when_email(self, tmp_path):
+        """BUG FIX (pass 9): email→Work card, so redirect must go to Work
+        when email was provided, otherwise the email field is invisible.
+        Phone-only should still go to Personal."""
+        db = _make_db(tmp_path)
+        client = TestClient(create_app(db))
+
+        # With email → redirect to Work card
+        resp = client.post(f"/owner/{_owner_token()}/new-connection",
+                           data={"display_name": "Eve Mail",
+                                 "phone": "+1-555-000-1111",
+                                 "email": "eve@mail.com"},
+                           follow_redirects=False)
+        assert resp.status_code == 303
+        loc = resp.headers.get("location", "")
+        assert "/cards/" in loc and "/edit" in loc
+        # The Work card for the NEW profile (id=2) should be targeted
+        conn = whitelist_db.wl_connect(db)
+        cards = whitelist_db.list_cards(conn, 2)  # new profile id
+        work_id = next(c["id"] for c in cards if c["name"].lower() == "work")
+        conn.close()
+        assert f"{work_id}/edit" in loc, (
+            f"Expected redirect to Work card {work_id}, got {loc}")
+
+        # Phone-only → redirect to Personal card
+        resp = client.post(f"/owner/{_owner_token()}/new-connection",
+                           data={"display_name": "Bob Phone",
+                                 "phone": "+1-555-000-2222",
+                                 "email": ""},
+                           follow_redirects=False)
+        assert resp.status_code == 303
+        loc = resp.headers.get("location", "")
+        conn = whitelist_db.wl_connect(db)
+        cards = whitelist_db.list_cards(conn, 3)  # new profile id
+        personal_id = next(c["id"] for c in cards if c["name"].lower() == "personal")
+        conn.close()
+        assert f"{personal_id}/edit" in loc, (
+            f"Expected redirect to Personal card {personal_id}, got {loc}")
 
     def test_create_requires_name(self, tmp_path):
         db = _make_db(tmp_path)

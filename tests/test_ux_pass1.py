@@ -6,7 +6,7 @@ Covers:
 - Card deletion copy: holders keep the vCard (normal vCard, badge gone)
 - Contact list: clicking a contact opens their card; both cards visible
   as chips on the row; fast A–Z filter rail (?letter=, prefix filter)
-- Contact detail: ONE card at a time with a chip switcher (?card=)
+- Contact detail: ALL cards on one continuous view (UX pass 7)
 - Public profile: owner sees '← Back to My Profile', strangers never do
 - Public profile: reach-me renders ONE ROW PER CARD with that card's photo
 - My Profile: no title/company line; chooser copy per spec; bio maxlength
@@ -362,41 +362,29 @@ class TestAlphabeticalRail:
 
 
 # ============================================================
-# Contact detail: ONE card + switcher
+# Contact detail: ALL cards on one continuous view (UX pass 7)
 # ============================================================
 
 class TestContactDetailOneCard:
-    def test_detail_renders_switcher_and_selected_card(self, tmp_path):
+    def test_detail_renders_all_cards(self, tmp_path):
         client, token, grant_ids = _granted_client(tmp_path)
         conn = whitelist_db.wl_connect(tmp_path / "test.db")
         card_ids = [r["id"] for r in conn.execute("SELECT id FROM cards ORDER BY id")]
         conn.close()
         html = client.get(f"/owner/{token}/contact/{grant_ids[0]}").text
-        # every profile card has a switch link targeting THIS grant
-        for cid in card_ids:
-            assert f"/owner/{token}/contact/{grant_ids[0]}?card={cid}" in html, \
-                "multi-card contacts need a chip per card"
+        # NO switcher links — all cards render on one view
+        assert "?card=" not in html, "no card switcher should exist"
+        # ALL cards' fields render (Work carries title/company)
+        assert "Sales" in html and "Walther EMC" in html
 
-    def test_detail_card_query_param_selects_card(self, tmp_path):
+    def test_detail_card_query_param_ignored(self, tmp_path):
         client, token, grant_ids = _granted_client(tmp_path)
         conn = whitelist_db.wl_connect(tmp_path / "test.db")
-        # UX pass 3: default pair is Personal (id 1) + Work (id 2); Work
-        # carries the seeded title/company fields.
         card_ids = [r["id"] for r in conn.execute("SELECT id FROM cards ORDER BY id")]
         conn.close()
-        identity_id, other_id = card_ids[-1], card_ids[0]
-        html = client.get(f"/owner/{token}/contact/{grant_ids[0]}?card={identity_id}").text
-        # the ACTIVE chip (slate fill) is the selected card — others are not
-        import re as _re
-        chips = _re.findall(
-            r'<a href="([^"]*card=(\d+))"[^>]*style="([^"]*)"', html)
-        style_by_card = {cid: style for href, cid, style in chips}
-        assert str(identity_id) in style_by_card
-        assert "--wl-btn-slate" in style_by_card[str(identity_id)], \
-            "selected chip must wear the active fill"
-        assert "--wl-btn-slate" not in style_by_card[str(other_id)], \
-            "non-selected chips must not"
-        # the selected card's own fields render (Work carries title/company)
+        # ?card= param is ignored — ALL cards still render
+        html = client.get(f"/owner/{token}/contact/{grant_ids[0]}?card={card_ids[-1]}").text
+        # ALL cards' fields render regardless of param
         assert "Sales" in html and "Walther EMC" in html
 
     def test_detail_photo_block_belongs_to_selected_card(self, tmp_path):
@@ -431,8 +419,14 @@ class TestProfileViewBackLink:
     def test_owner_email_link_sees_back_link(self, tmp_path):
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
-        html = client.get("/p/jasonheath?e=jason@waltheremc.com").text
+        # Security audit 2026-09-25: the back link needs the signed ?ot=
+        # token (or session) — the raw owner email no longer authenticates.
+        ot = wl_tokens.make_token(b"test-secret", "owner_dashboard", "1")
+        html = client.get(f"/p/jasonheath?ot={ot}").text
         assert "← Back to My Profile" in html
+        # ...and email knowledge alone must NOT produce it.
+        html2 = client.get("/p/jasonheath?e=jason@waltheremc.com").text
+        assert "Back to My Profile" not in html2
 
     def test_stranger_never_sees_back_link(self, tmp_path):
         db = _make_db(tmp_path)
@@ -446,8 +440,13 @@ class TestReachMeRowsPerCard:
         """One row per card, each led by THAT card's picture, that card's
         icons following it — pinned by ordering, not substrings-anywhere."""
         db = _make_db(tmp_path)
+        conn = whitelist_db.wl_connect(db)
+        gid = whitelist_db.create_grant(conn, 1, "grantedviewer@x.com", "GV")
+        whitelist_db.apply_decision(conn, gid, "approve", "quarter",
+                                    merge_contacts=False)
+        conn.close()
         client = TestClient(create_app(db))
-        html = client.get("/p/jasonheath?e=jason@waltheremc.com").text
+        html = client.get("/p/jasonheath?e=grantedviewer@x.com").text
         assert "Reach me" in html
         pos_reach = html.find("Reach me")
         # UX pass 3 card order: Personal first (phone icons, initials circle),

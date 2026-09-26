@@ -101,7 +101,7 @@
                 {% if reach.has %}
                 <div class="flex items-center gap-3">
                     {% if card.photo_path %}
-                    <img src="/photos/{{ profile.id }}/{{ card.id }}"
+                    <img src="/photos/{{ profile.id }}/{{ card.id }}{% if viewer_email %}?e={{ viewer_email | urlencode }}{% endif %}"
                          alt="{{ card.name }} photo"
                          class="w-8 h-8 rounded-full object-cover flex-shrink-0">
                     {% else %}
@@ -165,13 +165,13 @@
              style="border-color: var(--wl-glass-border);">
             <div class="flex items-center gap-2 mb-3">
                 {% if card.photo_path %}
-                <img src="/photos/{{ profile.id }}/{{ card.id }}"
+                <img src="/photos/{{ profile.id }}/{{ card.id }}{% if viewer_email %}?e={{ viewer_email | urlencode }}{% endif %}"
                      alt="{{ card.name }} photo"
                      class="w-8 h-8 rounded-full object-cover flex-shrink-0">
                 {% endif %}
                 <h2 class="wl-heading wl-heading-sm wl-text">{{ card.name }}</h2>
             </div>
-            <div class="space-y-2">
+            <div class="space-y-3">
                 {% for f in card.visible_fields %}
                 {{ _field_row(f) }}
                 {% endfor %}
@@ -183,7 +183,7 @@
         {# Card-less profile: legacy flat field list #}
         {% else %}
         {% if tier == 'granted' %}
-        <div class="space-y-2">
+        <div class="space-y-3">
             {% for f in profile.fields %}
             {{ _field_row(f) }}
             {% endfor %}
@@ -229,16 +229,19 @@
     {%- endif -%}
 {% endmacro %}
 
-{# One display row on the view-profile page. UX pass 2 (2026-09-22): the
-   field name is RIGHT-JUSTIFIED in a fixed column with clear spacing
-   (pr-4) so long names never overwrite the value; phone labels
-   (Mobile/Home/Work or a custom name) surface instead of the plain type. #}
+{# One display row on the view-profile page. UX pass 8 (2026-10-xx):
+   label on its own top row, value on the row below, single-spaced,
+   one blank line (space-y-3) between fields, everything left-justified. #}
 {% macro _field_row(f) %}
-<div class="flex items-start wl-text-sub">
-    <span class="w-28 flex-shrink-0 text-right pr-4 text-xs wl-text-faint uppercase tracking-wide pt-0.5">{% if f.field_type == 'phone' and f.get('label') %}{{ label_display(f.label) }}{% else %}{{ _field_label(f.field_type) }}{% endif %}</span>
-    <span class="flex-1 min-w-0 wl-text break-words">{% if f.field_type in ('phone', 'text_number', 'facetime_number') %}{{ phone_fmt(f.field_value) }}{% else %}{{ f.field_value }}{% endif %}</span>
+<div class="flex flex-col space-y-0.5">
+    <span class="text-xs wl-text-faint uppercase tracking-wide">
+        {% if f.field_type == 'phone' and f.get('label') %}{{ label_display(f.label) }}{% else %}{{ _field_label(f.field_type) }}{% endif %}
+    </span>
+    <span class="wl-text break-words">
+        {% if f.field_type in ('phone', 'text_number', 'facetime_number') %}{{ phone_fmt(f.field_value) }}{% else %}{{ f.field_value }}{% endif %}
+    </span>
     {% if f.visibility == 'private' %}
-    <span class="ml-2 text-xs wl-text-faint" title="Private field">🔒</span>
+    <span class="text-xs wl-text-faint" title="Private field">🔒</span>
     {% endif %}
 </div>
 {% endmacro %}

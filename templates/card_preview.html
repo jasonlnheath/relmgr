@@ -1,6 +1,41 @@
 {% extends "base.html" %}
 {% block title %}{{ card.name }} — WhiteList{% endblock %}
 
+{% macro _field_label(field_type) %}
+    {%- if field_type == 'email' -%}email
+    {%- elif field_type == 'phone' -%}phone
+    {%- elif field_type == 'text_number' -%}text number
+    {%- elif field_type == 'facetime_number' -%}FaceTime number
+    {%- elif field_type == 'facetime' -%}FaceTime
+    {%- elif field_type == 'skype' -%}skype
+    {%- elif field_type == 'video_app' -%}video app
+    {%- elif field_type == 'messenger' -%}messenger
+    {%- elif field_type == 'messaging_app' -%}messaging app
+    {%- elif field_type == 'facebook' -%}facebook
+    {%- elif field_type == 'instagram' -%}instagram
+    {%- elif field_type == 'social_other' -%}social
+    {%- elif field_type == 'title' -%}title
+    {%- elif field_type == 'company' -%}company
+    {%- elif field_type == 'address1' -%}address 1
+    {%- elif field_type == 'address2' -%}address 2
+    {%- elif field_type == 'city' -%}city
+    {%- elif field_type == 'state' -%}state/province
+    {%- elif field_type == 'zip' -%}zip/postal code
+    {%- elif field_type == 'country' -%}country
+    {%- elif field_type == 'address' -%}address
+    {%- elif field_type == 'website' -%}website
+    {%- elif field_type == 'birthday' -%}birthday
+    {%- elif field_type == 'note' -%}note
+    {%- elif field_type == 'high_school' -%}high school
+    {%- elif field_type == 'maiden_name' -%}maiden name
+    {%- elif field_type == 'nickname' -%}nickname
+    {%- elif field_type == 'childhood_address1' -%}childhood address
+    {%- elif field_type == 'childhood_city' -%}childhood city
+    {%- elif field_type == 'childhood_state' -%}childhood state
+    {%- else -%}{{ field_type }}
+    {%- endif -%}
+{% endmacro %}
+
 {% block content %}
 <div class="max-w-2xl mx-auto py-8 px-4">
     <div class="wl-card p-6">
@@ -12,7 +47,7 @@
         {# Photo #}
         {% if card.photo_path %}
         <div class="mb-4">
-            <img src="/photos/{{ owner_id }}/{{ card.id }}" alt="{{ card.name }} photo" class="w-24 h-24 rounded-full object-cover">
+            <img src="/photos/{{ owner_id }}/{{ card.id }}?t={{ token | urlencode }}" alt="{{ card.name }} photo" class="w-24 h-24 rounded-full object-cover">
         </div>
         {% endif %}
 
@@ -20,12 +55,11 @@
         {% if card.fields %}
         <div class="border-t pt-4 mt-4" style="border-color: var(--wl-glass-border);">
             <h2 class="wl-heading wl-heading-sm wl-text mb-3">Fields</h2>
-            <div class="space-y-2">
+            <div class="space-y-3">
                 {% for f in card.fields %}
-                <div class="flex items-center wl-text-sub">
-                    <span class="w-20 text-xs wl-text-faint uppercase tracking-wide">{{ f.field_type }}</span>
-                    <span>{{ f.field_value }}</span>
-                    <span class="ml-2 text-xs wl-text-faint">({{ f.visibility }})</span>
+                <div class="flex flex-col">
+                    <span class="text-xs wl-text-faint uppercase tracking-wide mb-0.5">{{ _field_label(f.field_type) }}</span>
+                    <span class="wl-text">{{ f.field_value }}</span>
                 </div>
                 {% endfor %}
             </div>
