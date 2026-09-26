@@ -160,26 +160,33 @@ class TestVisibilityDefaults:
     def test_new_row_select_defaults(self, tmp_path):
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
-        # UX pass 3: the Personal card has no title/company/website rows, so
-        # the dedicated add-row slots (and their default-visibility selects)
-        # render there.
+        # Scoped templates: Personal renders the identity-scope add-row
+        # slots (never title/company/website — those live on the vcard/
+        # work scopes). The public-default ruling is pinned on a fresh,
+        # fieldless vCard-scope card, whose dedicated slots all render.
         html, _ = _editor_gets(db, client, "Personal")
+        conn = whitelist_db.wl_connect(db)
+        fresh = whitelist_db.create_card(conn, 1, "Field Audit", [])
+        conn.commit()
+        conn.close()
+        fresh_html = client.get(
+            f"/owner/{_owner_token()}/cards/{fresh['id']}/edit").text
 
-        def _selected_default(name: str) -> str:
+        def _selected_default(name: str, page: str) -> str:
             m = re.search(
-                r'name="' + name + r'".*?</select>', html, re.DOTALL)
+                r'name="' + name + r'".*?</select>', page, re.DOTALL)
             assert m, f"{name} select renders"
             sel = re.search(
                 r'<option value="(\w+)" selected>(\w+)</option>', m.group(0))
             return sel.group(1) if sel else "(none)"
 
-        assert _selected_default("new_email_visibility") == "granted", \
+        assert _selected_default("new_email_visibility", html) == "granted", \
             "email add-row defaults to granted"
-        assert _selected_default("new_title_visibility") == "public", \
+        assert _selected_default("new_phone_visibility", html) == "granted"
+        assert _selected_default("new_title_visibility", fresh_html) == "public", \
             "title add-row defaults to public (UX pass 2 defaults ruling)"
-        assert _selected_default("new_company_visibility") == "public"
-        assert _selected_default("new_website_visibility") == "public"
-        assert _selected_default("new_phone_visibility") == "granted"
+        assert _selected_default("new_company_visibility", fresh_html) == "public"
+        assert _selected_default("new_website_visibility", fresh_html) == "public"
 
     def test_save_without_visibility_defaults_granted(self, tmp_path):
         db = _make_db(tmp_path)

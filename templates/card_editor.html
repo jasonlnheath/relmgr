@@ -51,6 +51,10 @@
                                'city', 'state',
                                'childhood_city', 'childhood_state'] %}
 
+{# UX pass 5: custom_field defaults PRIVATE (arbitrary content — gap
+   analysis report §6 item 5). Feeds the default_visibility macro below #}
+{% set private_default_types = ['custom_field'] %}
+
 {% macro vis_select(name, current='') %}
 <select name="{{ name }}"
         class="wl-select text-xs border border-gray-600 rounded px-1 py-1 focus:border-[#E8E8E8] focus:ring-1 focus:ring-[#E8E8E8]"

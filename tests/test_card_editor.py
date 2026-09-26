@@ -120,21 +120,68 @@ class TestDashboardOwnsOnlyItsCards:
 # ============================================================
 
 class TestEditorRendersAllFieldTypes:
-    def test_all_types_present_for_seeded_card(self, tmp_path):
+    # UX pass 5 scoped card templates: vCard gets ALL six Google-parity
+    # fields; Personal gets po_box/related_person/event + identity fields
+    # (never professional types); Work gets department/po_box (never
+    # identity types). Re-pinned from the flat all-types era.
+    VARD_SIX = ("department", "po_box", "related_person", "event",
+               "custom_field", "name_prefix", "name_suffix")
+
+    def test_vcard_scope_renders_all_six(self, tmp_path):
         db = _make_db(tmp_path)
         client = TestClient(create_app(db))
-        card_id = _first_card_id(db)
-        resp = client.get(f"/owner/{_owner_token()}/cards/{card_id}/edit")
+        conn = whitelist_db.wl_connect(db)
+        vcard = whitelist_db.create_card(conn, 1, "Field Audit", [])
+        conn.commit()
+        conn.close()
+        resp = client.get(f"/owner/{_owner_token()}/cards/{vcard['id']}/edit")
         assert resp.status_code == 200
-        for t in FIELD_TYPES:
+        for t in self.VARD_SIX:
             assert f'data-type="{t}"' in resp.text, \
-                f"editor section for '{t}' missing"
+                f"vCard editor section for '{t}' missing"
         for t in RETIRED_TYPES:
             assert f'data-type="{t}"' not in resp.text, \
                 f"retired type '{t}' still has its own editor section"
         # Both name inputs (card + profile display name) render too.
         assert 'name="card_name"' in resp.text
         assert 'name="display_name"' in resp.text
+
+    def test_personal_scope_scoped_sections(self, tmp_path):
+        """Personal = personal-appropriate: po_box/related_person/event +
+        identity fields present; professional types absent."""
+        db = _make_db(tmp_path)
+        client = TestClient(create_app(db))
+        card_id = _first_card_id(db)
+        html = client.get(f"/owner/{_owner_token()}/cards/{card_id}/edit").text
+        for t in ("po_box", "related_person", "event",
+                 "high_school", "maiden_name", "nickname"):
+            assert f'data-type="{t}"' in html, \
+                f"personal section for '{t}' missing"
+        for t in ("title", "company", "website", "department",
+                  "custom_field", "name_prefix", "name_suffix"):
+            assert f'data-type="{t}"' not in html, \
+                f"professional/identity-excluded type '{t}' leaked onto Personal"
+
+    def test_work_scope_scoped_sections(self, tmp_path):
+        """Work = professional-appropriate: department/po_box present;
+        identity fields (Personal history / Childhood home) absent."""
+        db = _make_db(tmp_path)
+        client = TestClient(create_app(db))
+        conn = whitelist_db.wl_connect(db)
+        work_id = conn.execute(
+            "SELECT id FROM cards WHERE owner_profile_id = 1 AND name = 'Work'"
+        ).fetchone()[0]
+        conn.close()
+        html = client.get(f"/owner/{_owner_token()}/cards/{work_id}/edit").text
+        for t in ("department", "po_box", "title", "company", "website"):
+            assert f'data-type="{t}"' in html, \
+                f"work section for '{t}' missing"
+        for t in ("related_person", "event", "custom_field",
+                  "name_prefix", "name_suffix", "birthday",
+                  "high_school", "maiden_name", "nickname",
+                  "childhood_address1"):
+            assert f'data-type="{t}"' not in html, \
+                f"non-professional type '{t}' leaked onto Work"
 
     def test_preferred_channel_slots_are_labeled_not_checkboxes(self, tmp_path):
         """The captain's ask: dedicated, clearly-labeled Text number and
@@ -213,41 +260,11 @@ class TestEditorRendersAllFieldTypes:
 # ============================================================
 
 class TestEditorSaveRoundTrip:
-    def test_one_field_per_type_round_trips(self, tmp_path):
-        db = _make_db(tmp_path)
-        client = TestClient(create_app(db))
-        tok = _owner_token()
-        card_id = _first_card_id(db)
-
-        data = {"card_name": "Personal", "display_name": "Jason Heath"}
-        expectations = {
-            "email": ("work@acme.com", "public"),
-            "phone": ("+1-555-999-0000", "granted"),
-            "text_number": ("+1-555-999-0001", "public"),
-            "facetime_number": ("+1-555-999-0002", "granted"),
-            "facetime": ("jason@acme.com", "granted"),
-            "skype": ("live:.cid.jason", "private"),
-            "video_app": ("Zoom 555-123-4567", "granted"),
-            "messenger": ("m.me/jasonh", "public"),
-            "messaging_app": ("WhatsApp +1-555-999-0003", "granted"),
-            "facebook": ("facebook.com/jason.heath", "public"),
-            "instagram": ("@jasonheath", "public"),
-            "social_other": ("YouTube @heathtech", "public"),
-            "title": ("VP Engineering", "granted"),
-            "company": ("Acme Inc.", "private"),
-            "address1": ("123 Main St", "public"),
-            "address2": ("Suite 400", "public"),
-            "city": ("Denver", "public"),
-            "state": ("CO", "public"),
-            "zip": ("80014", "public"),
-            "website": ("https://acme.com", "granted"),
-            "birthday": ("1985-06-15", "private"),
-            "note": ("Met at the conference.", "private"),
-        }
-        for t, (value, vis) in expectations.items():
-            data[f"new_{t}_value"] = value
-            data[f"new_{t}_visibility"] = vis
-
+    def _assert_round_trip(self, client, tok, db, card_id, expectations):
+        """POST one fresh field per type; DB + re-render must echo it."""
+        data = {f"new_{t}_value": v for t, (v, _) in expectations.items()}
+        data.update({f"new_{t}_visibility": vis
+                     for t, (_, vis) in expectations.items()})
         resp = client.post(f"/owner/{tok}/cards/{card_id}/edit", data=data)
         assert resp.status_code == 200
 
@@ -271,6 +288,54 @@ class TestEditorSaveRoundTrip:
         html = client.get(f"/owner/{tok}/cards/{card_id}/edit").text
         for t, (value, _) in expectations.items():
             assert value in html, f"{t} value not shown after save"
+
+    def test_one_field_per_type_round_trips(self, tmp_path):
+        """Scoped round-trip: personal-appropriate types on Personal (the
+        six-field addition included), professional types on Work — each
+        card's editor renders and echoes exactly its own scope."""
+        db = _make_db(tmp_path)
+        client = TestClient(create_app(db))
+        tok = _owner_token()
+        personal_id = _first_card_id(db)
+
+        self._assert_round_trip(client, tok, db, personal_id, {
+            "email": ("work@acme.com", "public"),
+            "phone": ("+1-555-999-0000", "granted"),
+            "text_number": ("+1-555-999-0001", "public"),
+            "facetime_number": ("+1-555-999-0002", "granted"),
+            "facetime": ("jason@acme.com", "granted"),
+            "skype": ("live:.cid.jason", "private"),
+            "video_app": ("Zoom 555-123-4567", "granted"),
+            "messenger": ("m.me/jasonh", "public"),
+            "messaging_app": ("WhatsApp +1-555-999-0003", "granted"),
+            "facebook": ("facebook.com/jason.heath", "public"),
+            "instagram": ("@jasonheath", "public"),
+            "social_other": ("YouTube @heathtech", "public"),
+            "address1": ("123 Main St", "public"),
+            "address2": ("Suite 400", "public"),
+            "city": ("Denver", "public"),
+            "state": ("CO", "public"),
+            "zip": ("80014", "public"),
+            "birthday": ("1985-06-15", "private"),
+            "note": ("Met at the conference.", "private"),
+            # UX pass 5 six-field addition, personal-appropriate subset.
+            "po_box": ("PO Box 77", "granted"),
+            "event": ("2024-06-15", "granted"),
+            "related_person": ("Assistant Dana", "granted"),
+        })
+
+        # Professional types round-trip on the WORK card instead.
+        conn = whitelist_db.wl_connect(db)
+        work_id = conn.execute(
+            "SELECT id FROM cards WHERE owner_profile_id = 1 AND name = 'Work'"
+        ).fetchone()[0]
+        conn.close()
+        self._assert_round_trip(client, tok, db, work_id, {
+            "title": ("VP Engineering", "granted"),
+            "company": ("Acme Inc.", "private"),
+            "website": ("https://acme.com", "granted"),
+            "department": ("Growth Team", "granted"),
+        })
 
     def test_visibility_change_on_existing_field(self, tmp_path):
         db = _make_db(tmp_path)
@@ -842,5 +907,9 @@ class TestLegacyAddressMigration:
         html = client.get(f"/owner/{_owner_token()}/cards/1/edit").text
         assert 'value="123 Old Rd, Denver, CO 80014"' in html, \
             "migrated value missing from the editor"
-        assert 'data-type="address1"' in html, \
-            "migrated field must live in the address1 slot"
+        # UX pass 5: a generic card is vCard-scoped — the section renders as
+        # grouped address BLOCKS (heading 'Addresses'), and the retired
+        # single-line 'address' type never has its own row again.
+        assert "Addresses" in html, "grouped address section missing"
+        assert f'data-type="address"' not in html, \
+            "retired single-line address type still renders a row"

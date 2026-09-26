@@ -2037,15 +2037,19 @@ def create_app(db_path: Path = None) -> FastAPI:
             if f["field_type"] in by_type:
                 by_type[f["field_type"]].append(dict(f))
         base_url = wl_env.get_secret("BASE_URL") or "http://100.81.77.168:8099"
-        # UX pass 5: determine card scope for scoped sections + address blocks
-        card_scope = whitelist_db.card_kind(card)
+        # UX pass 5: determine card scope for scoped sections + address
+        # blocks. card_kind is name-based ('personal'/'work'/None) — every
+        # other card is a generic vCard, so None maps to the 'vcard'
+        # scope; the scoped sections (picker_sections) carry the heading
+        # 'Addresses' that the editor's grouped-block branch matches.
+        card_scope = whitelist_db.card_kind(card) or "vcard"
         address_block = whitelist_db.address_blocks(card_scope)
         return HTMLResponse(jinja.get_template("card_editor.html").render(
             request=request,
             profile=profile,
             card=card,
             by_type=by_type,
-            sections=whitelist_db.CARD_EDITOR_SECTIONS,
+            sections=whitelist_db.picker_sections(card_scope),
             labels=whitelist_db.CARD_EDITOR_FIELD_LABELS,
             field_types=field_types,
             multi_types=whitelist_db.CARD_EDITOR_MULTI_TYPES,

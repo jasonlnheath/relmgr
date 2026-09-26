@@ -91,10 +91,18 @@ class TestCreateVCardFlow:
             "create must land in the new vCard's editor"
         editor = client.get(loc)
         assert editor.status_code == 200
-        # ALL field sections ready to populate
-        for heading in ("Emails", "Phone numbers", "Address", "Personal history",
-                        "Childhood home", "Birthday", "Note"):
+        # Scoped templates: the email lands on the WORK card, whose
+        # professional-appropriate sections are ready to populate. Identity
+        # fields (Personal history / Childhood home / Birthday) stay on
+        # Personal and never render on Work.
+        for heading in ("Emails", "Phone numbers", "Addresses", "Title",
+                        "Company", "Department", "Website", "Note"):
             assert heading in editor.text, f"editor missing '{heading}'"
+        for absent in ("Personal history", "Childhood home", "Birthday",
+                       "Significant dates", "Related people",
+                       "Custom fields"):
+            assert absent not in editor.text, \
+                f"non-professional section '{absent}' leaked onto Work"
         assert "Jane Rivers" in editor.text
 
     def test_curated_stub_editable_by_creating_owner_only(self, tmp_path):
