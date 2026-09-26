@@ -4,12 +4,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}WhiteList{% endblock %}</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    {# Tailwind Play CDN, SELF-HOSTED and PINNED to 3.4.17
+       (regression-verify pass 2026-09-26): the app's whole stylesheet
+       previously loaded from cdn.tailwindcss.com, which (a) lets a phone
+       cache it 4h and drift on CDN updates, and (b) can be blocked by iOS
+       content blockers / fail on split-horizon phone networks — leaving
+       every page an unstyled broken stack while the server still logs
+       200s (the captain's 'silently fails' phone symptom). Same script
+       bytes, now same-origin, immutable, and version-busted via asset_v
+       so a stale phone can never mask a fix. Upgrading Tailwind = vendor
+       the new build under static/ and point this tag at it. #}
+    <script src="/static/tailwind-3.4.17.js?v={{ asset_v('tailwind-3.4.17.js') }}"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Arapey:ital@0;1&display=swap" rel="stylesheet">
-    {# Scroll mark favicon — approved identity mark #}
-    <link rel="icon" type="image/png" href="/static/scroll-mark.png">
+    {# Scroll mark favicon — approved identity mark; ?v= busts phone
+       caches when the file changes (see asset_v in app.py) #}
+    <link rel="icon" type="image/png" href="/static/scroll-mark.png?v={{ asset_v('scroll-mark.png') }}">
     <style>
         /* === Whitelist identity tokens (captain approved 2026-09-22) ===
            Source: ~/Downloads/whitelist-identity/design-guide.txt

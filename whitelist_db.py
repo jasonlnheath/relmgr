@@ -228,7 +228,12 @@ ADDRESS_BLOCK_TYPES: tuple[str, ...] = (
 )
 
 # UX pass 5: card scopes whose Address section renders as grouped blocks.
-ADDRESS_BLOCK_SCOPES = ('vcard', 'personal')
+# Regression-verify 2026-09-26: 'work' added — an address is a six-line
+# block on every card kind; the new-connection flow lands in the stub's
+# Work editor when an email was provided, and the captain saw no address
+# block / + Add address control there. Every _SCOPE_TEMPLATES Addresses
+# section carries the same six block components, so grouping is uniform.
+ADDRESS_BLOCK_SCOPES = ('vcard', 'personal', 'work')
 
 
 def address_blocks(scope: str) -> bool:

@@ -131,7 +131,7 @@
             {% else %}
             <span class="w-10 h-10 rounded-full flex items-center justify-center overflow-hidden"
                   style="background: var(--wl-badge-{{ {'whitelist': 'white', 'greylist': 'grey', 'blacklist': 'black'}[t.key] }}); border: 1px solid var(--wl-glass-edge);">
-                <img src="/static/badge-{{ t.key }}.png" alt="" aria-hidden="true" class="w-6 h-6 object-contain">
+                <img src="/static/badge-{{ t.key }}.png?v={{ asset_v('badge-' ~ t.key ~ '.png') }}" alt="" aria-hidden="true" class="w-6 h-6 object-contain">
             </span>
             {% endif %}
         </a>
@@ -161,12 +161,12 @@
                 {% if row.logo_state == 'fresh' %}
                 <span class="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center overflow-hidden"
                       style="background: var(--wl-badge-white); border: 1px solid var(--wl-glass-edge);">
-                    <img src="/static/badge-whitelist.png" alt="" aria-hidden="true" class="w-6 h-6 object-contain">
+                    <img src="/static/badge-whitelist.png?v={{ asset_v('badge-whitelist.png') }}" alt="" aria-hidden="true" class="w-6 h-6 object-contain">
                 </span>
                 {% elif row.logo_state == 'stale' %}
                 <span class="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center overflow-hidden"
                       style="background: var(--wl-badge-grey); border: 1px solid var(--wl-glass-edge);">
-                    <img src="/static/badge-greylist.png" alt="" aria-hidden="true" class="w-6 h-6 object-contain">
+                    <img src="/static/badge-greylist.png?v={{ asset_v('badge-greylist.png') }}" alt="" aria-hidden="true" class="w-6 h-6 object-contain">
                 </span>
                 {% else %}
                 <div class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
@@ -214,14 +214,14 @@
                                 aria-label="Click to change to {{ state_label }}"
                                 class="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center transition-opacity hover:opacity-80"
                                 style="background: var(--wl-badge-{{ {'whitelist': 'white', 'greylist': 'grey', 'blacklist': 'black'}[badge_state] }}); border: 1px solid var(--wl-glass-edge);">
-                            <img src="/static/badge-{{ badge_state }}.png" alt="" aria-hidden="true" class="w-6 h-6 object-contain">
+                            <img src="/static/badge-{{ badge_state }}.png?v={{ asset_v('badge-' ~ badge_state ~ '.png') }}" alt="" aria-hidden="true" class="w-6 h-6 object-contain">
                         </button>
                     </form>
                     {% else %}
                     <span class="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center"
                           style="background: var(--wl-badge-black); border: 1px solid var(--wl-glass-edge);"
                           title="BlackList" aria-label="BlackList">
-                        <img src="/static/badge-blacklist.png" alt="" aria-hidden="true" class="w-6 h-6 object-contain">
+                        <img src="/static/badge-blacklist.png?v={{ asset_v('badge-blacklist.png') }}" alt="" aria-hidden="true" class="w-6 h-6 object-contain">
                     </span>
                     {% endif %}
                 </div>

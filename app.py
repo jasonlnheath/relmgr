@@ -149,6 +149,27 @@ def _encode_square_jpeg(content: bytes) -> bytes:
         raise ValueError("invalid image file")
 
 
+# Static assets are content-versioned: every template references them as
+# /static/<name>?v=<asset_v(name)>, so browsers may cache them forever —
+# a changed file changes the URL (regression-verify pass, 2026-09-26:
+# two "fixed on server, still broken on phone" rounds were stale mobile
+# caches; versioned URLs + no-cache HTML close that hole for good).
+_STATIC_DIR = Path(__file__).parent / "static"
+
+
+def _static_version(name: str) -> str:
+    """Cheap content version for a file under static/ (mtime_ns + size).
+
+    Changes whenever the file changes; stable while it does not. Missing
+    files return "0" so templates never crash on a stray reference.
+    """
+    try:
+        st = (_STATIC_DIR / name).stat()
+        return f"{st.st_mtime_ns:x}{st.st_size:x}"
+    except OSError:
+        return "0"
+
+
 def _make_jinja():
     jinja = Jinja2Templates(directory=str(_JINJA_DIR))
     # UX pass 2: phone label rendering shared by every field-row template.
@@ -156,6 +177,10 @@ def _make_jinja():
     # UX pass 3: +1(XXX)XXX-XXXX display formatting, one formatter for every
     # surface (stored values are never rewritten).
     jinja.env.globals["phone_fmt"] = whitelist_db.format_phone_display
+    # Cache-busting version for static asset URLs (?v=…) — see
+    # _static_version; every /static/ reference in templates goes through
+    # it so changed assets get a new URL (and /static can cache forever).
+    jinja.env.globals["asset_v"] = _static_version
     return jinja
 
 
@@ -519,10 +544,14 @@ def create_app(db_path: Path = None) -> FastAPI:
         content_length = request.headers.get("content-length")
         if (content_length and content_length.isdigit()
                 and int(content_length) > _MAX_BODY_BYTES):
-            return HTMLResponse("Request body too large", status_code=413)
+            r = HTMLResponse("Request body too large", status_code=413)
+            r.headers["Cache-Control"] = "no-cache"
+            return r
         if not _RATELIMIT_OFF and _rate_limited(request):
-            return HTMLResponse("Too many requests — try again later.",
-                                status_code=429)
+            r = HTMLResponse("Too many requests — try again later.",
+                             status_code=429)
+            r.headers["Cache-Control"] = "no-cache"
+            return r
         response = await call_next(request)
         # Capability tokens live in /owner/{token} URLs — never leak them
         # via Referer on outbound navigation.
@@ -531,6 +560,22 @@ def create_app(db_path: Path = None) -> FastAPI:
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Permissions-Policy"] = (
             "camera=(), microphone=(), geolocation=()")
+        # Cache discipline (2026-09-26): every HTML page revalidates so a
+        # stale phone browser can never mask a deployed fix (Safari had
+        # been serving old editor/profile pages after server updates).
+        # /static is content-versioned via asset_v() URLs → immutable
+        # forever. /photos and /qr mutate in place under the same URL →
+        # revalidate (their ETag/Last-Modified make that a cheap 304).
+        if "cache-control" not in response.headers:
+            ct = response.headers.get("content-type", "")
+            p = request.url.path
+            if ct.startswith("text/html"):
+                response.headers["Cache-Control"] = "no-cache, must-revalidate"
+            elif p.startswith("/static/"):
+                response.headers["Cache-Control"] = (
+                    "public, max-age=31536000, immutable")
+            elif p.startswith(("/photos/", "/qr/")):
+                response.headers["Cache-Control"] = "no-cache"
         return response
 
     # ============================================================

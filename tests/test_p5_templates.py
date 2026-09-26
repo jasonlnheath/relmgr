@@ -64,6 +64,10 @@ def env():
     env = Environment(loader=FileSystemLoader(tmpl_dir))
     env.globals["days_since"] = days_since
     env.globals["days_until"] = days_until
+    # Cache-busting global every template may use (?v=asset_v(...)) —
+    # mirrors the production environment from app._make_jinja.
+    from app import _static_version
+    env.globals["asset_v"] = _static_version
     return env
 
 
