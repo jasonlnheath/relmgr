@@ -32,7 +32,7 @@ def _name_match(contact_a: dict, contact_b: dict) -> float:
 
     # Try fuzzy matching
     try:
-        from rapidfuzz import fuzz, process
+        from rapidfuzz import fuzz
         score = fuzz.ratio(name_a, name_b) / 100.0
         if score >= DEDUP_FUZZY_NAME_THRESHOLD:
             return score

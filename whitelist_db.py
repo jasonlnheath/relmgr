@@ -456,21 +456,6 @@ CARD_EDITOR_SECTIONS = (
     ('Name suffix', (('name_suffix', None),)),
 )
 
-# UX pass 5: private-default field types (custom_field defaults PRIVATE).
-_PRIVATE_DEFAULT_TYPES = ('custom_field',)
-
-
-def editor_default_visibility(field_type: str) -> str:
-    """Default visibility for a NEW field row in the editor."""
-    if field_type in _PRIVATE_DEFAULT_TYPES:
-        return 'private'
-    # Public defaults: identity/friend-finding fields
-    _PUBLIC_DEFAULT_TYPES = ('title', 'company', 'website', 'birthday',
-                             'high_school', 'maiden_name', 'nickname',
-                             'city', 'state',
-                             'childhood_city', 'childhood_state')
-    return 'public' if field_type in _PUBLIC_DEFAULT_TYPES else 'granted'
-
 
 # Repeatable types that get a "+ Add …" row button in the editor.
 # UX pass 5: related_person, event, custom_field are multi.
@@ -1446,17 +1431,6 @@ def get_pending_grants_for_profile(
     return [dict(r) for r in rows]
 
 
-def get_all_grants_for_profile(
-    conn: sqlite3.Connection, profile_id: int
-) -> list[dict]:
-    """Return all grants (any status) for a profile."""
-    rows = conn.execute(
-        "SELECT * FROM access_grants WHERE profile_id = ? ORDER BY created_at DESC",
-        (profile_id,),
-    ).fetchall()
-    return [dict(r) for r in rows]
-
-
 def update_verified_at(conn: sqlite3.Connection, profile_id: int) -> None:
     """Stamp a profile's verified_at to now."""
     now = _now_iso()
@@ -1542,18 +1516,6 @@ def add_alias(conn: sqlite3.Connection, profile_id: int, alias: str) -> Optional
     )
     conn.commit()
     return row.lastrowid
-
-
-def get_all_grants_for_profile_ordered(conn: sqlite3.Connection, profile_id: int) -> list[dict]:
-    """Return all grants for a profile, pending first then active, ordered by created_at desc."""
-    rows = conn.execute(
-        """SELECT * FROM access_grants WHERE profile_id = ?
-           ORDER BY
-             CASE WHEN status = 'pending' THEN 0 ELSE 1 END,
-             created_at DESC""",
-        (profile_id,),
-    ).fetchall()
-    return [dict(r) for r in rows]
 
 
 def apply_decision(conn: sqlite3.Connection, grant_id: str, decision: str, expiry_choice: str,

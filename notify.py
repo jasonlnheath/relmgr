@@ -7,7 +7,7 @@ Exports:
 """
 import sys
 import argparse
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 # Ensure parent dir is on path for flat imports
@@ -18,12 +18,10 @@ from whitelist_db import (
     wl_init,
     quarter_end_iso,
     is_current_quarter,
-    get_all_grants_for_profile,
     get_profile_by_id,
     get_active_cards_for_grant,
     get_grey_contacts_by_owner,
     get_grey_contacts,
-    _now_iso,
 )
 import mailer
 
