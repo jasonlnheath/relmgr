@@ -1877,6 +1877,8 @@ def ensure_access_grants_context(conn: sqlite3.Connection) -> None:
 
 _SCAN_EMAIL_MAX = 320  # RFC max email length — cap for unthrottled GET
                         # scan writes (see record_scan)
+_SCAN_DAY_MAX = 500    # max scan rows per profile per UTC day (see
+                        # record_scan — bounds GET-speed row pollution)
 
 
 def ensure_scan_events(conn: sqlite3.Connection) -> None:
@@ -1903,10 +1905,26 @@ def record_scan(conn: sqlite3.Connection, profile_id: int,
     POST-only), so the stored value is CAPPED at _SCAN_EMAIL_MAX bytes.
     Real emails are <=320 chars (RFC); anything longer is junk written at
     network speed (disk-fill / scan-stats pollution), not a contact.
+
+    Tool attack (2026-09-26): A1 capped the ROW SIZE, not the ROW RATE —
+    live-fire measured ~600 GET rows/s (email rotation makes per-email
+    dedupe useless). A per-profile per-day row cap bounds the table at
+    _SCAN_DAY_MAX rows/day; the 14-day chart only ever displays counts,
+    so a saturation-at-500 ceiling is honest for any real traffic and the
+    write path is bounded for every fake-email flood. The timestamp
+    compare is sargable ('YYYY-MM-DD HH:MM:SS' >= 'YYYY-MM-DD' as string
+    compare) and rides the idx_scan_events_profile index.
     """
     email = viewer_email if viewer_email else None
     if email is not None and len(email) > _SCAN_EMAIL_MAX:
         email = email[:_SCAN_EMAIL_MAX]
+    today_count = conn.execute(
+        "SELECT COUNT(*) FROM scan_events "
+        "WHERE profile_id = ? AND scanned_at >= date('now')",
+        (profile_id,),
+    ).fetchone()[0]
+    if today_count >= _SCAN_DAY_MAX:
+        return
     conn.execute(
         "INSERT INTO scan_events (profile_id, viewer_email) VALUES (?, ?)",
         (profile_id, email),
