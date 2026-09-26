@@ -2422,6 +2422,33 @@ def find_contact_by_email(
     return None
 
 
+def find_requester_profile(conn: sqlite3.Connection, email: str) -> Optional[dict]:
+    """Find the requester's own profile by email (amber-box bio display).
+
+    A connection requester is usually just name+email on the grant row —
+    but when they are also a RelMgr profile owner (signup stores their
+    email in profile_fields), their bio can introduce them to the owner
+    they are petitioning. Exact case-insensitive match on any email field
+    of any profile; profiles carrying a non-empty bio win over empty ones
+    (curated stubs carry the same email with no bio), lowest id breaks
+    ties. Read-only. Returns the profile dict or None (no/blank email,
+    no match).
+    """
+    if not email or not email.strip():
+        return None
+    row = conn.execute(
+        """SELECT p.* FROM profiles p
+           JOIN profile_fields f ON f.profile_id = p.id
+           WHERE f.field_type = 'email'
+             AND LOWER(f.field_value) = LOWER(?)
+           ORDER BY (CASE WHEN p.bio IS NOT NULL AND TRIM(p.bio) != ''
+                          THEN 0 ELSE 1 END), p.id
+           LIMIT 1""",
+        (email.strip(),),
+    ).fetchone()
+    return dict(row) if row else None
+
+
 def _json_list(raw) -> list:
     """Parse a contacts JSON-array column into a list ([] on junk/None)."""
     try:

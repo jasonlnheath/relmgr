@@ -51,7 +51,7 @@ Root, by role:
 | `routes_profile.py` | My Profile: GET `/profile`, POST `/bio`, `/bio-visibility`, `/cards/new`, `/cards/{cid}/fields`, `/fields/new`. **`_my_profile_html` = ONE render site for all of them.** |
 | `routes_editor.py` | Card editor: GET/POST `/cards/{cid}/edit`, per-field ✕ delete, card delete, photo upload, `/profile/card/{cid}` preview. Seams: **`_card_editor_html`** (one render site), **`_parse_editor_form`** (one parser, shared by save + ✕ delete), `_resolve_editor_card` (auth + curated-stub exception), `_editor_default_visibility` + `_PUBLIC_DEFAULT_TYPES`/`_PRIVATE_DEFAULT_TYPES`. |
 | `routes_media.py` | `/photos/{pid}/{cid}[/hs]` via **`_photo_allowed`** (audit predicate) + `/qr/share/{bid}`, `/qr/{handle}`. |
-| `routes_decisions.py` | POST `/owner/{token}/decision`, `/bulk`, `/revoke`, quarter make_permanent/revoke/punt (all ownership-enforced). |
+| `routes_decisions.py` | POST `/owner/{token}/decision` (three-way whitelist/greylist/blacklist + legacy approve/deny), `/bulk`, `/revoke`, quarter make_permanent/revoke/punt (all ownership-enforced). |
 | `whitelist_db.py` (~4400 ln) | Entire data layer: schema, migrations, queries. Map below. |
 | `wl_tokens.py` | HMAC-SHA256 make/consume tokens (`purpose\|payload\|expiry`). |
 | `wl_env.py` | `get_secret(key)`: os.environ first, then `.env` beside app.py. |
@@ -138,7 +138,7 @@ POST /p/{handle}/forward                        routes_public     granted contac
 GET  /s/{bundle_id}                             routes_share      share link: ALWAYS public-tier page; expired page
 GET  /s/{bundle_id}/card.vcf                    routes_share      public-fields-only vCard download
 GET  /a/{token}                                 routes_review     emailed grant-review page (grant_review token)
-POST /a/{token}/decision                        routes_review     approve/deny from email link
+POST /a/{token}/decision                        routes_review     three-way decision (whitelist/greylist/blacklist) + card checkboxes
 GET  /verify/{token}                            routes_review     verify token → stamp verified_at
 GET  /photos/{owner_pid}/{card_id}              routes_media      guarded photo JPEG (default slot)
 GET  /photos/{owner_pid}/{card_id}/hs           routes_media      guarded photo JPEG (high-school slot)
@@ -147,7 +147,7 @@ GET  /qr/{handle}                               routes_media      QR PNG for /p/
      /static/*                                  app.py            mounted static dir
 GET  /owner/{token}                             routes_dashboard  contact list dashboard (q,page,letter,f params)
 POST /owner/{token}/badge                       routes_dashboard  White/Grey/Black badge flip (silent)
-POST /owner/{token}/approve                     routes_dashboard  approve pending + choose cards
+POST /owner/{token}/approve                     routes_dashboard  approve pending + chosen cards (modal 'Done'; return_to=list → 303 back)
 GET  /owner/{token}/junk                        routes_dashboard  denied-grants list
 GET  /owner/{token}/new-connection              routes_dashboard  search contacts for new connection
 POST /owner/{token}/new-connection              routes_dashboard  create curated vCard → its editor
@@ -164,7 +164,7 @@ POST /owner/{token}/cards/{cid}/fields/{fid}/delete  routes_editor per-row ✕: 
 POST /owner/{token}/cards/{cid}/delete          routes_editor     delete card (two-step confirm UI)
 POST /owner/{token}/cards/{cid}/photo           routes_editor     upload/remove photo (?photo_kind=hs)
 GET  /owner/{token}/profile/card/{cid}          routes_editor     card preview
-POST /owner/{token}/decision                    routes_decisions  approve/deny from dashboard
+POST /owner/{token}/decision                    routes_decisions  three-way whitelist/greylist/blacklist from dashboard (legacy approve/deny kept)
 GET  /owner/{token}/contact/{grant_id}          routes_dashboard  contact card detail (?card= selected)
 POST /owner/{token}/bulk                        routes_decisions  bulk approve/deny/revoke
 POST /owner/{token}/revoke                      routes_decisions  revoke granted access

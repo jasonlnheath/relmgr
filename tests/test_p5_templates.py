@@ -72,44 +72,70 @@ def env():
 
 
 # ============================================================
-# admin_review.html — quarter option
+# admin_review.html — three-way decision (amber-box redesign)
 # ============================================================
 
 class TestAdminReviewTemplate:
-    """admin_review.html must render the 'quarter' expiry option."""
+    """admin_review.html carries the SAME three-way decision as the
+    dashboard amber box: WhiteList / GreyList / BlackList, with row-by-row
+    card checkboxes for the share choice (2026-09-26 redesign)."""
 
-    def test_quarter_option_exists(self, env):
-        """The expiry select must contain a 'quarter' option."""
+    def _render(self, env):
         tmpl = env.get_template("admin_review.html")
-        html = tmpl.render(
-            profile={"display_name": "Test Owner"},
+        return tmpl.render(
+            profile={"display_name": "Test Owner", "handle": "testowner"},
             grant={
                 "requester_name": "Test User",
                 "requester_email": "test@example.com",
                 "created_at": "2026-09-11T12:00:00Z",
             },
             token="test-token",
+            cards=[{"id": 1, "name": "Personal", "photo_path": None},
+                   {"id": 2, "name": "Work", "photo_path": None}],
+            requester_bio="Hello, I make things.",
         )
-        assert 'value="quarter"' in html, "admin_review.html must have a 'quarter' option in the expiry select"
-        # Verify it appears alongside the existing options
-        assert 'value="14"' in html
-        assert 'value="90"' in html
-        assert 'value="lifetime"' in html
 
-    def test_quarter_option_text(self, env):
-        """The quarter option should have readable text."""
+    def test_three_way_decision_buttons(self, env):
+        """White/Grey/Black buttons replace approve/deny + expiry select."""
+        html = self._render(env)
+        assert 'value="whitelist"' in html
+        assert 'value="greylist"' in html
+        assert 'value="blacklist"' in html
+        assert "WhiteList" in html and "GreyList" in html and "BlackList" in html
+        # The old expiry select is gone — the list choice IS the expiry.
+        assert 'name="expiry"' not in html
+        assert 'value="deny"' not in html
+
+    def test_card_checkboxes_row_by_row(self, env):
+        """Every owner card is a checkbox row (multi-select, required)."""
+        html = self._render(env)
+        assert 'name="card_ids" value="1"' in html
+        assert 'name="card_ids" value="2"' in html
+        assert 'Personal' in html and 'Work' in html
+        assert html.count('type="checkbox"') == 2
+        assert "Choose cards to share" in html
+
+    def test_requester_bio_rendered(self, env):
+        """The requester's bio shows when their profile has one."""
+        html = self._render(env)
+        assert "Hello, I make things." in html
+
+    def test_bio_fallback_without_bio(self, env):
+        """No bio in context → name + email still render, no crash."""
         tmpl = env.get_template("admin_review.html")
         html = tmpl.render(
-            profile={"display_name": "Test Owner"},
+            profile={"display_name": "Test Owner", "handle": "testowner"},
             grant={
                 "requester_name": "Test User",
                 "requester_email": "test@example.com",
                 "created_at": "2026-09-11T12:00:00Z",
             },
             token="test-token",
+            cards=[],
+            requester_bio="",
         )
-        # The quarter option should be present with some label
-        assert "quarter" in html.lower() or "Q" in html
+        assert "test@example.com" in html
+        assert "Hello, I make things." not in html
 
 
 # ============================================================

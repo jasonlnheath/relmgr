@@ -57,8 +57,14 @@
     {# ============================================================
        PENDING REQUESTS (UX pass 3, 2026-09-23): access requests land at
        the TOP of the whitelist, directly below the search bar, in an
-       AMBER box. Buttons stay the slate-grey action style (pass-2 style
-       ruling); only the BOX wears amber.
+       AMBER box. Amber-box redesign (2026-09-26, captain ruling): the
+       Approve/Deny pair is GONE — three badge actions instead
+       (WhiteList / GreyList / BlackList). BlackList acts instantly
+       through the silent badge machinery; White/Grey open the
+       choose-cards modal ("user taps card(s), clicks done. that's it").
+       Buttons stay the slate-grey action style (pass-2 style ruling);
+       only the BOX wears amber. The requester's bio (when they have a
+       profile with one) introduces them above the actions.
        ============================================================ #}
     {% if pending_rows %}
     <div class="rounded-xl p-4 mb-4"
@@ -80,20 +86,86 @@
                         <p class="text-xs wl-text-faint truncate">{{ row.email }}</p>
                     </div>
                 </div>
-                <form method="POST" action="/owner/{{ token }}/decision" class="mt-3 pt-2 flex gap-2"
-                      style="border-top: 1px solid var(--wl-glass-border);">
-                    <input type="hidden" name="grant_id" value="{{ row.live_grant.id }}">
-                    <button type="submit" name="decision" value="approve"
-                            class="wl-btn-approve px-3 py-1 rounded text-xs">
-                        Approve
+                {% if row.requester_bio %}
+                <p class="text-xs wl-text-sub mt-2 leading-snug"
+                   style="border-left: 2px solid var(--wl-glass-edge); padding-left: 0.5rem;">{{ row.requester_bio }}</p>
+                {% endif %}
+                <div class="mt-3 pt-2 flex gap-2"
+                     style="border-top: 1px solid var(--wl-glass-border);">
+                    <button type="button" data-cards-open
+                            data-grant-id="{{ row.live_grant.id }}"
+                            data-access="lifetime"
+                            data-who="{{ row.name }}"
+                            class="wl-btn-approve px-3 py-1 rounded text-xs flex-1">
+                        WhiteList
                     </button>
-                    <button type="submit" name="decision" value="deny"
-                            class="wl-btn-deny px-3 py-1 rounded text-xs">
-                        Deny
+                    <button type="button" data-cards-open
+                            data-grant-id="{{ row.live_grant.id }}"
+                            data-access="quarter"
+                            data-who="{{ row.name }}"
+                            class="wl-btn-approve px-3 py-1 rounded text-xs flex-1">
+                        GreyList
                     </button>
-                </form>
+                    <form method="POST" action="/owner/{{ token }}/decision" class="flex-1"
+                          data-blacklist-confirm data-who="{{ row.name }}">
+                        <input type="hidden" name="grant_id" value="{{ row.live_grant.id }}">
+                        <input type="hidden" name="decision" value="blacklist">
+                        <input type="hidden" name="return_to" value="list">
+                        <button type="submit" class="wl-btn-deny w-full px-3 py-1 rounded text-xs">
+                            BlackList
+                        </button>
+                    </form>
+                </div>
             </div>
         {% endfor %}
+        </div>
+    </div>
+
+    {# Choose-cards modal (2026-09-26): ONE shared bottom sheet for every
+       request row — the tapped WhiteList/GreyList button fills in the
+       grant + access level, the owner taps card rows (multi-select) and
+       hits Done, which posts to the approve-with-cards route and lands
+       back on the list. Mobile-first: full-width sheet anchored to the
+       bottom at 390px. #}
+    <div id="cards-modal" class="hidden fixed inset-0 z-50" role="dialog" aria-modal="true" aria-labelledby="cards-modal-title">
+        <div class="absolute inset-0" style="background: rgba(0,0,0,0.72);" data-cards-close></div>
+        <div class="absolute inset-x-0 bottom-0 rounded-t-2xl p-4 pb-6 max-h-[85vh] overflow-y-auto"
+             style="background: var(--wl-surface-base); border-top: 1px solid var(--wl-glass-edge);">
+            <h3 id="cards-modal-title" class="wl-heading wl-heading-sm">Choose cards to share</h3>
+            <p id="cards-modal-who" class="text-xs wl-text-faint mt-1 mb-3"></p>
+            <form method="POST" action="/owner/{{ token }}/approve" id="cards-modal-form">
+                <input type="hidden" name="grant_id" value="">
+                <input type="hidden" name="decision" value="approve">
+                <input type="hidden" name="access" value="lifetime">
+                <input type="hidden" name="return_to" value="list">
+                <div class="space-y-2">
+                    {% for card in all_cards %}
+                    <label class="wl-card p-3 flex flex-row items-center gap-3 cursor-pointer">
+                        <input type="checkbox" name="card_ids" value="{{ card.id }}" required
+                               class="peer sr-only">
+                        {% if card.photo_path %}
+                        <img src="/photos/{{ card.owner_profile_id }}/{{ card.id }}?t={{ token | urlencode }}"
+                             alt="" aria-hidden="true"
+                             class="w-10 h-10 rounded-full object-cover flex-shrink-0">
+                        {% else %}
+                        <span class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 text-xs wl-text-muted"
+                              style="background: var(--wl-btn-slate);">{{ card.name[:2]|upper }}</span>
+                        {% endif %}
+                        <span class="flex-1 min-w-0 wl-text text-sm truncate">{{ card.name }}</span>
+                        <span class="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 text-xs opacity-0 peer-checked:opacity-100 transition-opacity"
+                              style="background: var(--wl-btn-slate); border: 1px solid var(--wl-glass-edge);"
+                              aria-hidden="true">✓</span>
+                    </label>
+                    {% endfor %}
+                </div>
+                <button type="submit" class="w-full wl-btn-approve px-4 py-2 rounded-lg text-sm mt-4">
+                    Done
+                </button>
+            </form>
+            <button type="button" data-cards-close
+                    class="w-full mt-2 py-2 text-xs wl-text-faint">
+                Cancel
+            </button>
         </div>
     </div>
     {% endif %}
@@ -317,6 +389,54 @@
     }
     input.addEventListener('input', sync);
     sync();
+})();
+
+// Choose-cards modal (amber-box redesign 2026-09-26): the tapped
+// WhiteList/GreyList button fills the shared bottom sheet with its grant
+// + access level; Done submits the approve form, Cancel/overlay/Esc
+// dismisses without touching the request.
+(function () {
+    const modal = document.getElementById('cards-modal');
+    if (!modal) return;
+    const form = document.getElementById('cards-modal-form');
+    const who = document.getElementById('cards-modal-who');
+
+    function openModal(btn) {
+        form.elements['grant_id'].value = btn.getAttribute('data-grant-id') || '';
+        form.elements['access'].value = btn.getAttribute('data-access') || 'lifetime';
+        const name = btn.getAttribute('data-who') || '';
+        who.textContent = name ? ('Sharing with ' + name) : '';
+        form.querySelectorAll('input[name="card_ids"]').forEach(function (cb) {
+            cb.checked = false;
+        });
+        modal.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeModal() {
+        modal.classList.add('hidden');
+        document.body.style.overflow = '';
+    }
+
+    document.querySelectorAll('[data-cards-open]').forEach(function (btn) {
+        btn.addEventListener('click', function () { openModal(btn); });
+    });
+    modal.querySelectorAll('[data-cards-close]').forEach(function (el) {
+        el.addEventListener('click', closeModal);
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && !modal.classList.contains('hidden')) closeModal();
+    });
+
+    // BlackList accidental-touch protection (same ruling as the badge
+    // cycle): confirm before the silent revoke. The name rides in a data
+    // attribute so any characters in it stay safe.
+    document.querySelectorAll('form[data-blacklist-confirm]').forEach(function (f) {
+        f.addEventListener('submit', function (e) {
+            const name = f.getAttribute('data-who') || 'this requester';
+            if (!confirm('Move ' + name + ' to BlackList?')) e.preventDefault();
+        });
+    });
 })();
 
 // Alpha rail swipe/drag (UX pass 9): dragging a finger across
